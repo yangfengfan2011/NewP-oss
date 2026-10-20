@@ -66,7 +66,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
                     sp.GetRequiredService<IPlatformTransactionExecutor>(),
                     new ICP.Platform.Modules.Organization.Caching.PublishedOrganizationFacts(sp.GetRequiredService<ICP.Platform.Organization.Contracts.IOrganizationQuery>()),
                     new SqlOrganizationFacts(db, new SqlServerDepartmentHierarchyQuery(db)));
-                return new EfCompanyDirectory(db, facts);
+                return new EfCompanyDirectory(db, facts, () => sp.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>());
             });
             var sql = new SqlCounter();
             var commitFault = new AfterCommitFault();

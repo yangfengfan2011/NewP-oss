@@ -16,7 +16,6 @@ public sealed class WorkspaceClipboardDataExecutionContractTests
         var owner = candidates.Single(candidate => candidate.ModuleId == "Workspace");
         var contracts = owner.DataExecutions.Where(contract => contract.Key.StartsWith("workspace.clipboard.", StringComparison.Ordinal)).ToArray();
         Assert.NotEmpty(contracts);
-        Assert.All(contracts, contract => Assert.False(contract.LegacyActions));
         var declarations = compiled.Plan!.ActionDataAccessCatalog.Where(item => item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal)).ToArray();
         Assert.All(contracts, contract => Assert.Contains(declarations, declaration => declaration.Execution == contract.Key));
         Assert.All(owner.Features.SelectMany(feature => feature.DataAccess).Where(item => item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal)),

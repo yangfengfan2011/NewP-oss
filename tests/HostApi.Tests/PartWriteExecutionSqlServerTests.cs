@@ -99,9 +99,6 @@ public sealed class PartWriteExecutionSqlServerTests
                 var error = await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", ObjectOperationAction.Create, null, input, wrong));
                 Assert.Equal(400, error.Status);
             }
-            var rejectedLegacy = await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", ObjectOperationAction.Create,
-                null, input, new ObjectOperationWriteSource.Legacy(typeof(PartWriteExecutionSqlServerTests), nameof(EntryAndInternalWrites_RequireExactSourceAndPreserveClosedHttpOperations), "part.part", "create", null)));
-            Assert.Equal("ActionDataAccess.LegacyWriteBindingInvalid", rejectedLegacy.Code);
             var result = await executor.ExecuteAsync("part.part", ObjectOperationAction.Create, null, input, source);
             Assert.True(result.Succeeded, result.Error?.Code);
             var id = (string)result.Detail!.Fields["EID"]!;

@@ -12,11 +12,10 @@ using System.Security.Claims;
 namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>完整对象管理操作拥有目标资格、输入校验与执行顺序，调用方无需预先取得资格。</summary>
-public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, CanonicalModulePlan plan,
+public sealed partial class DataScopeObjectManagement(IDataExecutionAccess executions, DataScopeCatalog catalog, CanonicalModulePlan plan,
     IFeatureDecisionSource features, IDataScopeObjectDecisionProvider decisions, DataScopeObjectGrants grants,
     DataScopeIdentities identities, IHttpContextAccessor context, IPlatformTransactionExecutor transactions, IEntityAuditValueProvider audit, IPlatformObjectIdGenerator ids,
-    IDataScopeObjectAccess? access = null,
-    IDataScopeEvaluationScope? evaluation = null, IDataExecutionAccess? executions = null) : IDataScopeObjectAuthorization, IDataScopeBatchAuthorization
+    IDataScopeEvaluationScope? evaluation = null) : IDataScopeObjectAuthorization, IDataScopeBatchAuthorization
 {
     /// <summary>只读操作组合功能位置与当前数据资格；手工写入只前置功能资格，数据资格由锁内流程拥有。</summary>
     public async Task<DataScopeObjectEligibility> CheckAsync(string resourceKey, string objectId, CancellationToken token)
@@ -24,7 +23,7 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
         using var operation = evaluation?.BeginOperation();
         var feature = await CheckFeatureAsync(resourceKey, token);
         return feature == DataScopeObjectEligibility.Allowed
-            ? await CheckDataAsync(resourceKey, objectId, token, executions?.BindResourceEndpoint(resourceKey)) : feature;
+            ? await CheckDataAsync(resourceKey, objectId, token, executions.BindResourceEndpoint(resourceKey)) : feature;
     }
 
     /// <summary>校验具体资源的授权功能位置，不能借另一资源的入口或请求头获得资格。</summary>
@@ -50,29 +49,17 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
 
     // 统一数据资格供旧generic功能门禁和已验证来源的owner入口复用，不接收skip或功能头替代值。
     private async Task<DataScopeObjectEligibility> CheckDataAsync(string resourceKey, string objectId, CancellationToken token,
-        DataExecutionBindingReference? execution = null)
+        DataExecutionBindingReference execution)
     {
         using var operation = evaluation?.BeginOperation();
-        var resource = catalog.Resolve(resourceKey);
-        if (execution is not null)
+        await foreach (var decision in executions.EvaluateObjectsAsync(RequiredOwnerExecution(execution), "target", [new(resourceKey, objectId)], token))
+            return decision.Decision switch
         {
-            await foreach (var decision in executions!.EvaluateObjectsAsync(execution, "target", [new(resourceKey, objectId)], token))
-                return decision.Decision switch
-            {
-                DataExecutionDecision.Allowed => DataScopeObjectEligibility.Allowed,
-                DataExecutionDecision.NotFound => DataScopeObjectEligibility.NotFound,
-                _ => DataScopeObjectEligibility.Forbidden
-            };
-            throw new InvalidOperationException("DATA_EXECUTION_TARGET_RESULT_MISSING");
-        }
-        // 手工构造的旧无约束消费者保留原构造方式；显式声明约束绝不能退回纯数据read。
-        if (access is null && resource.ReadConstraintKey is not null)
-            throw new InvalidOperationException("DATA_SCOPE_OBJECT_ACCESS_MISSING");
-        var readable = access is not null ? await access.IsReadableAsync(resourceKey, objectId, token)
-            : await decisions.IsAllowedAsync(resourceKey, objectId, "read", token);
-        if (!readable) return DataScopeObjectEligibility.NotFound;
-        if (!await decisions.IsAllowedAsync(resourceKey, objectId, "authorize", token)) return DataScopeObjectEligibility.Forbidden;
-        return DataScopeObjectEligibility.Allowed;
+            DataExecutionDecision.Allowed => DataScopeObjectEligibility.Allowed,
+            DataExecutionDecision.NotFound => DataScopeObjectEligibility.NotFound,
+            _ => DataScopeObjectEligibility.Forbidden
+        };
+        throw new InvalidOperationException("DATA_EXECUTION_TARGET_RESULT_MISSING");
     }
 
     /// <summary>取得目标管理资格后读取完整对象配置，包含自身或其他主体项。</summary>
@@ -90,7 +77,7 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
         using var operation = evaluation?.BeginOperation();
         var eligibility = await CheckFeatureAsync(resourceKey, token);
         if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
-        return await SaveConfigurationAsync(resourceKey, objectId, input, token, executions?.BindResourceEndpoint(resourceKey));
+        return await SaveConfigurationAsync(resourceKey, objectId, input, token, executions.BindResourceEndpoint(resourceKey));
     }
 
     /// <summary>被分析账号必须存在；复用正式裁决实现，不改变操作者的管理资格或请求身份。</summary>
@@ -128,41 +115,6 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
         catch (RolePermissionValidationException exception)
         { return new(DataScopeObjectStatus.InvalidInput, ValidationMessage: exception.Message, ValidationError: exception); }
     }
-
-    /// <inheritdoc/>
-    async Task<DataScopeAuthorizationStatus> IDataScopeObjectAuthorization.CheckAsync(string resourceKey, string objectId, CancellationToken token) =>
-        AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token, LegacyOwnerExecution()));
-
-    /// <inheritdoc/>
-    async Task<DataScopeAuthorizationResult<DataScopeObjectConfiguration>> IDataScopeObjectAuthorization.ReadAsync(string resourceKey, string objectId, CancellationToken token)
-    {
-        using var operation = evaluation?.BeginOperation();
-        var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token, LegacyOwnerExecution()));
-        return status == DataScopeAuthorizationStatus.Succeeded
-            ? new(status, await grants.GetAsync(resourceKey, objectId, token)) : new(status);
-    }
-
-    /// <inheritdoc/>
-    async Task<DataScopeAuthorizationResult> IDataScopeObjectAuthorization.ReplaceAsync(string resourceKey, string objectId, DataScopeObjectConfiguration input, CancellationToken token)
-    {
-        var result = await SaveConfigurationAsync(resourceKey, objectId, input, token, LegacyOwnerExecution());
-        return new(AuthorizationStatus(result.Status), result.ValidationError is null ? null : Error(result.ValidationError));
-    }
-
-    /// <inheritdoc/>
-    async Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> IDataScopeObjectAuthorization.SubjectsAsync(string resourceKey, string objectId,
-        string type, string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token)
-    {
-        using var operation = evaluation?.BeginOperation();
-        var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token, LegacyOwnerExecution()));
-        if (status != DataScopeAuthorizationStatus.Succeeded) return new(status);
-        try { return new(status, await identities.SearchAsync(type, query, page, currentIds, token)); }
-        catch (RolePermissionValidationException error) { return new(DataScopeAuthorizationStatus.InvalidInput, Error: Error(error)); }
-    }
-
-    // 旧无来源ABI仅保留给明确手工低层构造；正式DI已经要求执行器，不能借该ABI绕开来源。
-    private DataExecutionBindingReference? LegacyOwnerExecution() => executions is null ? null
-        : throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
 
     // 稳定契约只携带原错误事实，不跨模块传出Authorization私有异常类型。
     private static DataScopeConfigurationError Error(AuthorizationValidationException error) =>

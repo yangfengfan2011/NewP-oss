@@ -16,8 +16,6 @@ public sealed class PartWriteExecutionContractTests
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
         var plan = compiled.Plan!;
         var descriptor = PartCrudDescriptor.Create();
-        Assert.Empty(descriptor.LegacyDataExecutions);
-        Assert.Empty(descriptor.LegacyObjectOperationBindings);
         var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "part.part.create");
         Assert.Equal(("part.part.list", "pageActions", "create", "standardCrud.create"),
             (declaration.ViewKey, declaration.Surface, declaration.ActionKey, declaration.Provider));

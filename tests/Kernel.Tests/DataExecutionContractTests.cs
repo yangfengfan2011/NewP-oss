@@ -46,11 +46,20 @@ public sealed class DataExecutionContractTests
             JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(Path.Combine(root.FullName, "tests", "Kernel.Tests", "Fixtures", "ExampleRuntimeModel.contract.json")))));
     }
 
+    [Fact]
+    public void ExecutionContracts_RejectTheRetiredLegacyActionMode()
+    {
+        using var json = JsonDocument.Parse("""
+            {"dataExecutions":[{"key":"test.execution","moduleId":"Test","provider":"test.backend","boundary":"internal",
+              "featureBehaviors":[],"requirements":[{"role":"target","stage":"read","shape":"object","resources":["test.item"],"anyOf":[["read"]]}],
+              "fixedBindings":[{"kind":"internal","identity":"test.execution","caller":"Test.Consumer.ReadAsync"}],"legacyActions":true}]}
+            """);
+        Assert.Throws<JsonException>(() => DataExecutionContracts.Read(json.RootElement, "Test"));
+    }
     [Theory]
     [InlineData("provider")]
     [InlineData("owner")]
     [InlineData("lower-floor")]
-    [InlineData("legacy")]
     [InlineData("shape")]
     [InlineData("actions")]
     [InlineData("unbound")]
@@ -66,7 +75,6 @@ public sealed class DataExecutionContractTests
             "provider" => contract with { Provider = "unregistered.provider" },
             "owner" => contract with { ModuleId = "Workspace" },
             "lower-floor" => contract with { Requirements = [contract.Requirements[0], contract.Requirements[1] with { AnyOf = [["read"]] }] },
-            "legacy" => contract with { LegacyActions = true },
             "shape" => contract with { Requirements = [contract.Requirements[0], contract.Requirements[1] with { Shape = "candidate" }] },
             _ => contract
         };

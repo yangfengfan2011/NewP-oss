@@ -98,11 +98,11 @@ public sealed class WorkspaceObjectAuthorizationExecutionSqlServerTests
         using (var scope = fixture.Services.CreateScope())
         {
             await Assert.ThrowsAsync<ActionDataAccessException>(() => scope.ServiceProvider.GetRequiredService<IDataScopeObjectAuthorization>()
-                .CheckAsync("part.part", targets[1].Id));
+                .CheckAsync("part.part", targets[1].Id, null!));
             await Assert.ThrowsAsync<ActionDataAccessException>(() => scope.ServiceProvider.GetRequiredService<IDataScopeObjectPermissionQueries>()
-                .CatalogAsync("part.part", targets[1].Id));
+                .CatalogAsync("part.part", targets[1].Id, null!));
             await Assert.ThrowsAsync<ActionDataAccessException>(() => scope.ServiceProvider.GetRequiredService<IDataScopeBatchAuthorization>()
-                .ReadCurrentAsync([new("part.part", targets[1].Id)]));
+                .ReadCurrentAsync([new("part.part", targets[1].Id)], null!));
         }
 
         async Task<string> DirectSubjectsAsync()

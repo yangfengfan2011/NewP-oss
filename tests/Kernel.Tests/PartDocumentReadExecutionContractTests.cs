@@ -17,7 +17,6 @@ public sealed class PartDocumentReadExecutionContractTests
         var descriptor = module == "Part" ? PartCrudDescriptor.Create() : DocumentCrudDescriptor.Create();
         Assert.True(descriptor.MapStandardEndpoints);
         Assert.Equal(route, descriptor.Route);
-        Assert.Empty(descriptor.LegacyDataExecutions);
         var compiled = new CanonicalModulePlanCompiler().Compile("owned-resource-reads",
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray());
         Assert.True(compiled.IsSuccess, System.Text.Json.JsonSerializer.Serialize(compiled.Diagnostics));

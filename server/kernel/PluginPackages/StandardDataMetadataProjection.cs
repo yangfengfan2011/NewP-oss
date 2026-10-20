@@ -14,7 +14,7 @@ public static class StandardDataMetadataProjection
             path => JsonNode.Parse(File.ReadAllText(path))!.AsObject(), StringComparer.Ordinal)
         : new Dictionary<string, JsonObject>(StringComparer.Ordinal);
 
-    /// <summary>模板的真实读取操作复用标准提供者固定下限；动作定义仍来自平台目录。</summary>
+    /// <summary>模板的真实读写操作复用标准提供者固定下限；动作定义仍来自平台目录。</summary>
     public static IReadOnlyList<DataExecutionContract> ReadExecutions(string moduleId, JsonObject blueprint)
     {
         var resources = blueprint["standardData"]?["resources"]?.AsArray()
@@ -23,7 +23,17 @@ public static class StandardDataMetadataProjection
         {
             var resource = node?.AsObject() ?? throw new JsonException($"Standard data Blueprint for '{moduleId}' contains an invalid resource.");
             var key = moduleId + "." + RequiredString(resource, "key", moduleId);
-            return new[] { DataExecutionContracts.StandardRead(moduleId, key, "list"), DataExecutionContracts.StandardRead(moduleId, key, "read") };
+            var update = DataExecutionContracts.StandardWrite(moduleId, key, "update") with
+            {
+                FeatureBehaviors = [key + ".update", .. (resource["fields"]!.AsArray().Any(field => field?["name"]?.GetValue<string>() == "IsEnabled")
+                    ? new[] { key + ".enable", key + ".disable" } : [])]
+            };
+            // 授权功能位置原已存在；只引用Authorization提供的下限，不在模板复制read/authorize。
+            var manage = new DataExecutionContract(key + ".authorization.manage", moduleId, "authorization.object.manage", "entry",
+                [key + ".authorize"], []) { TargetResource = key };
+            return new[] { DataExecutionContracts.StandardRead(moduleId, key, "list"),
+                DataExecutionContracts.StandardWrite(moduleId, key, "create"), update, manage }
+                .Concat(resource.ContainsKey("detailViewKey") ? [DataExecutionContracts.StandardRead(moduleId, key, "read")] : []);
         }).OrderBy(contract => contract.Key, StringComparer.Ordinal).ToArray();
     }
 
@@ -122,7 +132,7 @@ public static class StandardDataMetadataProjection
 
             // 已有编辑器会先读取详情；没有显式详情页时，此预取仍是真实read入口。
             rowActions.Add(new { key = "edit", labelKey = "Action_Edit", standardAction = "edit", variant = (string?)null,
-                dataAccess = ReadReference(moduleId, resourceKey, "read") });
+                dataAccess = Reference(moduleId, resourceKey, "update") });
             if (hasEnabledField)
             {
                 // standard-data.v1 没有删除策略声明；这里只投影描述符已支持的停启能力，
@@ -133,6 +143,7 @@ public static class StandardDataMetadataProjection
                     labelKey = "Action_Disable",
                     standardAction = "disable",
                     variant = "danger",
+                    dataAccess = Reference(moduleId, resourceKey, "update"),
                     visibleWhen = new { field = "IsEnabled", @operator = "equals", value = true }
                 });
                 rowActions.Add(new
@@ -141,6 +152,7 @@ public static class StandardDataMetadataProjection
                     labelKey = "Action_Enable",
                     standardAction = "enable",
                     variant = (string?)null,
+                    dataAccess = Reference(moduleId, resourceKey, "update"),
                     visibleWhen = new { field = "IsEnabled", @operator = "equals", value = false }
                 });
             }
@@ -153,17 +165,17 @@ public static class StandardDataMetadataProjection
                 ["mode"] = "list",
                 ["model"] = resourceKey,
                 ["resourceKey"] = $"{moduleId}.{resourceKey}",
-                ["dataAccess"] = ReadReference(moduleId, resourceKey, "list"),
+                ["dataAccess"] = Reference(moduleId, resourceKey, "list"),
                 ["editorMode"] = "drawer",
                 // 通用资源授权端点消费每个CRUD资源的功能声明；声明不增加页面行操作。
                 ["featureActions"] = JsonSerializer.SerializeToNode(new[]
                 {
-                    new { key = "authorize", titleKey = "Authorize", behaviorKey = $"{moduleId}.{resourceKey}.authorize" }
+                    new { key = "authorize", titleKey = "Authorize", behaviorKey = $"{moduleId}.{resourceKey}.authorize", dataAccess = Reference(moduleId, resourceKey, "authorization.manage") }
                 }),
                 ["columns"] = JsonSerializer.SerializeToNode(columns),
                 ["pageActions"] = JsonSerializer.SerializeToNode(new object[]
                 {
-                    new { key = "create", labelKey = "Action_Create", standardAction = "create", variant = "primary" },
+                    new { key = "create", labelKey = "Action_Create", standardAction = "create", variant = "primary", dataAccess = Reference(moduleId, resourceKey, "create") },
                     new { key = "refresh", labelKey = "Action_Refresh", standardAction = "refresh", variant = (string?)null }
                 }),
                 ["rowActions"] = JsonSerializer.SerializeToNode(rowActions)
@@ -203,17 +215,22 @@ public static class StandardDataMetadataProjection
             || OptionalString(matches[0]!, "model", moduleId) != resourceKey)
             throw new JsonException($"Standard data resource '{moduleId}.{resourceKey}' detailViewKey '{viewKey}' must resolve to exactly one matching package Detail View.");
         matches[0]!["resourceKey"] = $"{moduleId}.{resourceKey}";
-        matches[0]!["dataAccess"] = ReadReference(moduleId, resourceKey, "read");
+        matches[0]!["dataAccess"] = Reference(moduleId, resourceKey, "read");
+        // 作者已声明的详情编辑复用该资源update；不为只读详情生成动作或功能点。
+        foreach (var surface in new[] { "pageActions", "rowActions" })
+            if (matches[0]![surface] is JsonArray actions)
+                foreach (var action in actions.OfType<JsonObject>().Where(action => action["standardAction"]?.GetValue<string>() == "edit"))
+                    action["dataAccess"] = Reference(moduleId, resourceKey, "update");
         RemoveLegacyPermissions(matches[0]!);
     }
 
     // View仅引用执行和真实资源，不复制提供者的read下限。
-    private static JsonObject ReadReference(string moduleId, string resource, string operation)
+    private static JsonObject Reference(string moduleId, string resource, string operation)
     {
         var key = moduleId + "." + resource;
         return new JsonObject
         {
-            ["execution"] = DataExecutionContracts.StandardRead(moduleId, key, operation).Key,
+            ["execution"] = key + "." + operation,
             ["resources"] = new JsonArray(key)
         };
     }

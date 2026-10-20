@@ -23,7 +23,7 @@ internal static class StandardDataReadFixtureCatalog
             .Select(module => new ModuleCapsuleCandidate(module.ModuleId, module.Version, module.DisplayName,
                 "Test-only action catalog; not a runnable builtin.", catalogRoot, null, null, null, null,
                 "behavior-bindings", [], [], [], [], [], new("test-catalog", Path.Combine(catalogRoot, "catalog.json"), "/"))
-            { DataActions = module.DataActions.ToArray() });
+            { DataActions = module.DataActions.ToArray(), BackendBehaviorKey = module.BackendBehaviorKey, DataExecutionProviders = module.DataExecutionProviders.ToArray() });
         var result = new CanonicalModulePlanCompiler().Compile("standard-data-read-fixture", catalog.Append(candidate));
         return result.Plan ?? throw new InvalidOperationException(string.Join(Environment.NewLine, result.Diagnostics.Select(item => item.Code + ": " + item.Message)));
     }

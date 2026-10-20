@@ -71,12 +71,12 @@ public sealed class DepartmentCrudUniqueConstraintTests
     }
 
     private static StandardCrudService CreateService(IStandardCrudRepository repository) => new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             null!,
-            new StandardCrudDefaultWriter(repository, [], [], auditValueProvider: new EntityAuditValueProvider(new FixedAuditStampProvider())),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], auditValueProvider: new EntityAuditValueProvider(new FixedAuditStampProvider()), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
     private static Dictionary<string, object?> DepartmentValues(
         string companyId,

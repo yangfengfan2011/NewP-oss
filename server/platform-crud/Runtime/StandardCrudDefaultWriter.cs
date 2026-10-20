@@ -23,14 +23,14 @@ public sealed class StandardCrudDefaultWriter
     private readonly IReadOnlyDictionary<string, IStandardCrudUpdateRecorder> _updateRecorders;
     private readonly IPlatformTransactionExecutor? _transactionExecutor;
     private readonly StandardCrudWriteRules _rules;
-    private readonly IDataScopeObjectDecisionProvider? _dataScope;
-    private readonly IDataExecutionAccess? _executions;
+    private readonly IDataExecutionAccess _executions;
     private readonly IPlatformObjectIdGenerator? _objectIds;
     private readonly ICP.Platform.Crud.Ownership.EntityOwnershipValues? _ownership;
     private readonly ICP.Platform.Crud.Ownership.EntityOwnershipAudit? _ownershipAudit;
 
     /// <summary>组合默认写入依赖；事务与审计仍复用平台已有 owner，不依赖查询或展示服务。</summary>
     public StandardCrudDefaultWriter(
+        IDataExecutionAccess executions,
         IStandardCrudRepository repository,
         IEnumerable<IStandardCrudValidator> validators,
         IEnumerable<IStandardCrudDeleteGuard> deleteGuards,
@@ -40,7 +40,6 @@ public sealed class StandardCrudDefaultWriter
         IEnumerable<IStandardCrudCreationRecorder>? creationRecorders = null,
         IPlatformTransactionExecutor? transactionExecutor = null,
         IEnumerable<IStandardCrudUpdateRecorder>? updateRecorders = null,
-        IDataScopeObjectDecisionProvider? dataScope = null,
         IPlatformObjectIdGenerator? objectIds = null,
         ICP.Platform.Crud.Ownership.EntityOwnershipValues? ownership = null,
         ICP.Platform.Crud.Ownership.EntityOwnershipAudit? ownershipAudit = null)
@@ -53,38 +52,11 @@ public sealed class StandardCrudDefaultWriter
         _updateRecorders = (updateRecorders ?? []).ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _transactionExecutor = transactionExecutor;
         _rules = new StandardCrudWriteRules(repository, validators, temporalInputNormalizer, auditValueProvider);
-        _dataScope = dataScope;
+        _executions = executions ?? throw new ArgumentNullException(nameof(executions));
         _objectIds = objectIds;
         _ownership = ownership;
         _ownershipAudit = ownershipAudit;
     }
-
-    /// <summary>正式DI组合要求执行器；保留原构造ABI供未迁移的已有消费者使用。</summary>
-    public StandardCrudDefaultWriter(
-        IDataExecutionAccess executions,
-        IStandardCrudRepository repository,
-        IEnumerable<IStandardCrudValidator> validators,
-        IEnumerable<IStandardCrudDeleteGuard> deleteGuards,
-        IEnumerable<IStandardCrudConditionalDeleteExecutor>? conditionalDeleteExecutors = null,
-        IEntityAuditValueProvider? auditValueProvider = null,
-        ITemporalInputNormalizer? temporalInputNormalizer = null,
-        IEnumerable<IStandardCrudCreationRecorder>? creationRecorders = null,
-        IPlatformTransactionExecutor? transactionExecutor = null,
-        IEnumerable<IStandardCrudUpdateRecorder>? updateRecorders = null,
-        IDataScopeObjectDecisionProvider? dataScope = null,
-        IPlatformObjectIdGenerator? objectIds = null,
-        ICP.Platform.Crud.Ownership.EntityOwnershipValues? ownership = null,
-        ICP.Platform.Crud.Ownership.EntityOwnershipAudit? ownershipAudit = null)
-        : this(repository, validators, deleteGuards, conditionalDeleteExecutors, auditValueProvider, temporalInputNormalizer,
-            creationRecorders, transactionExecutor, updateRecorders, dataScope, objectIds, ownership, ownershipAudit)
-    {
-        _executions = executions;
-    }
-
-    // 默认创建核心可由统一对象行为复用；已处于对象事务时只登记变化，不再取得第二次事务所有权。
-    internal ValueTask<StandardCrudMutationResult> CreateAsync(StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values,
-        CancellationToken cancellationToken) => CreateAsync(descriptor, values, null, cancellationToken);
 
     // 来源不进入业务值，正式裁决仍处于原事务和事实保护位置。
     internal async ValueTask<StandardCrudMutationResult> CreateAsync(StandardCrudDescriptor descriptor,
@@ -150,11 +122,6 @@ public sealed class StandardCrudDefaultWriter
 
     /// <summary>只读预检正式创建候选；复用字段、可信审计及数据 create 裁决，不登记对象或开启写事务。</summary>
     /// <remarks>内部候选包含本次服务端身份，仅供业务预检；不能公开它或把成功当作后续提交的凭证。</remarks>
-    public Task<StandardCrudMutationResult> PrepareCreateCandidateAsync(StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default)
-        => PrepareCreateCandidateAsync(descriptor, values, null, cancellationToken);
-
-    /// <summary>候选保留真实补齐顺序，来源独立于业务字段且不授权后续提交。</summary>
     public async Task<StandardCrudMutationResult> PrepareCreateCandidateAsync(StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken cancellationToken = default)
     {
@@ -168,36 +135,17 @@ public sealed class StandardCrudDefaultWriter
             if (_ownership is null) throw new InvalidOperationException("ENTITY_OWNERSHIP_PROVIDER_REQUIRED");
             await _ownership.ApplyCreateAsync(ownedCandidate, ownershipFields, cancellationToken);
         }
-        IReadOnlyDictionary<string, object?> candidate = ownedCandidate;
-        if (_dataScope is not null || source is ObjectOperationWriteSource.Declared)
+        if (_objectIds is null) throw new InvalidOperationException("DATA_SCOPE_OBJECT_ID_GENERATOR_REQUIRED");
+        IReadOnlyDictionary<string, object?> candidate = new Dictionary<string, object?>(ownedCandidate, StringComparer.Ordinal)
         {
-            if (_objectIds is null) throw new InvalidOperationException("DATA_SCOPE_OBJECT_ID_GENERATOR_REQUIRED");
-            candidate = new Dictionary<string, object?>(candidate, StringComparer.Ordinal)
-            {
-                [descriptor.IdField] = _objectIds.NewId(descriptor.ModelName)
-            };
-            if (source is ObjectOperationWriteSource.Declared declared)
-            {
-                var access = _executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED");
-                if (await access.EvaluateCandidateAsync(declared.Context, descriptor.ResourceKey,
-                    "candidate", candidate, cancellationToken) != DataExecutionDecision.Allowed)
-                    return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
-            }
-            else
-            {
-                if (source is not ObjectOperationWriteSource.Legacy) AssertLegacyExecution(descriptor, "create");
-                if (!await (_dataScope ?? throw new InvalidOperationException("DATA_SCOPE_OBJECT_DECISIONS_REQUIRED")).IsCandidateAllowedAsync(descriptor.ResourceKey, candidate, "create", cancellationToken))
-                    return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
-            }
-        }
+            [descriptor.IdField] = _objectIds.NewId(descriptor.ModelName)
+        };
+        var declared = (ObjectOperationWriteSource.Declared)source!;
+        if (await _executions.EvaluateCandidateAsync(declared.Context, descriptor.ResourceKey,
+            "candidate", candidate, cancellationToken) != DataExecutionDecision.Allowed)
+            return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
         return StandardCrudMutationResult.Success(new StandardCrudDetail { Fields = candidate });
     }
-
-    // 默认更新核心在对象事务内直接保护旧值、校验最终输入并登记业务审计，避免形成第二个事务 owner。
-    internal ValueTask<StandardCrudMutationResult> UpdateAsync(StandardCrudDescriptor descriptor,
-        string id,
-        IReadOnlyDictionary<string, object?> values,
-        CancellationToken cancellationToken) => UpdateAsync(descriptor, id, values, null, cancellationToken);
 
     // 来源不进入业务值，正式裁决仍处于原事务和事实保护位置。
     internal async ValueTask<StandardCrudMutationResult> UpdateAsync(StandardCrudDescriptor descriptor,
@@ -305,10 +253,6 @@ public sealed class StandardCrudDefaultWriter
     }
 
     // 默认删除核心在统一行为事务内执行 guard 或原子条件删除，不更新即将物理删除行的审计字段。
-    internal ValueTask<StandardCrudMutationResult> DeleteAsync(StandardCrudDescriptor descriptor,
-        string id,
-        CancellationToken cancellationToken) => DeleteAsync(descriptor, id, null, cancellationToken);
-
     // 来源不进入业务值，正式裁决仍处于原事务和事实保护位置。
     internal async ValueTask<StandardCrudMutationResult> DeleteAsync(StandardCrudDescriptor descriptor,
         string id,
@@ -321,7 +265,6 @@ public sealed class StandardCrudDefaultWriter
                 cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
         AssertWriteSource(descriptor, "delete", id, source);
-        if (_dataScope is not null || source is ObjectOperationWriteSource.Declared)
         {
             var existing = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
             if (existing is null) return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
@@ -424,50 +367,22 @@ public sealed class StandardCrudDefaultWriter
     private async Task<StandardCrudError?> CheckExistingScopeAsync(StandardCrudDescriptor descriptor, string id,
         string action, IReadOnlyDictionary<string, object?> existing, ObjectOperationWriteSource? source, CancellationToken token)
     {
-        if (_dataScope is null && source is not ObjectOperationWriteSource.Declared) return null;
-        if (source is ObjectOperationWriteSource.Declared declared)
-        {
-            var access = _executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED");
-            var result = await access.EvaluateObjectAsync(declared.Context, "target",
-                new DataExecutionWriteFacts(descriptor.ResourceKey, id, existing), token);
-            return result == DataExecutionDecision.Allowed ? null : result == DataExecutionDecision.NotFound ? NotFound(descriptor, id) : ScopeDenied(descriptor);
-        }
-        if (source is not ObjectOperationWriteSource.Legacy) AssertLegacyExecution(descriptor, action == "edit" ? "update" : action);
-        if (!await (_dataScope ?? throw new InvalidOperationException("DATA_SCOPE_OBJECT_DECISIONS_REQUIRED")).IsAllowedAsync(descriptor.ResourceKey, id, "read", token)) return NotFound(descriptor, id);
-        return await _dataScope.IsAllowedAsync(descriptor.ResourceKey, id, action, token)
-            ? null : ScopeDenied(descriptor);
+        var declared = (ObjectOperationWriteSource.Declared)source!;
+        var result = await _executions.EvaluateObjectAsync(declared.Context, "target",
+            new DataExecutionWriteFacts(descriptor.ResourceKey, id, existing), token);
+        return result == DataExecutionDecision.Allowed ? null : result == DataExecutionDecision.NotFound ? NotFound(descriptor, id) : ScopeDenied(descriptor);
     }
 
-    // 新来源不可改换操作、资源或目标；未迁移caller必须明确匹配独立过渡登记，缺来源绝不回退。
+    // 来源只能是本次正式写；资源、操作和目标必须与实际owner调用完全一致。
     private static void AssertWriteSource(StandardCrudDescriptor descriptor, string operation, string? id, ObjectOperationWriteSource? source)
     {
-        if (source is ObjectOperationWriteSource.Declared declared)
-        {
-            var context = declared.Context;
-            if (context.ResourceKey != descriptor.ResourceKey || context.ObjectId != id
-                || context.Binding.Provider != "standardCrud." + operation || context.Binding.Stage != "submit"
-                || context.Internal is null && (!descriptor.DataExecutions.TryGetValue(operation, out var key) || context.Binding.Execution != key))
-                throw new ActionDataAccessException(400, "ActionDataAccess.WriteBindingInvalid");
-            return;
-        }
-        if (source is ObjectOperationWriteSource.Legacy legacy)
-        {
-            if (legacy.ResourceKey != descriptor.ResourceKey || legacy.Operation != operation || legacy.ObjectId != id
-                || !legacy.Caller.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static)
-                    .Any(method => method.Name == legacy.Member)
-                || !descriptor.LegacyObjectOperationBindings.Contains(new(legacy.Caller.FullName + "." + legacy.Member, operation)))
-                throw new ActionDataAccessException(400, "ActionDataAccess.LegacyWriteBindingInvalid");
-            return;
-        }
-        if (descriptor.DataExecutions.ContainsKey(operation)) throw new ActionDataAccessException(400, "ActionDataAccess.WriteContextRequired");
-        // 未迁移的原构造ABI保留其原字段/事实顺序；具体Legacy登记仍在原实际判权位置核对。
-    }
-
-    // 过渡仅允许资源owner明确登记的具体旧执行；#321删除该分支，不能用请求头选择。
-    private static void AssertLegacyExecution(StandardCrudDescriptor descriptor, string operation)
-    {
-        if (!descriptor.LegacyDataExecutions.Contains(operation, StringComparer.Ordinal))
-            throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
+        if (source is not ObjectOperationWriteSource.Declared declared || declared.Context is null)
+            throw new ActionDataAccessException(400, "ActionDataAccess.WriteContextRequired");
+        var context = declared.Context;
+        if (context.ResourceKey != descriptor.ResourceKey || context.ObjectId != id
+            || context.Binding.Provider != "standardCrud." + operation || context.Binding.Stage != "submit"
+            || context.Internal is null && (!descriptor.DataExecutions.TryGetValue(operation, out var key) || context.Binding.Execution != key))
+            throw new ActionDataAccessException(400, "ActionDataAccess.WriteBindingInvalid");
     }
 
     // 功能入口资格由端点独立检查；这里仅报告数据动作明确拒绝。

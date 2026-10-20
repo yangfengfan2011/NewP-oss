@@ -5,12 +5,8 @@ namespace ICP.Platform.Crud.Descriptors;
 
 public sealed record StandardCrudDescriptor
 {
-    /// <summary>具体执行绑定；未迁移操作必须在 LegacyDataExecutions 单独登记，不能从请求猜测路径。</summary>
+    /// <summary>具体执行的正式绑定；缺少映射不能选择其他路径。</summary>
     public IReadOnlyDictionary<string, string> DataExecutions { get; init; } = new Dictionary<string, string>();
-    /// <summary>迁移期保留的具体共享执行；随所属切片迁移删除，#321 退役整个过渡机制。</summary>
-    public IReadOnlyList<string> LegacyDataExecutions { get; init; } = [];
-    /// <summary>仅保留尚未迁移的具体内部调用者/动作；缺少来源不能选择这些过渡项。</summary>
-    public IReadOnlyList<ICP.Platform.Crud.ObjectOperations.ObjectOperationLegacyBinding> LegacyObjectOperationBindings { get; init; } = [];
 
     /// <summary>创建必须登记业务事实；缺少资源登记实现或事务参与能力时失败关闭。</summary>
     public bool RequiresCreationRecord { get; init; }

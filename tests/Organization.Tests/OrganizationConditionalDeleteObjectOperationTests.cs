@@ -67,6 +67,12 @@ public sealed class OrganizationConditionalDeleteObjectOperationTests
             objectKey is "organization.company" or "organization.position"
             && action == ObjectOperationAction.Delete;
 
+        public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action, string? targetId,
+            IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken token = default)
+        {
+            Assert.IsType<ObjectOperationWriteSource.Declared>(source);
+            return ExecuteAsync(objectKey, action, targetId, values, token);
+        }
         public Task<StandardCrudMutationResult> ExecuteAsync(
             string objectKey,
             ObjectOperationAction action,

@@ -23,8 +23,8 @@ public sealed class ObjectAuthorizationRequiredSourceTests
     public async Task FormalOverloads_RejectMissingSourceBeforeAnyDependencyIsUsed(string operation)
     {
         var executor = new NeverAccess();
-        var management = new DataScopeObjectManagement(null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, executions: executor);
-        var queries = new DataScopeObjectPermissionQueries(null!, null!, null!, null!, null!, null!, executions: executor);
+        var management = new DataScopeObjectManagement(executor, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!);
+        var queries = new DataScopeObjectPermissionQueries(executor, null!, null!, null!, null!, null!);
         Task Invoke() => operation switch
         {
             "check" => management.CheckAsync("part.part", "target", null!),
@@ -60,6 +60,35 @@ public sealed class ObjectAuthorizationRequiredSourceTests
 
     private sealed class NeverAccess : IDataExecutionAccess
     {
+        // 未消费的能力明确抛出，字段/拒绝测试不能继承生产接口的过渡实现。
+        public Task<DataScopeReadPlan> GetQueryReadPlanAsync(DataExecutionQueryContext context, string resourceKey,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetObjectReadPlanAsync(IReadOnlyList<DataExecutionBindingReference> bindings,
+            string resourceKey, string role, string objectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlySet<string>> GetInternalReadableIdsAsync(DataExecutionInternalReadBinding binding,
+            string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetInternalReadPlanAsync(DataExecutionInternalReadBinding binding,
+            string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetInternalQueryReadPlanAsync(DataExecutionInternalReadBinding binding,
+            string resourceKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetApiQueryReadPlanAsync(DataExecutionApiQueryContext context,
+            string resourceKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetApiObjectReadPlanAsync(DataExecutionApiObjectContext context, string resourceKey, string objectId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataExecutionTargetDecision> EvaluateApiObjectAsync(DataExecutionApiObjectExecutionContext context, string role,
+            DataExecutionTargetInput target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public DataExecutionBindingReference BindResourceEndpoint(string resourceKey) => throw new NotSupportedException();
+        public IAsyncEnumerable<DataExecutionTargetDecision> EvaluateObjectsAsync(DataExecutionBindingReference binding, string role,
+            IReadOnlyList<DataExecutionTargetInput> targets, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> EvaluateObjectFromBindingsAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey,
+            string role, string objectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionWriteContext source, string resourceKey, string role,
+            IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionWriteContext source, string role,
+            DataExecutionWriteFacts before, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<DataExecutionTargetDecision> EvaluateInternalObjectAsync(DataExecutionInternalBinding binding, string role,
+            DataExecutionTargetInput target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey) => throw new InvalidOperationException("unexpected dependency");
         public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey, string role, string objectId,
             CancellationToken cancellationToken = default) => throw new InvalidOperationException("unexpected dependency");

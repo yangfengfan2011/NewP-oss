@@ -182,6 +182,40 @@ public sealed class ProductionEndpointAccessCoverageTests
         app.MapPluginManifestEndpoints("test-plugin-root");
 
         EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
+        var actualEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>().ToArray();
+        var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));
+        var assemblies = candidates.Where(candidate => candidate.BackendEntry is not null).Select(candidate =>
+            System.Reflection.Assembly.LoadFrom(Path.GetFullPath(Path.Combine(candidate.PackageRoot, candidate.BackendEntry!))))
+            .Append(typeof(ICP.Platform.Crud.Runtime.StandardCrudService).Assembly).Distinct().ToArray();
+        foreach (var module in compiled.Plan!.Modules)
+        foreach (var execution in module.DataExecutions)
+        {
+            if (execution.Boundary == "entry")
+                Assert.Contains(compiled.Plan.ActionDataAccessCatalog, declaration => declaration.Execution == execution.Key);
+            foreach (var binding in execution.FixedBindings)
+            {
+                Assert.Equal(execution.Boundary, binding.Kind);
+                if (binding.Kind == "api")
+                {
+                    var endpoint = Assert.Single(actualEndpoints, endpoint =>
+                        endpoint.RoutePattern.RawText?.TrimStart('/') == binding.Route?.TrimStart('/')
+                        && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains(binding.HttpMethod!));
+                    Assert.Equal(module.ModuleId, endpoint.Metadata.GetMetadata<EndpointModuleAttribute>()!.ModuleId);
+                }
+                else if (binding.Kind == "internal")
+                {
+                    var identity = binding.Caller!;
+                    var types = assemblies.Select(assembly => assembly.GetType(identity)).OfType<Type>().Distinct().ToArray();
+                    if (types.Length > 0) { Assert.Single(types); continue; }
+                    var split = identity.LastIndexOf('.');
+                    var type = Assert.Single(assemblies.Select(assembly => assembly.GetType(identity[..split])).OfType<Type>().Distinct());
+                    Assert.Contains(type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                        | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance), method => method.Name == identity[(split + 1)..]);
+                }
+                else Assert.Fail("Unknown fixed source: " + binding.Kind);
+            }
+        }
+
         var partEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
             .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("/api/part/parts", StringComparison.Ordinal) == true).ToArray();
         Assert.Equal(new[] { "part.part.create", "part.part.read" }, partEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())

@@ -28,7 +28,7 @@ public sealed class ObjectOperationContext
         Values = values.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
-    /// <summary>本次写的正式或明确过渡来源；未知调用不能由业务值补入。</summary>
+    /// <summary>标准写的正式来源；专用行为使用自己的执行合同，未知调用不能由业务值补入。</summary>
     public ObjectOperationWriteSource? WriteSource { get; }
 
     /// <summary>当前对象的稳定标识。</summary>

@@ -43,6 +43,5 @@ public sealed class DocumentObjectCopyExecutionContractTests
         Assert.Equal("ICP.Platform.Modules.Document.DocumentFiles.ReadCopySourceAsync", Assert.Single(metadata.FixedBindings).Caller);
         Assert.Equal(new[] { "ICP.Platform.Modules.Document.DocumentFiles.PrepareCopyFilesAsync", "ICP.Platform.Modules.Document.DocumentFiles.CopyAsync" }, copy.FixedBindings.Select(item => item.Caller));
         Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.Execution == metadata.Key || item.Execution == copy.Key);
-        Assert.Empty(DocumentCrudDescriptor.Create().LegacyObjectOperationBindings);
     }
 }

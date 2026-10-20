@@ -22,7 +22,7 @@ public sealed class StandardCrudCreatePreparationTests
         var decision = new CandidateDecision();
         var ids = new CandidateIds();
         var writer = Writer(repository, transaction, decision, ids);
-        var result = await writer.PrepareCreateCandidateAsync(Descriptor(), new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "准入候选" });
+        var result = await writer.PrepareCreateCandidateAsync(Descriptor(), new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "准入候选" }, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()));
         Assert.True(result.Succeeded);
         Assert.Equal(1, repository.UniqueChecks);
         Assert.Equal(1, decision.CandidateChecks);
@@ -50,7 +50,7 @@ public sealed class StandardCrudCreatePreparationTests
         var decision = new CandidateDecision();
         var ids = new CandidateIds();
         var result = await Writer(repository, transaction, decision, ids).PrepareCreateCandidateAsync(Descriptor(),
-            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选", ["CreatedBy"] = "forged" });
+            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选", ["CreatedBy"] = "forged" }, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()));
         Assert.False(result.Succeeded);
         Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", result.Error!.Code);
         Assert.Equal(0, repository.UniqueChecks);
@@ -69,15 +69,15 @@ public sealed class StandardCrudCreatePreparationTests
         var decision = new CandidateDecision();
         var ids = new CandidateIds();
         var writer = Writer(repository, transaction, decision, ids);
-        var duplicate = await writer.PrepareCreateCandidateAsync(Descriptor(), new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选" });
+        var duplicate = await writer.PrepareCreateCandidateAsync(Descriptor(), new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选" }, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()));
         Assert.False(duplicate.Succeeded);
         Assert.Equal("Person.NumberDuplicated", duplicate.Error!.Code);
         Assert.Equal(0, decision.CandidateChecks);
         Assert.Equal(0, ids.Calls);
         var validValues = new Dictionary<string, object?> { ["PersonNo"] = "P002", ["ENAME"] = "合法候选" };
-        Assert.True((await writer.PrepareCreateCandidateAsync(Descriptor(), validValues)).Succeeded);
+        Assert.True((await writer.PrepareCreateCandidateAsync(Descriptor(), validValues, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()))).Succeeded);
         decision.Allow = false;
-        var revoked = await writer.PrepareCreateCandidateAsync(Descriptor(), validValues);
+        var revoked = await writer.PrepareCreateCandidateAsync(Descriptor(), validValues, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()));
         Assert.False(revoked.Succeeded);
         Assert.Equal("DataScope.ActionDenied", revoked.Error!.Code);
         Assert.Equal(2, decision.CandidateChecks);
@@ -88,13 +88,13 @@ public sealed class StandardCrudCreatePreparationTests
     }
 
     private static StandardCrudDefaultWriter Writer(PreparationRepository repository, PreparationTransaction transaction, CandidateDecision decision, CandidateIds ids) =>
-        new(repository, [], [], auditValueProvider: new EntityAuditValueProvider(new Stamp()), transactionExecutor: transaction, dataScope: decision, objectIds: ids);
+        new(new ICP.Platform.Testing.StandardCrudTestAccess(decision), repository, [], [], auditValueProvider: new EntityAuditValueProvider(new Stamp()), transactionExecutor: transaction, objectIds: ids);
 
     private static StandardCrudDescriptor Descriptor() => new()
     {
         ResourceKey = "organization.person", ModuleId = "Organization", ModelName = "Person", Route = "api/organization/persons", IdField = "EID", DisplayField = "ENAME",
         RequiresCreationRecord = true,
-        LegacyDataExecutions = ["create"],
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
         FieldSet = new(["EID", "PersonNo", "ENAME"], ["EID", "PersonNo", "ENAME", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"], ["PersonNo", "ENAME"], ["ENAME"]),
         FieldPolicies = [.. new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" }.Select(field => new StandardCrudFieldPolicy
             { Field = field, StorageRequired = true, ValueOwner = StandardCrudFieldValueOwner.Server })],

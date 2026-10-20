@@ -458,6 +458,12 @@ public sealed class PersonStandardCrudResourceTests
         public bool CanExecute(string objectKey, ObjectOperationAction action) =>
             objectKey == "organization.person" && action == ObjectOperationAction.Delete;
 
+        public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action, string? targetId,
+            IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken token = default)
+        {
+            Assert.IsType<ObjectOperationWriteSource.Declared>(source);
+            return ExecuteAsync(objectKey, action, targetId, values, token);
+        }
         public Task<StandardCrudMutationResult> ExecuteAsync(
             string objectKey,
             ObjectOperationAction action,

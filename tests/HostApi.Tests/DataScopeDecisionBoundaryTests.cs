@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using ICP.Platform.Modules.Workspace;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Kernel.ModulePlanning;
@@ -34,6 +36,29 @@ public sealed class DataScopeDecisionBoundaryTests
         var inventory = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(inventoryFile))!;
         Assert.All(inventory, item => Assert.False(string.IsNullOrWhiteSpace(item.Value)));
         Assert.Equal(inventory.Keys.Order(StringComparer.Ordinal), calls);
+    }
+
+    [Fact]
+    public void CompleteReadBoundary_IsAnActuallyRegisteredResolverConsumedByItsFixedInternalContract()
+    {
+        var services = new ServiceCollection();
+        new WorkspaceModule().ConfigureServices(services);
+        var registration = Assert.Single(services, service => service.ImplementationType == typeof(WorkspacePermissionTargetReadResolver));
+        Assert.Equal(typeof(IDataExecutionTargetResolver), registration.ServiceType);
+        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+        var result = new CanonicalModulePlanCompiler().Compile("complete-read-boundary",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
+        var owner = Assert.Single(result.Plan!.Modules, module => module.ModuleId == "Workspace");
+        var execution = Assert.Single(owner.DataExecutions, item => item.Key == WorkspacePermissionTargetReadResolver.Execution);
+        Assert.Equal("internal", execution.Boundary);
+        var source = Assert.Single(execution.FixedBindings);
+        Assert.Equal("ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveTargetsAsync", source.Caller);
+        var role = Assert.Single(execution.Requirements);
+        Assert.Equal("workspace.permission.target.fullRead", role.ReadResolverKey);
+        Assert.Equal("read", Assert.Single(Assert.Single(role.AnyOf)));
+        Assert.Contains(FindCalls([typeof(WorkspaceModule).Assembly]), call =>
+            call == typeof(WorkspacePermissionTargetReadResolver).FullName + ".ResolveAsync[0] -> IsAllowedAsync");
     }
 
     [Fact]

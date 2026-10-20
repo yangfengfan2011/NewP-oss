@@ -1,3 +1,4 @@
+using ICP.Platform.Testing;
 using System.Linq.Expressions;
 using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
@@ -92,10 +93,10 @@ public sealed class DataScopeResourceIdentityTests
         var resources = new StandardCrudResourceRegistry([descriptor, descriptor with { ResourceKey = "organization.company.alternate", Route = "api/organization/company-alternate" }]);
         var identities = new DataScopeIdentities([]);
         var catalog = new DataScopeCatalog(resources, new CanonicalModulePlan("test", "1.0", "", "", [], []), db, identities);
-        var queries = new DataScopeObjectPermissionQueries(new ReadableAccess(), identities, null!, new Microsoft.AspNetCore.Http.HttpContextAccessor(), catalog, db);
+        var queries = new DataScopeObjectPermissionQueries(new StandardCrudTestAccess(objects: new ReadableAccess()), identities, null!, new Microsoft.AspNetCore.Http.HttpContextAccessor(), catalog, db);
         foreach (var key in new[] { "organization.company", "organization.company.alternate" })
         {
-            var result = await queries.CatalogAsync(key, "catalog-only-target");
+            var result = await queries.CatalogAsync(key, "catalog-only-target", [new("test.catalog", "test.backend", "read")]);
             Assert.NotNull(result);
             Assert.Equal(new[] { "creator" }, result.SubjectTypes.Select(type => type.Key));
             Assert.False(Assert.Single(result.SubjectTypes).RequiresId);

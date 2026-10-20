@@ -202,7 +202,7 @@ public sealed class DataScopeObjectManagementTests
             var catalog = new DataScopeCatalog(new StandardCrudResourceRegistry([RoleReadResource.Create()]), plan, db, identities);
             Http.Request.Headers["X-NewP-Feature"] = plan.FeatureCatalog[0].Position;
             var grants = new DataScopeObjectGrants(db, null!, catalog, identities, null!, null!);
-            Management = new(catalog, plan, Features, Decisions, grants, identities, new HttpContextAccessor { HttpContext = Http }, null!, null!, null!);
+            Management = new(new ICP.Platform.Testing.StandardCrudTestAccess(Decisions), catalog, plan, Features, Decisions, grants, identities, new HttpContextAccessor { HttpContext = Http }, null!, null!, null!);
         }
 
         public void Dispose() => db.Dispose();

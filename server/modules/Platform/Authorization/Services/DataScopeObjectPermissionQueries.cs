@@ -7,14 +7,10 @@ using Microsoft.AspNetCore.Http;
 namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>仅从已经可浏览的真实对象进入查询，被分析用户显式传给同一裁决引擎。</summary>
-public sealed class DataScopeObjectPermissionQueries(IDataScopeObjectAccess access, DataScopeIdentities identities,
+public sealed class DataScopeObjectPermissionQueries(IDataExecutionAccess executions, DataScopeIdentities identities,
     IDataScopeReadPlanProvider reads, IHttpContextAccessor context, DataScopeCatalog catalog, EfPlatformDbContext db,
-    IDataScopeEvaluationScope? evaluation = null, IDataExecutionAccess? executions = null) : IDataScopeObjectPermissionQueries
+    IDataScopeEvaluationScope? evaluation = null) : IDataScopeObjectPermissionQueries
 {
-    /// <inheritdoc/>
-    public Task<DataScopePermissionCatalog?> CatalogAsync(string resourceKey, string objectId, CancellationToken token = default) =>
-        CatalogCoreAsync(resourceKey, objectId, LegacyOwnerBindings(), token);
-
     /// <inheritdoc/>
     public Task<DataScopePermissionCatalog?> CatalogAsync(string resourceKey, string objectId,
         IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default) =>
@@ -22,7 +18,7 @@ public sealed class DataScopeObjectPermissionQueries(IDataScopeObjectAccess acce
 
     // 声明校验替换原完整读取点，目录内容与功能资格由原owner保持。
     private async Task<DataScopePermissionCatalog?> CatalogCoreAsync(string resourceKey, string objectId,
-        IReadOnlyList<DataExecutionBindingReference>? bindings, CancellationToken token)
+        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
         if (!await IsReadableAsync(resourceKey, objectId, bindings, token)) return null;
@@ -31,17 +27,12 @@ public sealed class DataScopeObjectPermissionQueries(IDataScopeObjectAccess acce
 
     /// <inheritdoc/>
     public Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> UsersAsync(string resourceKey, string objectId, string? query,
-        int page, IReadOnlyList<string> currentIds, CancellationToken token = default) =>
-        UsersCoreAsync(resourceKey, objectId, query, page, currentIds, LegacyOwnerBindings(), token);
-
-    /// <inheritdoc/>
-    public Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> UsersAsync(string resourceKey, string objectId, string? query,
         int page, IReadOnlyList<string> currentIds, IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default) =>
         UsersCoreAsync(resourceKey, objectId, query, page, currentIds, RequiredBindings(bindings), token);
 
     // 用户候选和当前值仍用原最小安全目录，不引入业务档案对象权限。
     private async Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> UsersCoreAsync(string resourceKey, string objectId, string? query,
-        int page, IReadOnlyList<string> currentIds, IReadOnlyList<DataExecutionBindingReference>? bindings, CancellationToken token)
+        int page, IReadOnlyList<string> currentIds, IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
         if (!await IsReadableAsync(resourceKey, objectId, bindings, token)) return new(DataScopeAuthorizationStatus.NotFound);
@@ -52,16 +43,12 @@ public sealed class DataScopeObjectPermissionQueries(IDataScopeObjectAccess acce
 
     /// <inheritdoc/>
     public Task<DataScopeObjectInspection?> InspectAsync(string resourceKey, string objectId, string? accountId,
-        CancellationToken token = default) => InspectCoreAsync(resourceKey, objectId, accountId, LegacyOwnerBindings(), token);
-
-    /// <inheritdoc/>
-    public Task<DataScopeObjectInspection?> InspectAsync(string resourceKey, string objectId, string? accountId,
         IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default) =>
         InspectCoreAsync(resourceKey, objectId, accountId, RequiredBindings(bindings), token);
 
     // 解释连接所有权、被分析账号和原批量名称投影保持，只替换原read资格点。
     private async Task<DataScopeObjectInspection?> InspectCoreAsync(string resourceKey, string objectId, string? accountId,
-        IReadOnlyList<DataExecutionBindingReference>? bindings, CancellationToken token)
+        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
         // 整个解释是同一只读单元；只保留自有连接，不扩大事务或缓存授权事实。
@@ -96,15 +83,10 @@ public sealed class DataScopeObjectPermissionQueries(IDataScopeObjectAccess acce
         finally { if (openedHere) await db.Database.CloseConnectionAsync(); }
     }
 
-    // 旧手工构造供低层访问/连接测试；正式owner显式给来源，在原read点消费辅助查看role。
+    // 所有只读查询在原读取点消费明确来源，不保留无来源手工构造分支。
     private async Task<bool> IsReadableAsync(string resourceKey, string objectId,
-        IReadOnlyList<DataExecutionBindingReference>? bindings, CancellationToken token) => bindings is null
-        ? await access.IsReadableAsync(resourceKey, objectId, token)
-        : await executions!.EvaluateObjectFromBindingsAsync(bindings, resourceKey, "view", objectId, token) == DataExecutionDecision.Allowed;
-
-    // 正式装配不得退回旧手工无来源调用；兼容构造在#321统一退役。
-    private IReadOnlyList<DataExecutionBindingReference>? LegacyOwnerBindings() => executions is null ? null
-        : throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
+        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token) =>
+        await executions.EvaluateObjectFromBindingsAsync(bindings, resourceKey, "view", objectId, token) == DataExecutionDecision.Allowed;
 
     // 在打开解释连接或读取目录前拒绝缺失来源。
     private static IReadOnlyList<DataExecutionBindingReference> RequiredBindings(IReadOnlyList<DataExecutionBindingReference>? bindings) =>

@@ -48,7 +48,7 @@ public sealed class StandardDataCompositionSqlServerTests
                 new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false));
             var external = Assert.Single(modules.Modules, module => module.ModuleId == ModuleId);
             Assert.NotEmpty(external.DataExecutions);
-            Assert.Contains(modules.ActionDataAccessCatalog, requirement => requirement.ModuleId == ModuleId && requirement.Provider == "standardCrud.read");
+            Assert.Contains(modules.ActionDataAccessCatalog, requirement => requirement.ModuleId == ModuleId && requirement.Provider == "standardCrud.update");
             var result = new PersistencePlanCompiler(Path.Combine(repository!.FullName, "server", "platform-modeling", "metadata", "storage-types.json")).Compile(modules, PersistenceProvider.SqlServer);
             Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics));
             var model = Assert.Single(result.Plan!.Models, model => model.OwnerModuleId == "Partner.AssetCatalog");
@@ -99,23 +99,43 @@ public sealed class StandardDataCompositionSqlServerTests
             }
             throw;
         }
-        var point = Assert.Single(fixture.Catalog, point => point.BehaviorKey == "Partner.AssetCatalog.Asset.create");
-        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post,
-            "/api/plugins/partner-asset-catalog/assets", new { Code = "EXTERNAL266", Name = "真实外仓266" });
-        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
-        var created = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var id = created.GetProperty("fields").GetProperty("EID").GetString()!;
-        var read = Assert.Single(fixture.Catalog, point => point.BehaviorKey == "Partner.AssetCatalog.Asset.read");
+        const string resource = "Partner.AssetCatalog.Asset";
         using var manifest = await fixture.Administrator.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json");
         var owner = Assert.Single(manifest!.RootElement.GetProperty("modules").EnumerateArray(), module => module.GetProperty("moduleId").GetString() == ModuleId);
         var declarations = owner.GetProperty("dataAccess").Deserialize<ActionDataAccessRequirement[]>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
-        var declaration = Assert.Single(declarations, item => item.Provider == "standardCrud.read" && item.FeaturePositions.Contains(read.Position, StringComparer.Ordinal));
-        using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, read, HttpMethod.Get, ApiRoute + "/" + id))
+        ActionDataAccessRequirement Declaration(string execution, FeaturePoint point) => Assert.Single(declarations,
+            item => item.Execution == resource + "." + execution && item.FeaturePositions.Contains(point.Position, StringComparer.Ordinal));
+        var point = Assert.Single(fixture.Catalog, point => point.BehaviorKey == resource + ".create");
+        using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, ApiRoute,
+            new { Code = "MISSING321", Name = "缺少来源" })) Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, ApiRoute,
+            new { Code = "EXTERNAL266", Name = "真实外仓266" }, Declaration("create", point));
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        var created = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var id = created.GetProperty("fields").GetProperty("EID").GetString()!;
+        // 编辑准备沿真实行动作来源消费update.prepare，正式详情仍保留独立read。
+        var edit = Assert.Single(fixture.Catalog, item => item.BehaviorKey == resource + ".update" && item.ActionScope == "list.rowActions");
+        var update = Declaration("update", edit);
+        using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Get, ApiRoute + "/" + id))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
-        using var detailResponse = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, read, HttpMethod.Get, ApiRoute + "/" + id, dataAccess: declaration);
+        using var detailResponse = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Get, ApiRoute + "/" + id, dataAccess: update);
         Assert.True(detailResponse.StatusCode == HttpStatusCode.OK, await detailResponse.Content.ReadAsStringAsync());
         var detail = await detailResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("真实外仓266", detail.GetProperty("fields").GetProperty("Name").GetString());
+        using (var changed = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Put, ApiRoute + "/" + id,
+            new { Name = "正式写入321" }, update)) Assert.True(changed.IsSuccessStatusCode, await changed.Content.ReadAsStringAsync());
+        var authorize = Assert.Single(fixture.Catalog, item => item.BehaviorKey == resource + ".authorize");
+        var manage = Declaration("authorization.manage", authorize);
+        var permissionRoute = "/api/authorization/data-scope/objects/" + resource + "/" + id;
+        using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, authorize, HttpMethod.Get, permissionRoute))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using (var permissions = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, authorize, HttpMethod.Get, permissionRoute, dataAccess: manage))
+            Assert.True(permissions.IsSuccessStatusCode, await permissions.Content.ReadAsStringAsync());
+        using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, authorize, HttpMethod.Put, permissionRoute,
+            new ICP.Platform.Modules.Authorization.DTOs.DataScopeObjectDto(resource, id, []))) Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using (var saved = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, authorize, HttpMethod.Put, permissionRoute,
+            new ICP.Platform.Modules.Authorization.DTOs.DataScopeObjectDto(resource, id, []), manage))
+            Assert.True(saved.IsSuccessStatusCode, await saved.Content.ReadAsStringAsync());
         await using var connection = new SqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = new SqlCommand("SELECT COUNT(*) FROM np_partner_assetcatalog.Asset WHERE EID=@id;", connection);

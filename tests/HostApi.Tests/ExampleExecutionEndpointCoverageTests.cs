@@ -27,7 +27,6 @@ public sealed class ExampleExecutionEndpointCoverageTests
     [Theory]
     [InlineData("missing")]
     [InlineData("unknown")]
-    [InlineData("legacy-switch")]
     [InlineData("missing-list")]
     [InlineData("missing-read")]
     [InlineData("missing-export")]
@@ -37,7 +36,7 @@ public sealed class ExampleExecutionEndpointCoverageTests
         var bindings = descriptor.DataExecutions.ToDictionary(item => item.Key, item => item.Value);
         if (problem == "unknown") bindings["update"] = "unregistered.execution";
         else bindings.Remove(problem.StartsWith("missing-", StringComparison.Ordinal) ? problem[8..] : "update");
-        descriptor = descriptor with { DataExecutions = bindings, LegacyDataExecutions = problem == "legacy-switch" ? ["update"] : [] };
+        descriptor = descriptor with { DataExecutions = bindings };
         using var app = Build(descriptor);
         Assert.Throws<InvalidOperationException>(() => app.MapStandardCrudResources());
     }

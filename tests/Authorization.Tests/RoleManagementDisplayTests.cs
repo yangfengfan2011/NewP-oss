@@ -65,17 +65,17 @@ public sealed class RoleManagementDisplayTests
         }
         db.ChangeTracker.Clear();
         var names = new Names();
-        var writeRepository = new EfStandardCrudRepository(db, new PlatformObjectIdGenerator());
+        var writeRepository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), db, new PlatformObjectIdGenerator());
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             new EfPlatformQueryExecutor(db),
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [new RoleReadResource()],
             new DisplayValueProjection(
                 [],
                 temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
                 userDisplayNameDirectory: names),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
         var query = new RoleManagementQuery(service, registry);
         var page = JsonSerializer.SerializeToElement(await query.ListAsync("role", 1, 20, default));
         Assert.Equal(2, page.GetProperty("total").GetInt32());

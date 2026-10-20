@@ -128,10 +128,10 @@ public sealed class DataScopeReadConstraintRegistrationTests
         var module = new CanonicalModulePlanModule("Workspace", "1.1.0", "工作空间", null, "", null, null,
             null, null, "", [], [], [], [], [], new("test", "test", "/"))
             { DataActions = [new("Workspace", "read", "读取", "data.read"), new("Workspace", "edit", "编辑", "data.edit")],
-                DataExecutions = requirement is null ? [] : [new(requirement.Execution, "Workspace", "workspace.backend", "entry", [],
-                    [new("target", "read", "object", ["workspace.folder"], [["read"]])]) { LegacyActions = true }],
+                DataExecutions = requirement is null ? [] : [new(requirement.Execution, "Workspace", "workspace.backend", "entry", ["workspace.folder.read"],
+                    [new("target", "read", "object", ["workspace.folder"], [requirement.Actions])])],
                 Features = requirement is null ? [] : [new("Workspace", "read", "navigation", "读取", null, "workspace.folder.read")
-                    { DataResources = ["workspace.folder"], DataAccess = [requirement] }] };
+                    { DataResources = ["workspace.folder"], DataAccess = [requirement with { Actions = [] }] }] };
         var modules = new CanonicalModulePlan("candidate", "1.1.0", "", "", [], [module]);
         var models = new WorkspaceModelMetadataProvider().GetDefinitions();
         var persistence = new CompiledPersistencePlan("candidate", "snapshot", "hash", PersistenceProvider.SqlServer,

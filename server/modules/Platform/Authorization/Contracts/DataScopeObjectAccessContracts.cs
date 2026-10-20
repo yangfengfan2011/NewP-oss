@@ -35,24 +35,16 @@ public interface IDataScopeObjectAccess
 /// <summary>真实owner在自身入口验证位置/功能后复用同一权限引擎查询，不切换请求主体。</summary>
 public interface IDataScopeObjectPermissionQueries
 {
-    /// <summary>目标可浏览即可读取动作与主体类型，不公开任何完整对象直接配置。</summary>
-    Task<DataScopePermissionCatalog?> CatalogAsync(string resourceKey, string objectId, CancellationToken token = default);
-    /// <summary>账号选择仅公开最小用户候选，当前目标每次重新验证read；不开放其他配置主体候选。</summary>
-    Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> UsersAsync(string resourceKey, string objectId, string? query,
-        int page, IReadOnlyList<string> currentIds, CancellationToken token = default);
-    /// <summary>返回指定真实账号的数据动作及受控依据；目标或账号不可查询时返回null，依赖故障传播。</summary>
-    Task<DataScopeObjectInspection?> InspectAsync(string resourceKey, string objectId, string? accountId,
-        CancellationToken token = default);
     /// <summary>只读目录消费端点明确允许的查看或管理辅助read来源，不增加authorize。</summary>
     Task<DataScopePermissionCatalog?> CatalogAsync(string resourceKey, string objectId,
-        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default) => throw new NotSupportedException();
+        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default);
     /// <summary>最小用户目录保留原完整读取资格，与其他管理主体候选分离。</summary>
     Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> UsersAsync(string resourceKey, string objectId, string? query,
         int page, IReadOnlyList<string> currentIds, IReadOnlyList<DataExecutionBindingReference> bindings,
-        CancellationToken token = default) => throw new NotSupportedException();
+        CancellationToken token = default);
     /// <summary>解释只按原read角色查询真实目标，管理来源的辅助读取也不升级authorize。</summary>
     Task<DataScopeObjectInspection?> InspectAsync(string resourceKey, string objectId, string? accountId,
-        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default) => throw new NotSupportedException();
+        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default);
 }
 
 /// <summary>权限结果是数据动作裁决，不代替功能位置、业务状态或资源拥有者边界。</summary>

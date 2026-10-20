@@ -21,6 +21,10 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    private static OrganizationDirectoryLookupRequest Lookup(string? Keyword, int Page, int PageSize,
+        IReadOnlyCollection<string>? CurrentValueIds = null, bool IncludeDisabled = false) => new(Keyword, Page, PageSize, CurrentValueIds, IncludeDisabled)
+    { ReadContext = new(new("test.directory", "organization.backend", "read"), "query") };
+
     private const string RunEnvironmentVariable = "NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION";
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "受控上级候选在 SQL 分页前过滤并清理临时层级集合")]
@@ -40,7 +44,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         await context.SaveChangesAsync();
 
         var plans = new TestReadPlans();
-        var directory = new EfDepartmentDirectory(context, new SqlServerDepartmentHierarchyQuery(context), plans);
+        var directory = new EfDepartmentDirectory(context, new SqlServerDepartmentHierarchyQuery(context), () => new ICP.Platform.Testing.StandardCrudTestAccess(reads: plans));
         var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
         await connection.OpenAsync();
         connection.StatisticsEnabled = true;
@@ -56,7 +60,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         connection.ResetStatistics();
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var first = await directory.LookupParentCandidatesAsync("Company_1", "Department_000",
-            new OrganizationDirectoryLookupRequest(null, 1, 1,
+            Lookup(null, 1, 1,
                 ["Department_000", "Department_001", "Department_002", "Department_Other", "missing"]));
         watch.Stop();
         var statistics = connection.RetrieveStatistics();
@@ -94,10 +98,10 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
 
         plans.BadField = true;
         await Assert.ThrowsAnyAsync<Exception>(() => directory.LookupParentCandidatesAsync("Company_1", "Department_000",
-            new OrganizationDirectoryLookupRequest(null, 1, 1)));
+            Lookup(null, 1, 1)));
         plans.BadField = false;
         var second = await directory.LookupParentCandidatesAsync("Company_1", "Department_000",
-            new OrganizationDirectoryLookupRequest(null, 2, 1));
+            Lookup(null, 2, 1));
         Assert.Equal("Department_004", Assert.Single(second.Items).Id);
     }
 
@@ -181,7 +185,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
                 DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
             var reader = new RelationTreeReader(context,
                 new RelationTreeSql(context, registry, [new CompanyCrudQueryCustomizer(), new DepartmentCrudQueryCustomizer()]),
-                new ScopedTreePlans());
+                new ICP.Platform.Testing.StandardCrudTestAccess(reads: new ScopedTreePlans()));
             var definition = ReadRelationDefinition();
             async Task<T> Measure<T>(string operation, Func<Task<T>> run)
             {
@@ -299,7 +303,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             var definition = ReadRelationDefinition();
             var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
             var sql = new RelationTreeSql(context, registry, [new CompanyCrudQueryCustomizer(), new DepartmentCrudQueryCustomizer()]);
-            var standard = new RelationTreeReader(context, sql);
+            var standard = new RelationTreeReader(context, sql, new ICP.Platform.Testing.StandardCrudTestAccess());
             Assert.Single(await Measure("standard-roots", () => standard.RootsAsync(definition, default)));
             Assert.Equal(size - 10, (await Measure("standard-wide-children", () => standard.ChildrenAsync(definition, "company:Company_1", default)))!.Count);
             Assert.Equal(11, (await Measure("standard-path-depth-10", () => standard.PathAsync(definition, "department:Department_00009", default)))!.Count);
@@ -343,7 +347,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         });
         await context.SaveChangesAsync();
         var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
-        var reader = new RelationTreeReader(context, new RelationTreeSql(context, registry, []));
+        var reader = new RelationTreeReader(context, new RelationTreeSql(context, registry, []), new ICP.Platform.Testing.StandardCrudTestAccess());
         var definition = ReadRelationDefinition();
         Assert.Equal(3, (await reader.PathAsync(definition, "department:Child", default))!.Count);
         Assert.Single((await reader.ChildrenAsync(definition, "department:Parent|One", default))!);
@@ -388,7 +392,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             });
         await context.SaveChangesAsync();
         var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
-        var reader = new RelationTreeReader(context, new RelationTreeSql(context, registry, []));
+        var reader = new RelationTreeReader(context, new RelationTreeSql(context, registry, []), new ICP.Platform.Testing.StandardCrudTestAccess());
         var definition = ReadRelationDefinition();
         Assert.Equal("company:Company_A", Assert.Single(await reader.RootsAsync(definition, default)).NodeKey);
         var children = (await reader.ChildrenAsync(definition, "company:Company_A", default))!;
@@ -430,7 +434,15 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         var repository = new DirectoryInfo(AppContext.BaseDirectory);
         while (repository is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Organization"), "newp.plugin.json"))) repository = repository.Parent;
         using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository!.FullName, "Organization"), "metadata/views/OrganizationStructure.view.json")));
-        return new("Organization", "organization.structure", RelationTreeMetadata.Read(document.RootElement.GetProperty("view")));
+        var view = document.RootElement.GetProperty("view");
+        var source = view.GetProperty("dataAccess");
+        // 本类隔离SQL形状及原predicate，执行替身只取得该真实树的来源身份，不替代Host权限证明。
+        return new("Organization", "organization.structure", RelationTreeMetadata.Read(view))
+        {
+            ReadBinding = new("isolated-tree-sql", "Organization", "organization.structure", "read", "",
+                source.GetProperty("execution").GetString()!, source.GetProperty("resources").EnumerateArray().Select(item => item.GetString()!).ToArray(), [], [])
+                { Provider = "organization.backend" }
+        };
     }
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 Organization 树四类读取与批量路径")]
@@ -448,7 +460,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         await using var context = CreateContext(fixture.ConnectionString);
         var definition = ReadRelationDefinition();
         var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
-        var tree = new RelationTreeReader(context, new RelationTreeSql(context, registry, [new CompanyCrudQueryCustomizer(), new DepartmentCrudQueryCustomizer()]));
+        var tree = new RelationTreeReader(context, new RelationTreeSql(context, registry, [new CompanyCrudQueryCustomizer(), new DepartmentCrudQueryCustomizer()]), new ICP.Platform.Testing.StandardCrudTestAccess());
         var root = Assert.Single(await tree.RootsAsync(definition, default));
         Assert.Equal("company:Company_1", root.NodeKey);
         Assert.True(root.HasChildren);
@@ -511,10 +523,10 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             Assert.Equal(3L, connection.RetrieveStatistics()["SelectCount"]);
 
             connection.ResetStatistics();
-            var page = await new EfDepartmentDirectory(context).LookupParentCandidatesAsync(
+            var page = await new EfDepartmentDirectory(context, () => new ICP.Platform.Testing.StandardCrudTestAccess()).LookupParentCandidatesAsync(
                 "Company_1",
                 "Department_000",
-                new OrganizationDirectoryLookupRequest(null, 1, 20));
+                Lookup(null, 1, 20));
 
             Assert.Equal("Department_Peer", Assert.Single(page.Items).Id);
             Assert.Equal(2L, connection.RetrieveStatistics()["SelectCount"]);
@@ -583,10 +595,10 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
                 DepartmentCrudDescriptorFactory.Create(),
                 "Department_0000",
                 new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_1024" });
-            var page = await new EfDepartmentDirectory(context).LookupParentCandidatesAsync(
+            var page = await new EfDepartmentDirectory(context, () => new ICP.Platform.Testing.StandardCrudTestAccess()).LookupParentCandidatesAsync(
                 "Company_1",
                 "Department_0000",
-                new OrganizationDirectoryLookupRequest(
+                Lookup(
                     "Department_10",
                     2,
                     5,
@@ -632,10 +644,10 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
                 "Department_Current",
                 new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_A" });
             var exception = await Assert.ThrowsAsync<DepartmentHierarchyCorruptedException>(() =>
-                new EfDepartmentDirectory(context).LookupParentCandidatesAsync(
+                new EfDepartmentDirectory(context, () => new ICP.Platform.Testing.StandardCrudTestAccess()).LookupParentCandidatesAsync(
                     "Company_1",
                     "Department_A",
-                    new OrganizationDirectoryLookupRequest(null, 1, 20)));
+                    Lookup(null, 1, 20)));
 
             Assert.Equal(409, error?.StatusCode);
             Assert.Equal(DepartmentHierarchyErrors.Corrupted, error?.Code);

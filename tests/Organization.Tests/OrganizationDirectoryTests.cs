@@ -16,6 +16,10 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public sealed class OrganizationDirectoryTests
 {
+    private static OrganizationDirectoryLookupRequest Lookup(string? Keyword, int Page, int PageSize,
+        IReadOnlyCollection<string>? CurrentValueIds = null, bool IncludeDisabled = false) => new(Keyword, Page, PageSize, CurrentValueIds, IncludeDisabled)
+    { ReadContext = new(new("test.directory", "organization.backend", "read"), "query") };
+
     [Fact]
     public async Task CompanyDirectory_SelectsCurrentSqlForEveryBusinessReadAndReturnsToPublishedFacts()
     {
@@ -25,7 +29,7 @@ public sealed class OrganizationDirectoryTests
         var transactions = new OrganizationFactsTestServices.TransactionState();
         var facts = new OrganizationEffectiveFacts(transactions, new PublishedOrganizationFacts(published),
             new SqlOrganizationFacts(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext)));
-        var directory = new EfCompanyDirectory(dbContext, facts);
+        var directory = new EfCompanyDirectory(dbContext, facts, () => new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var stored = await dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Company"))
             .SingleAsync();
@@ -71,9 +75,9 @@ public sealed class OrganizationDirectoryTests
             Company("Company_2", "C002", "B研发", enabled: true),
             Company("Company_1", "C001", "A研发", enabled: true)
         ]);
-        var directory = new EfCompanyDirectory(dbContext, OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()));
+        var directory = new EfCompanyDirectory(dbContext, OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()), () => new ICP.Platform.Testing.StandardCrudTestAccess());
 
-        var page = await directory.LookupAsync(new OrganizationDirectoryLookupRequest(
+        var page = await directory.LookupAsync(Lookup(
             Keyword: "研发",
             Page: 1,
             PageSize: 1,
@@ -96,11 +100,11 @@ public sealed class OrganizationDirectoryTests
             Department("Department_2", "Company_1", "D002", "研发二部", enabled: false),
             Department("Department_3", "Company_2", "D003", "研发三部", enabled: true)
         ]);
-        var directory = new EfDepartmentDirectory(dbContext);
+        var directory = new EfDepartmentDirectory(dbContext, () => new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var page = await directory.LookupAsync(
             "Company_1",
-            new OrganizationDirectoryLookupRequest(
+            Lookup(
                 Keyword: "研发",
                 Page: 1,
                 PageSize: 20,
@@ -123,14 +127,14 @@ public sealed class OrganizationDirectoryTests
             Department("Department_2", "Company_2", "D002", "***", true)]);
         var plans = new TestReadPlans();
         var companies = new EfCompanyDirectory(dbContext,
-            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()), plans);
+            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()), () => new ICP.Platform.Testing.StandardCrudTestAccess(reads: plans));
         var departments = new EfDepartmentDirectory(dbContext, new StubHierarchyQuery(
-            new DepartmentHierarchyCandidatePage([], false)), plans);
+            new DepartmentHierarchyCandidatePage([], false)), () => new ICP.Platform.Testing.StandardCrudTestAccess(reads: plans));
 
-        var companyPage = await companies.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 1,
+        var companyPage = await companies.LookupAsync(Lookup(null, 1, 1,
             ["Company_1", "Company_2", "Company_1", " ", "missing"]));
         var departmentPage = await departments.LookupAsync("Company_2",
-            new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_1", "Department_2", "Department_1", " ", "missing"]));
+            Lookup(null, 1, 1, ["Department_1", "Department_2", "Department_1", " ", "missing"]));
 
         Assert.Equal(2, companyPage.CurrentItems.Count);
         Assert.Equal(2, departmentPage.CurrentItems.Count);
@@ -152,16 +156,16 @@ public sealed class OrganizationDirectoryTests
         Assert.False(Assert.Single(OrganizationLookupHttpProjection.Map(departmentPage, false).Items).Disabled);
         plans.ReadDisabled = true;
         Assert.Equal("Secret company", Assert.IsType<OrganizationDirectoryCurrentItem<Company>.Readable>(
-            Assert.Single((await companies.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 2,
+            Assert.Single((await companies.LookupAsync(Lookup(null, 1, 2,
                 ["Company_1"]))).CurrentItems)).Item.Name);
         Assert.Equal("Secret department", Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(
             Assert.Single((await departments.LookupAsync("Company_2",
-                new OrganizationDirectoryLookupRequest(null, 1, 2, ["Department_1"]))).CurrentItems)).Item.Name);
+                Lookup(null, 1, 2, ["Department_1"]))).CurrentItems)).Item.Name);
         plans.Failure = true;
         await Assert.ThrowsAsync<InvalidOperationException>(() => companies.LookupAsync(
-            new OrganizationDirectoryLookupRequest(null, 1, 2)));
+            Lookup(null, 1, 2)));
         await Assert.ThrowsAsync<InvalidOperationException>(() => departments.LookupAsync("Company_2",
-            new OrganizationDirectoryLookupRequest(null, 1, 2)));
+            Lookup(null, 1, 2)));
     }
 
     private sealed class TestReadPlans : IDataScopeReadPlanProvider
@@ -189,9 +193,9 @@ public sealed class OrganizationDirectoryTests
         var ids = Enumerable.Range(0, 105).Select(index => $"Company_{index:D3}").ToArray();
         await SeedCompaniesAsync(dbContext, ids.Select(id => Company(id, id, id, true)).ToArray());
         var directory = new EfCompanyDirectory(dbContext,
-            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()));
+            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()), () => new ICP.Platform.Testing.StandardCrudTestAccess());
 
-        var page = await directory.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 1, ids));
+        var page = await directory.LookupAsync(Lookup(null, 1, 1, ids));
 
         Assert.Equal(ids.Length, page.CurrentItems.Count);
         Assert.Equal(ids, page.CurrentItems.Select(item => Assert.IsType<OrganizationDirectoryCurrentItem<Company>.Readable>(item).Item.Id).Order(StringComparer.Ordinal));
@@ -205,8 +209,8 @@ public sealed class OrganizationDirectoryTests
         await SeedDepartmentsAsync(dbContext, ids.Select(id => Department(id, "Company_1", id, id, false))
             .Append(Department("other", "Company_2", "other", "other", true)));
         var directory = new EfDepartmentDirectory(dbContext,
-            new StubHierarchyQuery(new DepartmentHierarchyCandidatePage([], false)));
-        var request = new OrganizationDirectoryLookupRequest("does-not-match", 1, 1,
+            new StubHierarchyQuery(new DepartmentHierarchyCandidatePage([], false)), () => new ICP.Platform.Testing.StandardCrudTestAccess());
+        var request = Lookup("does-not-match", 1, 1,
             [.. ids, ids[0], " ", "missing", "other"]);
 
         var ordinary = await directory.LookupAsync("Company_1", request);
@@ -256,12 +260,12 @@ public sealed class OrganizationDirectoryTests
             new StubHierarchyQuery(
                 new DepartmentHierarchyCandidatePage(
                     [Department("Department_Peer", "Company_1", "D004", "同级", enabled: true)],
-                    HasMore: false)));
+                    HasMore: false)), () => new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var page = await directory.LookupParentCandidatesAsync(
             "Company_1",
             "Department_Root",
-            new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_Disabled"]));
+            Lookup(null, 1, 1, ["Department_Disabled"]));
 
         Assert.Equal("Department_Peer", Assert.Single(page.Items).Id);
         Assert.Equal("Department_Disabled", Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(Assert.Single(page.CurrentItems)).Item.Id);
@@ -280,8 +284,8 @@ public sealed class OrganizationDirectoryTests
             Department("Department_OtherCompany", "Company_2", "D004", "跨公司研发", enabled: true)
         ]);
         var hierarchyQuery = new StubHierarchyQuery(new DepartmentHierarchyCandidatePage([], HasMore: false));
-        var directory = new EfDepartmentDirectory(dbContext, hierarchyQuery);
-        var request = new OrganizationDirectoryLookupRequest(
+        var directory = new EfDepartmentDirectory(dbContext, hierarchyQuery, () => new ICP.Platform.Testing.StandardCrudTestAccess());
+        var request = Lookup(
             Keyword: "研发",
             Page: 1,
             PageSize: 1,
@@ -315,9 +319,9 @@ public sealed class OrganizationDirectoryTests
             Department("Department_2", "Company_2", "D002", "旧部门", enabled: false)
         ]);
 
-        var companies = await new EfCompanyDirectory(dbContext, OrganizationFactsTestServices.Published(await CreateQueryAsync(dbContext)))
+        var companies = await new EfCompanyDirectory(dbContext, OrganizationFactsTestServices.Published(await CreateQueryAsync(dbContext)), () => new ICP.Platform.Testing.StandardCrudTestAccess())
             .GetByIdsAsync(["Company_1", "Company_2", "Company_1"]);
-        var departments = await new EfDepartmentDirectory(dbContext)
+        var departments = await new EfDepartmentDirectory(dbContext, () => new ICP.Platform.Testing.StandardCrudTestAccess())
             .GetByIdsAsync(["Department_1", "Department_2", "Department_1"]);
 
         Assert.Equal(2, companies.Count);

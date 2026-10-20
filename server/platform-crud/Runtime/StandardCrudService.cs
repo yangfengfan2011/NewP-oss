@@ -19,23 +19,21 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly ILogger<StandardCrudService>? _logger;
     private readonly IObjectOperationExecutor? _objectOperations;
     private readonly StandardCrudDefaultWriter _defaultWriter;
-    private readonly ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? _dataScope;
-    private readonly ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? _objectScope;
-    private readonly ICP.Platform.Authorization.Contracts.IDataExecutionAccess? _executions;
+    private readonly ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider _objectScope;
+    private readonly ICP.Platform.Authorization.Contracts.IDataExecutionAccess _executions;
 
-    /// <summary>组合查询与展示依赖；写入只路由到对象执行器或公共默认写入模块。</summary>
+    /// <summary>所有读取和标准写必须显式组合正式执行器；写后观察仍独立于写前裁决。</summary>
     public StandardCrudService(
-        IStandardCrudRepository repository,
-        IPlatformQueryExecutor queryExecutor,
-        StandardCrudDefaultWriter defaultWriter,
-        IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
-        DisplayValueProjection displayProjection,
-        IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
-        ILogger<StandardCrudService>? logger = null,
-        IObjectOperationExecutor? objectOperations = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null)
+        ICP.Platform.Authorization.Contracts.IDataExecutionAccess executions,
+        ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation,
+        IStandardCrudRepository repository, IPlatformQueryExecutor queryExecutor,
+        StandardCrudDefaultWriter defaultWriter, IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
+        DisplayValueProjection displayProjection, IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
+        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider objectScope,
+        ILogger<StandardCrudService>? logger = null, IObjectOperationExecutor? objectOperations = null)
     {
+        _executions = executions ?? throw new ArgumentNullException(nameof(executions));
+        _evaluation = evaluation;
         _repository = repository;
         _queryExecutor = queryExecutor;
         _defaultWriter = defaultWriter;
@@ -44,39 +42,7 @@ public sealed class StandardCrudService : IStandardCrudService
         _summaryProviders = summaryProviders.ToDictionary(item => (item.ResourceKey, item.Key));
         _logger = logger;
         _objectOperations = objectOperations;
-        _dataScope = dataScope;
-        _objectScope = objectScope;
-    }
-
-    /// <summary>保留旧构造 ABI；正式 DI 额外注入观察范围，写后读取与写前裁决分开。</summary>
-    public StandardCrudService(
-        ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope evaluation,
-        IStandardCrudRepository repository, IPlatformQueryExecutor queryExecutor,
-        StandardCrudDefaultWriter defaultWriter, IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
-        DisplayValueProjection displayProjection, IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
-        ILogger<StandardCrudService>? logger = null, IObjectOperationExecutor? objectOperations = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null)
-        : this(repository, queryExecutor, defaultWriter, queryCustomizers, displayProjection, summaryProviders,
-            logger, objectOperations, dataScope, objectScope)
-    {
-        _evaluation = evaluation;
-    }
-
-    /// <summary>正式DI注入查询要求执行器；保留原有两种公开构造签名及其旧消费者。</summary>
-    public StandardCrudService(
-        ICP.Platform.Authorization.Contracts.IDataExecutionAccess executions,
-        ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope evaluation,
-        IStandardCrudRepository repository, IPlatformQueryExecutor queryExecutor,
-        StandardCrudDefaultWriter defaultWriter, IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
-        DisplayValueProjection displayProjection, IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
-        ILogger<StandardCrudService>? logger = null, IObjectOperationExecutor? objectOperations = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null)
-        : this(evaluation, repository, queryExecutor, defaultWriter, queryCustomizers, displayProjection, summaryProviders,
-            logger, objectOperations, dataScope, objectScope)
-    {
-        _executions = executions;
+        _objectScope = objectScope ?? throw new ArgumentNullException(nameof(objectScope));
     }
 
     /// <summary>
@@ -108,14 +74,9 @@ public sealed class StandardCrudService : IStandardCrudService
         if (readContext is null && descriptor.DataExecutions.TryGetValue("list", out var listExecution))
             readContext = new(new(listExecution, "standardCrud.list", "read"), "query");
         if (readContext is not null)
-            platformRequest = platformRequest with { ScopePredicate = (await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))
+            platformRequest = platformRequest with { ScopePredicate = (await _executions
                 .GetQueryReadPlanAsync(readContext, descriptor.ResourceKey, cancellationToken)).Predicate };
-        else if (_dataScope is not null)
-        {
-            if (_executions is not null && !descriptor.LegacyDataExecutions.Contains("list", StringComparer.Ordinal))
-                throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
-            platformRequest = platformRequest with { ScopePredicate = (await _dataScope.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken)).Predicate };
-        }
+        else throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
         var result = await _queryExecutor.QueryAsync(queryDescriptor, platformRequest, cancellationToken);
         var rows = await _displayProjection.ApplyDisplayValuesAsync(descriptor.ResourceKey, descriptor.DisplayProjectionPlan, result.Items, result.RequestedDisplayFields, cancellationToken);
         var projectedRows = rows.Select(row => Project(row, result.ResponseFields)).ToList();
@@ -216,19 +177,16 @@ public sealed class StandardCrudService : IStandardCrudService
         using var operation = _evaluation?.BeginOperation();
         StandardCrudDescriptorValidator.Validate(descriptor);
         var bindings = entryBindings ?? (source is null && apiSource is null ? ICP.Platform.Crud.Extensions.StandardCrudDataExecutions.DetailReadBindings(descriptor) : []);
-        if (source is not null || apiSource is not null || bindings.Count > 0 || _dataScope is not null)
+        if (source is not null || apiSource is not null || bindings.Count > 0)
         {
-            if (source is null && apiSource is null && bindings.Count == 0 && _executions is not null && !descriptor.LegacyDataExecutions.Contains("read", StringComparer.Ordinal))
-                throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
             var scope = apiSource is not null
-                ? await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))
+                ? await _executions
                     .GetApiObjectReadPlanAsync(apiSource, descriptor.ResourceKey, id, cancellationToken)
                 : source is not null
-                ? await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))
+                ? await _executions
                     .GetInternalReadPlanAsync(source, descriptor.ResourceKey, [id], cancellationToken)
-                : bindings.Count > 0 ? await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))
-                    .GetObjectReadPlanAsync(bindings, descriptor.ResourceKey, "target", id, cancellationToken)
-                : await _dataScope!.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken);
+                : await _executions
+                    .GetObjectReadPlanAsync(bindings, descriptor.ResourceKey, "target", id, cancellationToken);
             if (scope.Predicate is not null)
             {
                 var visible = await _queryExecutor.QueryAsync(StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(descriptor),
@@ -237,6 +195,7 @@ public sealed class StandardCrudService : IStandardCrudService
                 if (visible.Total == 0) return null;
             }
         }
+        else throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
         var row = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
         if (row is null)
         {
@@ -435,10 +394,10 @@ public sealed class StandardCrudService : IStandardCrudService
     }
 
     // 仅已登记的入口生成本次目标绑定；正式来源仍由统一执行器核对原请求声明。
-    private static ObjectOperationWriteSource? EntryWriteSource(StandardCrudDescriptor descriptor, string operation, string? id)
+    private static ObjectOperationWriteSource EntryWriteSource(StandardCrudDescriptor descriptor, string operation, string? id)
         => descriptor.DataExecutions.TryGetValue(operation, out var execution)
             ? new ObjectOperationWriteSource.Declared(new(new(execution, "standardCrud." + operation, "submit"), descriptor.ResourceKey, id))
-            : null;
+            : throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
 
     // 查询扩展点只产出标准条件；列表真正执行统一收口到平台查询内核，避免模块逻辑直接进入持久化实现。
     private IReadOnlyList<StandardCrudQueryCondition> BuildConditions(StandardCrudDescriptor descriptor, StandardCrudListQuery query)
@@ -494,21 +453,18 @@ public sealed class StandardCrudService : IStandardCrudService
         var row = result.Detail?.Fields
             ?? throw new InvalidOperationException(missingRowMessage);
         using var observation = _evaluation?.BeginReadAfterWrite();
-        if (_objectScope is not null)
+        var id = Convert.ToString(row.GetValueOrDefault(descriptor.IdField))
+            ?? throw new InvalidOperationException("STANDARD_CRUD_MUTATION_ID_MISSING");
+        try
         {
-            var id = Convert.ToString(row.GetValueOrDefault(descriptor.IdField))
-                ?? throw new InvalidOperationException("STANDARD_CRUD_MUTATION_ID_MISSING");
-            try
-            {
-                if (!await _objectScope.IsAllowedAsync(descriptor.ResourceKey, id, "read", cancellationToken))
-                    return StandardCrudMutationResult.Success();
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                // 提交后的读取只是呈现；故障不能倒转已提交的业务成功。
-                _logger?.LogWarning("STANDARD_CRUD_POST_WRITE_READ_UNAVAILABLE: {FailureType}", exception.GetType().Name);
+            if (!await _objectScope.IsAllowedAsync(descriptor.ResourceKey, id, "read", cancellationToken))
                 return StandardCrudMutationResult.Success();
-            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // 提交后的读取只是呈现；故障不能倒转已提交的业务成功。
+            _logger?.LogWarning("STANDARD_CRUD_POST_WRITE_READ_UNAVAILABLE: {FailureType}", exception.GetType().Name);
+            return StandardCrudMutationResult.Success();
         }
         try
         {

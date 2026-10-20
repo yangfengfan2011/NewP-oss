@@ -44,7 +44,6 @@ public sealed class ExampleAuthorizationExecutionContractTests
     [InlineData("backend")]
     [InlineData("unknown-provider")]
     [InlineData("lower-floor")]
-    [InlineData("legacy")]
     [InlineData("unbound")]
     [InlineData("resource")]
     public void FormalProviderConsumer_RejectsUnknownOwnerAndRequirementRewrites(string problem)
@@ -59,7 +58,6 @@ public sealed class ExampleAuthorizationExecutionContractTests
         var contracts = candidates[consumer].DataExecutions.Select(contract => contract.Key != "example.record.authorization.manage" ? contract : problem switch
         {
             "lower-floor" => contract with { Requirements = [new("target", "prepare", "object", ["example.record"], [["read"]])] },
-            "legacy" => contract with { LegacyActions = true },
             "resource" => contract with { TargetResource = "organization.person" },
             _ => contract
         }).ToArray();

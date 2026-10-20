@@ -92,7 +92,7 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
             .Select(contract => (Module: module, Contract: contract))).ToArray();
         if (sources.Length != 1) throw new ActionDataAccessException(400, "ActionDataAccess.InternalBindingInvalid");
         var (module, contract) = sources[0];
-        if (contract.ModuleId != module.ModuleId || contract.Boundary != "internal" || contract.LegacyActions
+        if (contract.ModuleId != module.ModuleId || contract.Boundary != "internal"
             || contract.Provider != binding.Provider || module.BackendBehaviorKey != binding.Provider
             || string.IsNullOrWhiteSpace(binding.Member)
             || !contract.FixedBindings.Any(source => source.Kind == "internal" && source.Identity == binding.Execution && source.Caller == binding.CallerIdentity)
@@ -107,7 +107,7 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
     {
         var contract = plan.Modules.SelectMany(module => module.DataExecutions).SingleOrDefault(item => item.Key == binding.Execution);
         if (contract is null || contract.Boundary != "internal" || contract.Provider != binding.Provider
-            || contract.LegacyActions || !contract.FixedBindings.Any(source => source.Kind == "internal"
+            || !contract.FixedBindings.Any(source => source.Kind == "internal"
                 && source.Identity == binding.Execution && source.Caller == binding.CallerIdentity)
             || binding.Member is not null && !binding.Caller.GetMethods(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static
                 | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic).Any(method => method.Name == binding.Member)
@@ -131,7 +131,7 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
     }
 
     /// <inheritdoc/>
-    public DataExecutionBindingReference? BindResourceEndpoint(string resourceKey)
+    public DataExecutionBindingReference BindResourceEndpoint(string resourceKey)
     {
         var context = http.HttpContext ?? throw new ActionDataAccessException(400, "ActionDataAccess.ContextRequired");
         var owner = context.GetEndpoint()?.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
@@ -141,8 +141,6 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
         if (owner?.Count != 1 || endpoints.Count == 0 || endpoints.Any(endpoint => !providers.Any(provider =>
             provider.Key == endpoint.Provider && provider.ModuleId == owner[0].ModuleId)))
             throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
-        if (endpoints.Any(endpoint => providers.Single(provider => provider.Key == endpoint.Provider).LegacyConsumers.Any(consumer =>
-            consumer.ModuleId == resource.ModuleId && consumer.ResourceKey == resourceKey))) return null;
         var ids = context.Request.Headers["X-NewP-Data-Declaration"];
         var requirement = ids.Count == 1 ? plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Id == ids[0]) : null;
         var selected = endpoints.SingleOrDefault(endpoint => endpoint.Provider == requirement?.Provider);

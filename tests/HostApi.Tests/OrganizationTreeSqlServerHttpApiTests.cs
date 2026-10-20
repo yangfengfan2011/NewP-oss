@@ -92,7 +92,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
                     sp.GetRequiredService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>(),
                     new ICP.Platform.Modules.Organization.Caching.PublishedOrganizationFacts(sp.GetRequiredService<ICP.Platform.Organization.Contracts.IOrganizationQuery>()),
                     new SqlOrganizationFacts(db, new SqlServerDepartmentHierarchyQuery(db)));
-                return new EfCompanyDirectory(db, facts);
+                return new EfCompanyDirectory(db, facts, () => sp.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>());
             });
             builder.Services.AddScoped<IDepartmentDirectory, EfDepartmentDirectory>();
             builder.Services.AddControllers();
@@ -237,12 +237,12 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
                 Assert.Contains("D2", sql.Parameters.Values);
                 var constrained = new RelationTreeReader(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
                     new RelationTreeSql(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
-                        treeScope.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>(), [new NarrowDepartmentQuery()]));
+                        treeScope.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>(), [new NarrowDepartmentQuery()]), treeScope.ServiceProvider.GetRequiredService<IDataExecutionAccess>());
                 Assert.Equal(0, (await constrained.SearchAsync(filtered, "Department", 1, 20, default)).Total);
                 // 可选空值条件须沿用普通 CRUD 的忽略语义，非空条件和 isNull 仍须执行。
                 var optional = new RelationTreeReader(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
                     new RelationTreeSql(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
-                        treeScope.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>(), [new OptionalDepartmentQuery()]));
+                        treeScope.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>(), [new OptionalDepartmentQuery()]), treeScope.ServiceProvider.GetRequiredService<IDataExecutionAccess>());
                 Assert.Equal(1, (await optional.SearchAsync(definition, "Department", 1, 20, default)).Total);
                 Assert.Single((await optional.ChildrenAsync(definition, "company:" + company, default))!);
                 var staticNull = definition with { Source = new() { Nodes = [definition.Source.Nodes[0], departmentNode with

@@ -25,19 +25,12 @@ public sealed record DataScopeBatchAuthorizationReceipt(bool Succeeded, int Targ
 /// <summary>真实owner负责功能与完整来源；公共服务在单事务内锁定并重验全部对象再写入。</summary>
 public interface IDataScopeBatchAuthorization
 {
-    /// <summary>显式读取整组当前直接配置；全部目标须仍可读且可管理，不证明任何既往请求的提交结果。</summary>
-    Task<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>> ReadCurrentAsync(
-        IReadOnlyList<DataScopeAuthorizationTarget> targets, CancellationToken token = default);
-
-    /// <summary>任一目标/配置失败整批拒绝；取消和基础设施异常传播，不跳过目标或产生部分成功。</summary>
-    Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> ReplaceAsync(
-        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, CancellationToken token = default);
     /// <summary>真实owner明确提交整批来源；锁定及全组现时资格仍由同一手工授权流程拥有。</summary>
     Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> ReplaceAsync(
         IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, DataExecutionBindingReference execution,
-        CancellationToken token = default) => throw new NotSupportedException();
+        CancellationToken token = default);
     /// <summary>当前配置核对使用同一正式批来源，不复用之前的允许结果。</summary>
     Task<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>> ReadCurrentAsync(
         IReadOnlyList<DataScopeAuthorizationTarget> targets, DataExecutionBindingReference execution,
-        CancellationToken token = default) => throw new NotSupportedException();
+        CancellationToken token = default);
 }

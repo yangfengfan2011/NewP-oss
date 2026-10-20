@@ -8,7 +8,7 @@ public sealed partial class DataScopeObjectManagement
     // 路由/owner目标先取得管理资格，再校验payload；两个单对象入口共同进入完整手工写入流程。
     private Task<DataScopeObjectResult<DataScopeBatchAuthorizationReceipt>> SaveConfigurationAsync(
         string resourceKey, string objectId, DataScopeObjectConfiguration input, CancellationToken token,
-        DataExecutionBindingReference? execution = null)
+        DataExecutionBindingReference execution)
     {
         // 单对象路由中不可能存在的ID仍按原对象不可读处理；它不是批量目标清单的格式错误。
         if (string.IsNullOrWhiteSpace(objectId) || objectId.Length > 128)
@@ -25,7 +25,7 @@ public sealed partial class DataScopeObjectManagement
     private async Task<DataScopeObjectResult<DataScopeBatchAuthorizationReceipt>> WriteAsync(
         IReadOnlyList<DataScopeAuthorizationTarget> targets,
         Func<IReadOnlyList<DataScopeAuthorizationTarget>, CancellationToken, Task<IReadOnlyList<DataScopeObjectDto>?>> prepare,
-        CancellationToken token, DataExecutionBindingReference? execution = null)
+        CancellationToken token, DataExecutionBindingReference execution)
     {
         using var observation = evaluation?.BeginOperation();
         using var operation = audit.BeginOperation();
@@ -69,7 +69,7 @@ public sealed partial class DataScopeObjectManagement
 
     // 写入与未知结果核对共用锁序和全组资格，资格故障不进入配置错误翻译。
     private async Task<DataScopeObjectStatus> LockAndCheckTargetsAsync(DataScopeAuthorizationTarget[] targets, CancellationToken token,
-        DataExecutionBindingReference? execution = null)
+        DataExecutionBindingReference execution)
     {
         if (targets.Length == 0 || targets.Any(target => string.IsNullOrWhiteSpace(target.ResourceKey)
             || string.IsNullOrWhiteSpace(target.ObjectId) || target.ObjectId.Length > 128)) return DataScopeObjectStatus.InvalidInput;

@@ -36,17 +36,17 @@ public sealed class EntityAuditProjectionTests
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options;
         await using var context = new EfPlatformDbContext(options, plan, new EntityAuditValueProvider(stamp));
         var directory = new Names();
-        var writeRepository = new EfStandardCrudRepository(context, new PlatformObjectIdGenerator());
+        var writeRepository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), context, new PlatformObjectIdGenerator());
         IStandardCrudService service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             new EfPlatformQueryExecutor(context),
-            new StandardCrudDefaultWriter(writeRepository, [], [], auditValueProvider: new EntityAuditValueProvider(stamp)),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], auditValueProvider: new EntityAuditValueProvider(stamp), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(
                 [],
                 temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
                 userDisplayNameDirectory: directory),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         foreach (var descriptor in registry.GetAll())
         {

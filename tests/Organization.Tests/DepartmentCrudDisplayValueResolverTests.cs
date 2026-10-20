@@ -36,12 +36,12 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             ["CompanyId", "CompanyId_DisplayValue", "ParentDepartmentId", "ParentDepartmentId_DisplayValue"],
             descriptor.DisplayValueFields));
         var service = new StandardCrudService(
-            null!,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, null!,
             executor,
-            new StandardCrudDefaultWriter(null!, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), null!, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new DepartmentCrudDisplayValueResolver(query, new AllowAllReadableIds())]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.ListAsync(
             descriptor,

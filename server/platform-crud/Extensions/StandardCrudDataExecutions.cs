@@ -34,6 +34,9 @@ public static class StandardCrudDataExecutions
     public static IReadOnlyList<DataExecutionBindingReference> DetailReadBindings(StandardCrudDescriptor descriptor)
     {
         if (!descriptor.DataExecutions.TryGetValue("read", out var read)) return [];
+        // 包未声明独立详情时，read映射必须显式引用本资源update，不能从缺失映射推断。
+        if (descriptor.DataExecutions.TryGetValue("update", out var preparation) && read == preparation)
+            return [new(read, "standardCrud.update", "prepare")];
         var bindings = new List<DataExecutionBindingReference> { new(read, "standardCrud.read", "read") };
         if (descriptor.DataExecutions.TryGetValue("update", out var update))
             bindings.Add(new(update, "standardCrud.update", "prepare"));
@@ -45,24 +48,19 @@ public static class StandardCrudDataExecutions
         StandardCrudDescriptor descriptor, string operation)
     {
         var capability = operation switch { "create" => StandardCrudOperation.Create, "update" => StandardCrudOperation.Update,
+            "enable" => StandardCrudOperation.Enable, "disable" => StandardCrudOperation.Disable,
             "delete" => StandardCrudOperation.Delete, "list" => StandardCrudOperation.List, "read" => StandardCrudOperation.Detail,
             "options" => StandardCrudOperation.Options, "export" => StandardCrudOperation.Export, _ => (StandardCrudOperation?)null };
         // 关闭URL的DenyAll保持原样；内部合同不能为它增加入口声明或启用能力。
         if (capability is not null && !descriptor.Authorization!.FeatureOperations.Contains(capability.Value)) return endpoint;
-        if (!descriptor.DataExecutions.TryGetValue(operation, out var execution))
-        {
-            var published = operation switch { "create" => StandardCrudOperation.Create, "update" => StandardCrudOperation.Update,
-                "delete" => StandardCrudOperation.Delete, "list" => StandardCrudOperation.List, "read" => StandardCrudOperation.Detail,
-                "options" => StandardCrudOperation.Options, "export" => StandardCrudOperation.Export, _ => (StandardCrudOperation?)null };
-            if (published is not null && descriptor.Authorization!.FeatureOperations.Contains(published.Value)
-                && !descriptor.LegacyDataExecutions.Contains(operation))
-                throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
-            return endpoint;
-        }
+        var executionOperation = operation is "enable" or "disable" ? "update" : operation;
+        if (!descriptor.DataExecutions.TryGetValue(executionOperation, out var execution))
+            throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
         var plan = services.GetRequiredService<CanonicalModulePlan>();
         var contract = plan.Modules.SelectMany(module => module.DataExecutions).SingleOrDefault(item => item.Key == execution);
-        var provider = "standardCrud." + operation;
-        if (contract is null || contract.Boundary != "entry" || contract.ModuleId != descriptor.ModuleId || contract.Provider != provider || contract.LegacyActions
+        var prepareOnly = operation == "read" && descriptor.DataExecutions.TryGetValue("update", out var update) && execution == update;
+        var provider = "standardCrud." + (prepareOnly ? "update" : executionOperation);
+        if (contract is null || contract.Boundary != "entry" || contract.ModuleId != descriptor.ModuleId || contract.Provider != provider
             || !contract.Requirements.All(requirement => requirement.Resources.SequenceEqual([descriptor.ResourceKey]))
             || !plan.ActionDataAccessCatalog.Any(requirement => requirement.Execution == execution))
             throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_BINDING_INVALID");

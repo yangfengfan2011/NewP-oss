@@ -86,10 +86,6 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
     // 在真实factory形成来源后只破坏一个事实，权限和克隆仍由实际初始化器执行。
     private sealed class CreatedParentInitializer(DataScopeObjectInitializer inner, EfPlatformDbContext db, CreatedSourceProbe state) : IDataScopeObjectInitializer
     {
-        public Task<bool> InitializeFromParentAsync(string resource, string parent, string target, CancellationToken token = default) =>
-            inner.InitializeFromParentAsync(resource, parent, target, token);
-        public Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resource, IReadOnlyList<string> parents, string target, CancellationToken token = default) =>
-            inner.InitializeFromParentsAsync(resource, parents, target, token);
         public Task<bool> InitializeFromParentAsync(string resource, string parent, string target, DataScopeObjectInitializationSource source, CancellationToken token = default) =>
             inner.InitializeFromParentAsync(resource, parent, target, source, token);
         public async Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resource, IReadOnlyList<string> parents, string target,
@@ -118,7 +114,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
             state.Capturing = true;
             try
             {
-                if (state.Mode == "missing") return await inner.InitializeFromParentsAsync(resource, parents, target, token);
+                if (state.Mode == "missing") return await inner.InitializeFromParentsAsync(resource, parents, target, null!, token);
                 var first = graph.Parents[0];
                 source = state.Mode switch
                 {

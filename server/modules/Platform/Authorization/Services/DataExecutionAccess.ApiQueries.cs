@@ -39,7 +39,7 @@ public sealed partial class DataExecutionAccess
         var module = plan.Modules.SingleOrDefault(module => module.ModuleId == owners[0].ModuleId);
         var contract = module?.DataExecutions.SingleOrDefault(contract => contract.Key == binding.Execution);
         if (contract is null || contract.ModuleId != module!.ModuleId || contract.Provider != binding.Provider
-            || module.BackendBehaviorKey != binding.Provider || contract.Boundary != "api" || contract.LegacyActions
+            || module.BackendBehaviorKey != binding.Provider || contract.Boundary != "api"
             || contract.FixedBindings.Count(source => source.Kind == "api" && source.Identity == identity
                 && source.HttpMethod == request.Request.Method && source.Route is not null
                 && ApiRouteIdentity(source.Route) == ApiRouteIdentity(endpoint.RoutePattern.RawText)) != 1)

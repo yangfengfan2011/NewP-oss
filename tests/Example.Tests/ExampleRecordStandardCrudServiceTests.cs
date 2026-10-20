@@ -267,18 +267,8 @@ public sealed class ExampleRecordStandardCrudServiceTests
         Assert.Equal("ReviewerUserEID_DisplayValue", fieldError.Field);
     }
 
-    // 这三例只观察字段/展示，未装写判权服务；显式隔离旧写输入，不把此fixture当正式权限证据。
-    private static StandardCrudDescriptor FieldOnlyWriteResource()
-    {
-        var descriptor = ExampleCrudTestResources.Create();
-        string[] writes = ["create", "update", "delete"];
-        return descriptor with
-        {
-            DataExecutions = descriptor.DataExecutions.Where(item => !writes.Contains(item.Key, StringComparer.Ordinal))
-                .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal),
-            LegacyDataExecutions = descriptor.LegacyDataExecutions.Concat(writes).Distinct(StringComparer.Ordinal).ToArray()
-        };
-    }
+    // 字段与display测试使用正式descriptor，权限执行替身由本fixture显式提供。
+    private static StandardCrudDescriptor FieldOnlyWriteResource() => ExampleCrudTestResources.Create();
 
     private static StandardCrudService CreateService(
         IStandardCrudRepository repository,
@@ -288,17 +278,42 @@ public sealed class ExampleRecordStandardCrudServiceTests
             new QueryFixture(), new QueryFixture(),
             repository,
             executor,
-            new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System))),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System)), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(
                 [new ExampleRecordDisplayValueResolver(directory)],
                 temporalDisplayProjectionExecutor: new ICP.Platform.Presentation.TemporalDisplayProjectionExecutor(
                 new NoPresentationContext(), new ICP.Platform.Presentation.TemporalDisplayFormatter())),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
     // 此类只验证字段与批量display，显式提供不受限查询计划；完整资格由Host真实API覆盖。
     private sealed class QueryFixture : IDataExecutionAccess, IDataScopeEvaluationScope, IDisposable
     {
+        // 未消费的能力明确抛出，字段/拒绝测试不能继承生产接口的过渡实现。
+        public Task<IReadOnlySet<string>> GetInternalReadableIdsAsync(DataExecutionInternalReadBinding binding,
+            string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetInternalReadPlanAsync(DataExecutionInternalReadBinding binding,
+            string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetInternalQueryReadPlanAsync(DataExecutionInternalReadBinding binding,
+            string resourceKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetApiQueryReadPlanAsync(DataExecutionApiQueryContext context,
+            string resourceKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataScopeReadPlan> GetApiObjectReadPlanAsync(DataExecutionApiObjectContext context, string resourceKey, string objectId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataExecutionTargetDecision> EvaluateApiObjectAsync(DataExecutionApiObjectExecutionContext context, string role,
+            DataExecutionTargetInput target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public DataExecutionBindingReference BindResourceEndpoint(string resourceKey) => throw new NotSupportedException();
+        public IAsyncEnumerable<DataExecutionTargetDecision> EvaluateObjectsAsync(DataExecutionBindingReference binding, string role,
+            IReadOnlyList<DataExecutionTargetInput> targets, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> EvaluateObjectFromBindingsAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey,
+            string role, string objectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionWriteContext source, string resourceKey, string role,
+            IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionWriteContext source, string role,
+            DataExecutionWriteFacts before, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<DataExecutionTargetDecision> EvaluateInternalObjectAsync(DataExecutionInternalBinding binding, string role,
+            DataExecutionTargetInput target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public DateTimeOffset ObservedAt => DateTimeOffset.UnixEpoch;
         public IDisposable BeginOperation() => this;
         public IDisposable BeginReadAfterWrite() => this;
@@ -311,7 +326,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
         public Task<DataScopeReadPlan> GetObjectReadPlanAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey,
             string role, string objectId, CancellationToken token = default) => Task.FromResult(new DataScopeReadPlan(null));
         public void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey) => throw new NotSupportedException();
-        public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey, string role, string objectId, CancellationToken token = default) => throw new NotSupportedException();
+            public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey, string role, string objectId, CancellationToken token = default) => throw new NotSupportedException();
         public Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey, string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => throw new NotSupportedException();
     }
 

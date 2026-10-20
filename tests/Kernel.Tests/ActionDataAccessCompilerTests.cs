@@ -82,6 +82,21 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         Assert.False(new CanonicalModulePlanCompiler().Compile("invalid", candidates).IsSuccess);
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("[\"read\"]")]
+    public void AuthoringDeclaration_RejectsRetiredActionsSyntax(string actions)
+    {
+        using var navigation = JsonDocument.Parse("""
+            {"navigation":{"items":[{"key":"entry","featureAuthorization":true,"targetKey":"items"}]}}
+            """);
+        using var view = JsonDocument.Parse("""
+            {"view":{"key":"items","mode":"list","resourceKey":"test.item","dataAccess":
+              {"execution":"test.list","resources":["test.item"],"actions":ACTIONS}}}
+            """.Replace("ACTIONS", actions, StringComparison.Ordinal));
+        Assert.Throws<InvalidOperationException>(() => StandardFeatureMetadataCompiler.Read("Test", [navigation.RootElement, view.RootElement]));
+    }
+
     [Fact]
     public void AuthoringActionDeclaration_BindsToItsExistingActionPosition()
     {
@@ -90,7 +105,7 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
             """);
         using var view = JsonDocument.Parse("""
             {"view":{"key":"items","mode":"list","resourceKey":"test.item","rowActions":[
-              {"key":"change","handlerKey":"change","dataAccess":{"execution":"test.change","resources":["test.item"],"actions":["edit"]}}
+              {"key":"change","handlerKey":"change","dataAccess":{"execution":"test.change","resources":["test.item"]}}
             ]}}
             """);
         var features = StandardFeatureMetadataCompiler.Read("Test", [navigation.RootElement, view.RootElement]);
@@ -108,7 +123,7 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
             """);
         using var view = JsonDocument.Parse("""
             {"view":{"key":"history","mode":"list","resourceKey":"test.history","detailContributions":[
-              {"key":"history.entry","navigationKey":"entry","dataAccess":{"execution":"test.history.enter","resources":["test.item"],"actions":["read"]}}
+              {"key":"history.entry","navigationKey":"entry","dataAccess":{"execution":"test.history.enter","resources":["test.item"]}}
             ]}}
             """);
         var feature = Assert.Single(StandardFeatureMetadataCompiler.Read("Test", [navigation.RootElement, view.RootElement]));

@@ -52,7 +52,7 @@ public sealed partial class DataScopeObjectManagement
         catch (RolePermissionValidationException error) { return new(DataScopeAuthorizationStatus.InvalidInput, Error: Error(error)); }
     }
 
-    // 新正式重载先拒绝空来源，不能进入旧手工构造的兼容分支。
+    // 正式入口先拒绝空来源，不能在配置读取或目标循环前绕过来源校验。
     private static DataExecutionBindingReference RequiredOwnerExecution(DataExecutionBindingReference? execution) => execution
         ?? throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
 

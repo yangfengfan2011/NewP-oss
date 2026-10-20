@@ -55,7 +55,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
         var declaration = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
             binding => binding.Execution == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position));
         var before = await Snapshot();
-        foreach (var mismatch in new[] { "missing", "parents", "target", "values", "caller", "binding", "legacy-same-member" })
+        foreach (var mismatch in new[] { "missing", "parents", "target", "values", "caller", "binding", "unregistered-shape" })
         {
             state.Mismatch = mismatch; state.ConfigurationCommands = 0;
             using var rejected = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, "/api/workspace/content/folders",
@@ -447,10 +447,6 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
     // 只在实际创建已形成真实父/候选后破坏来源事实；从不伪造权限允许或替换真实初始化器。
     private sealed class SourceProbeInitializer(DataScopeObjectInitializer inner, InitializationProbe state) : IDataScopeObjectInitializer
     {
-        public Task<bool> InitializeFromParentAsync(string resource, string parent, string target, CancellationToken token = default) =>
-            inner.InitializeFromParentAsync(resource, parent, target, token);
-        public Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resource, IReadOnlyList<string> parents, string target, CancellationToken token = default) =>
-            inner.InitializeFromParentsAsync(resource, parents, target, token);
         public Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resource, IReadOnlyList<string> parents, string target,
             DataScopeObjectInitializationSource source, CancellationToken token = default) => inner.InitializeFromParentsAsync(resource, parents, target, source, token);
         public async Task<bool> InitializeFromParentAsync(string resource, string parent, string target,
@@ -459,7 +455,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             state.Capturing = true;
             try
             {
-                if (state.Mismatch == "missing") return await inner.InitializeFromParentAsync(resource, parent, target, token);
+                if (state.Mismatch == "missing") return await inner.InitializeFromParentAsync(resource, parent, target, null!, token);
                 var declared = Assert.IsType<DataScopeObjectInitializationSource.Declared>(source);
                 source = state.Mismatch switch
                 {
@@ -468,7 +464,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
                     "values" => declared with { Target = declared.Target with { Values = new Dictionary<string, object?> { ["LID"] = target } } },
                     "caller" => declared with { Caller = declared.Caller with { Caller = typeof(WorkspaceFolderExecutionSqlServerTests) } },
                     "binding" => declared with { Binding = declared.Binding with { Execution = WorkspaceClipboardExecutions.Copy } },
-                    "legacy-same-member" => new DataScopeObjectInitializationSource.Legacy(declared.Caller, declared.ParentObjectIds, declared.Target),
+                    "unregistered-shape" => new UnregisteredInitializationSource(declared.Caller, declared.ParentObjectIds, declared.Target),
                     _ => source
                 };
                 return await inner.InitializeFromParentAsync(resource, parent, target, source, token);
@@ -476,4 +472,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             finally { state.Capturing = false; }
         }
     }
+    private sealed record UnregisteredInitializationSource(DataExecutionInternalBinding Caller, IReadOnlyList<string> Parents,
+        DataExecutionWriteFacts Target) : DataScopeObjectInitializationSource(Caller, Parents, Target);
+
 }

@@ -448,10 +448,35 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         builder.Services.AddSingleton<StandardCrudXlsxWriter>();
         builder.Services.AddScoped<StandardCrudEndpoint>();
         builder.Services.AddScoped<StandardCrudExportService>();
+        builder.Services.AddSingleton<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>(new ICP.Platform.Testing.StandardCrudTestAccess());
+        builder.Services.AddSingleton(EndpointPlan());
         builder.Services.AddStandardCrudResource(Descriptor());
         return builder;
     }
 
+    // HTTP形状测试显式装配当前标准合同；字段替身不承担来源或权限正确性的证明。
+    private static ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan EndpointPlan()
+    {
+        var descriptor = Descriptor();
+        var contracts = ICP.Platform.Kernel.ModulePlanning.DataExecutionContracts.Read(JsonSerializer.SerializeToElement(new
+        {
+            dataExecutions = descriptor.DataExecutions.Select(pair => new { key = pair.Value, moduleId = descriptor.ModuleId,
+                provider = "standardCrud." + pair.Key, boundary = "entry", resourceKey = descriptor.ResourceKey,
+                featureBehaviors = new[] { descriptor.ResourceKey + "." + (pair.Key is "read" or "list" ? "read" : pair.Key) } })
+        }), descriptor.ModuleId);
+        var module = new ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlanModule(descriptor.ModuleId, "1.0", "字段HTTP测试", null, "", null, null,
+            null, null, "", [], [], [], [], [], new("test", "test", "/"))
+        {
+            DataExecutions = contracts,
+            DataActions = new[] { "read", "create", "edit", "delete" }.Select(key =>
+                new ICP.Platform.Kernel.ModulePlanning.DataActionDeclaration("Test", key, key, "data." + key)).ToArray(),
+            Features = contracts.Select(contract => new ICP.Platform.Kernel.ModulePlanning.FeatureDeclaration(descriptor.ModuleId,
+                contract.Key, "navigation", contract.Key, null, contract.FeatureBehaviors[0])
+            { DataResources = [descriptor.ResourceKey], DataAccess = [new(descriptor.ModuleId, "fixture", "rowActions", contract.Key,
+                contract.Key, [descriptor.ResourceKey], [])] }).ToArray()
+        };
+        return new("fixture", "1.0", "", "", [], [module]);
+    }
     private sealed class GrantAllPermissionDecisionSource : ICP.Platform.Authorization.Http.IFeatureDecisionSource
     {
         public ValueTask<PermissionDecision> EvaluateAsync(
@@ -467,7 +492,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         string resourceKey = "organization.person",
         string route = "api/organization/persons") => new()
         {
-            LegacyDataExecutions = ["list", "read", "options", "export", "create", "update", "delete"],
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings(resourceKey),
             ResourceKey = resourceKey,
             ModuleId = "Organization",
             ModelName = "Person",

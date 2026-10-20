@@ -25,26 +25,28 @@ public sealed class DataScopeDirectSubjectSqlServerTests
             fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.company.initialize"), HttpMethod.Post, "/api/organization/initialization");
         Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
         var department = (await initialized.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("departmentId").GetString()!;
-        var person = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
-            "/api/organization/persons", new { PersonNo = "SELECTOR295", ENAME = "部门选择器", EmploymentStatus = "Active", IsEnabled = true });
+        var create = http.Organization("persons", "create", "list.pageActions");
+        var person = await FeatureHttpTestRequests.CreateAsync(admin, create,
+            "/api/organization/persons", new { PersonNo = "SELECTOR295", ENAME = "部门选择器", EmploymentStatus = "Active", IsEnabled = true }, OwnedResourceReadHttpRequests.Declaration(fixture, create, "organization.person", "create"));
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
         var path = "/api/authorization/data-scope/objects/organization.person/" + id;
+        var source = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "organization.person.authorization.manage", "authorization.object.manage", "organization.person");
         var selector = new DataScopeDirectSubjectDto("Selector295Direct", "department", department, 1,
             new Dictionary<string, string> { ["read"] = "allow" });
         using (var duplicate = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path,
-            new DataScopeObjectDto("organization.person", id, [selector, selector with { Id = "Selector295False", MatchOptions = new(false) }])))
+            new DataScopeObjectDto("organization.person", id, [selector, selector with { Id = "Selector295False", MatchOptions = new(false) }]), source))
             Assert.Equal(HttpStatusCode.BadRequest, duplicate.StatusCode);
         var configuration = new DataScopeObjectDto("organization.person", id,
             [selector, selector with { Id = "Selector295Descendants", MatchOptions = new(true), Priority = 2,
                 Actions = new Dictionary<string, string> { ["read"] = "deny" } }]);
-        using (var valid = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, configuration))
+        using (var valid = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, configuration, source))
             Assert.True(valid.StatusCode == HttpStatusCode.NoContent, await valid.Content.ReadAsStringAsync());
         using (var unchanged = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path,
             configuration with { Subjects = [configuration.Subjects[1] with { Id = "Selector295NewDescendants" },
-                configuration.Subjects[0] with { Id = "Selector295NewDirect", MatchOptions = new(false) }] }))
+                configuration.Subjects[0] with { Id = "Selector295NewDirect", MatchOptions = new(false) }] }, source))
             Assert.Equal(HttpStatusCode.NoContent, unchanged.StatusCode);
-        var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, path);
+        var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, path, dataAccess: source);
         Assert.Equal(2, stored.GetProperty("subjects").GetArrayLength());
         Assert.Contains(stored.GetProperty("subjects").EnumerateArray(), subject => subject.GetProperty("id").GetString() == "Selector295Direct");
         Assert.Contains(stored.GetProperty("subjects").EnumerateArray(), subject => subject.GetProperty("id").GetString() == "Selector295Descendants");
@@ -59,11 +61,13 @@ public sealed class DataScopeDirectSubjectSqlServerTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        var person = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
-            "/api/organization/persons", new { PersonNo = "DIRECT295", ENAME = "直接项期限", EmploymentStatus = "Active", IsEnabled = true });
+        var create = http.Organization("persons", "create", "list.pageActions");
+        var person = await FeatureHttpTestRequests.CreateAsync(admin, create,
+            "/api/organization/persons", new { PersonNo = "DIRECT295", ENAME = "直接项期限", EmploymentStatus = "Active", IsEnabled = true }, OwnedResourceReadHttpRequests.Declaration(fixture, create, "organization.person", "create"));
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
         var path = "/api/authorization/data-scope/objects/organization.person/" + id;
+        var source = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "organization.person.authorization.manage", "authorization.object.manage", "organization.person");
         var baseline = new DataScopeObjectDto("organization.person", id,
             [new("Direct295All", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
         await SaveAsync(baseline, HttpStatusCode.NoContent);
@@ -105,6 +109,7 @@ public sealed class DataScopeDirectSubjectSqlServerTests
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier,
                     administrator.GetProperty("id").GetString()!)], "test"))
             };
+            var execution = OwnedResourceReadHttpRequests.BindManagementContext(fixture, context.HttpContext, manage, changed.ResourceKey, changed.ObjectId);
             var transactions = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
             fixture.Fault.AfterRegister = async (_, token) =>
             {
@@ -113,7 +118,7 @@ public sealed class DataScopeDirectSubjectSqlServerTests
                 cancellation.Cancel();
                 token.ThrowIfCancellationRequested();
             };
-            try { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => authorization.ReplaceAsync(changed.ResourceKey, changed.ObjectId, changed, cancellation.Token)); }
+            try { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => authorization.ReplaceAsync(changed.ResourceKey, changed.ObjectId, changed, execution, cancellation.Token)); }
             finally { fixture.Fault.AfterRegister = null; context.HttpContext = previousContext; }
             Assert.True(flushed);
         }
@@ -121,7 +126,7 @@ public sealed class DataScopeDirectSubjectSqlServerTests
 
         async Task SaveAsync(object input, HttpStatusCode expected)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, input);
+            using var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, input, source);
             Assert.True(response.StatusCode == expected, $"Expected {expected}, actual {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
         }
         async Task<int> AuditCountAsync()
@@ -132,7 +137,7 @@ public sealed class DataScopeDirectSubjectSqlServerTests
         }
         async Task AssertOriginalAsync()
         {
-            var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, path);
+            var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, path, dataAccess: source);
             var subject = Assert.Single(stored.GetProperty("subjects").EnumerateArray());
             Assert.Equal("Direct295All", subject.GetProperty("id").GetString());
             Assert.Equal("2026-10-17T12:00:00Z", subject.GetProperty("expiresAt").GetString());

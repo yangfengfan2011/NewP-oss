@@ -39,7 +39,7 @@ public static class RelationTreeExtensions
         services.AddScoped<RelationTreeSql>();
         // 正式装配不能因执行器漏注册而让DI选择旧手工构造，绕过声明来源校验。
         services.AddScoped(provider => new RelationTreeReader(provider.GetRequiredService<EfPlatformDbContext>(),
-            provider.GetRequiredService<RelationTreeSql>(), provider.GetService<IDataScopeReadPlanProvider>(),
+            provider.GetRequiredService<RelationTreeSql>(),
             provider.GetRequiredService<IDataExecutionAccess>()));
         services.AddSingleton(new LinkTreeCatalog(LinkTreeMetadata.Project(plan)));
         services.AddScoped<LinkTreeReader>();

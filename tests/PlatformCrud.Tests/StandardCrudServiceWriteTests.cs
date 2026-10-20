@@ -18,6 +18,36 @@ namespace ICP.Platform.Crud.Tests;
 public sealed class StandardCrudServiceWriteTests
 {
     [Fact]
+    public async Task CreateAsync_WhenPostWriteReadIsDenied_ReturnsOnlySuccessReceipt()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var observation = new DeniedObservation();
+        var result = await Service(repository, observation: observation).CreateAsync(Descriptor(),
+            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "张三" });
+        Assert.True(result.Succeeded);
+        Assert.Null(result.Detail);
+        Assert.Equal(1, repository.CreateCallCount);
+        Assert.Equal(1, observation.Reads);
+        Assert.Throws<ArgumentNullException>(() => new StandardCrudService(
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository, EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], []),
+            [], new DisplayValueProjection([]), [], null!));
+    }
+
+    private sealed class DeniedObservation : ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider
+    {
+        public int Reads { get; private set; }
+        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken token = default)
+        {
+            Assert.Equal("read", actionKey);
+            Reads++;
+            return Task.FromResult(false);
+        }
+        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string actionKey,
+            CancellationToken token = default) => throw new InvalidOperationException("Observation must not authorize writes.");
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenObjectBehaviorIsRegistered_UsesOnlyUnifiedOperationEntry()
     {
         var repository = new RecordingMutationStandardCrudRepository([]);
@@ -98,12 +128,12 @@ public sealed class StandardCrudServiceWriteTests
             "Asia/Shanghai",
             TimeProvider.System);
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], [], temporalInputNormalizer: normalizer),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], temporalInputNormalizer: normalizer, objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.CreateAsync(TemporalDescriptor(), new Dictionary<string, object?>
         {
@@ -276,6 +306,7 @@ public sealed class StandardCrudServiceWriteTests
         var service = Service(repository);
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -322,6 +353,7 @@ public sealed class StandardCrudServiceWriteTests
         var service = Service(repository);
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -363,6 +395,7 @@ public sealed class StandardCrudServiceWriteTests
         var service = Service(repository, auditStampProvider: new NullAuditStampProvider());
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -393,6 +426,7 @@ public sealed class StandardCrudServiceWriteTests
         var service = Service(repository, auditStampProvider: new MissingActorAuditStampProvider());
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -426,6 +460,7 @@ public sealed class StandardCrudServiceWriteTests
             auditStampProvider: new FixedAuditStampProvider("trusted-subject", now));
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -532,6 +567,7 @@ public sealed class StandardCrudServiceWriteTests
         var service = Service(repository);
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -593,6 +629,7 @@ public sealed class StandardCrudServiceWriteTests
             auditStampProvider: new FixedAuditStampProvider("trusted-editor", updatedAt));
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -641,6 +678,7 @@ public sealed class StandardCrudServiceWriteTests
         var service = Service(repository);
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -977,6 +1015,7 @@ public sealed class StandardCrudServiceWriteTests
         var service = Service(repository);
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -1328,7 +1367,7 @@ public sealed class StandardCrudServiceWriteTests
     [Fact]
     public async Task DeleteAsync_WhenConditionalWithoutGuard_FailsClosed()
     {
-        var service = Service();
+        var service = Service(new InMemoryStandardCrudRepository([new Dictionary<string, object?> { ["EID"] = "person-1", ["ENAME"] = "存在目标" }]));
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
 
@@ -1344,12 +1383,12 @@ public sealed class StandardCrudServiceWriteTests
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], [new AllowingDeleteGuard()]),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [new AllowingDeleteGuard()], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
 
@@ -1362,7 +1401,7 @@ public sealed class StandardCrudServiceWriteTests
     [Fact]
     public async Task DeleteAsync_WhenAuditablePolicyHasNoAuditKernel_FailsClosed()
     {
-        var service = Service();
+        var service = Service(new InMemoryStandardCrudRepository([new Dictionary<string, object?> { ["EID"] = "person-1", ["ENAME"] = "存在目标" }]));
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Auditable), "person-1");
 
@@ -1379,12 +1418,12 @@ public sealed class StandardCrudServiceWriteTests
         ]);
         var executor = new BlockingDeleteGuard();
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], [executor], conditionalDeleteExecutors: [executor]),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [executor], conditionalDeleteExecutors: [executor], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
 
@@ -1402,12 +1441,12 @@ public sealed class StandardCrudServiceWriteTests
         ]);
         var executor = new RecordingConditionalDeleteExecutor();
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [executor]),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [executor], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "person-1");
 
@@ -1422,17 +1461,18 @@ public sealed class StandardCrudServiceWriteTests
         IStandardCrudRepository? repository = null,
         IEnumerable<IStandardCrudDisplayValueResolver>? displayValueResolvers = null,
         IEntityAuditStampProvider? auditStampProvider = null,
-        IObjectOperationExecutor? objectOperations = null)
+        IObjectOperationExecutor? objectOperations = null,
+        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? observation = null)
     {
         repository ??= new InMemoryStandardCrudRepository([]);
         return new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: auditStampProvider is null ? null : new EntityAuditValueProvider(auditStampProvider)),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: auditStampProvider is null ? null : new EntityAuditValueProvider(auditStampProvider), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(displayValueResolvers ?? []),
             [],
-            objectOperations: objectOperations);
+            objectOperations: objectOperations, objectScope: observation ?? new ICP.Platform.Testing.StandardCrudTestAccess());
     }
 
     private static StandardCrudFieldPolicy ServerOwnedAuditPolicy(string field) => new()
@@ -1447,6 +1487,7 @@ public sealed class StandardCrudServiceWriteTests
 
     private static StandardCrudDescriptor TemporalDescriptor() => new()
     {
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
         ResourceKey = "organization.person",
         ModuleId = "Organization",
         ModelName = "Person",
@@ -1472,6 +1513,7 @@ public sealed class StandardCrudServiceWriteTests
         bool includeCreatedAt = false,
         string? concurrencyRevisionField = null) => new()
     {
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
         ResourceKey = "organization.person",
         ModuleId = "Organization",
         ModelName = "Person",
@@ -1510,6 +1552,7 @@ public sealed class StandardCrudServiceWriteTests
 
     private static StandardCrudDescriptor ShortTextDescriptor() => new()
     {
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.position"),
         ResourceKey = "organization.position",
         ModuleId = "Organization",
         ModelName = "Position",
@@ -1565,6 +1608,7 @@ public sealed class StandardCrudServiceWriteTests
 
     private static StandardCrudDescriptor CallerOnCreateDescriptor() => new()
     {
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("example.immutable"),
         ResourceKey = "example.immutable",
         ModuleId = "Example",
         ModelName = "ImmutableItem",
@@ -1607,6 +1651,7 @@ public sealed class StandardCrudServiceWriteTests
 
     private static StandardCrudDescriptor DescriptorWithMutationDisplayValueFields() => new()
     {
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
         ResourceKey = "organization.person",
         ModuleId = "Organization",
         ModelName = "Person",
@@ -1646,6 +1691,7 @@ public sealed class StandardCrudServiceWriteTests
 
     private static StandardCrudDescriptor DescriptorWithUniqueConstraint(bool includePersonNoInUpdate = false) => new()
     {
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
         ResourceKey = "organization.person",
         ModuleId = "Organization",
         ModelName = "Person",
@@ -1673,6 +1719,7 @@ public sealed class StandardCrudServiceWriteTests
 
     private static StandardCrudDescriptor DescriptorWithRequiredFields() => new()
     {
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
         ResourceKey = "organization.person",
         ModuleId = "Organization",
         ModelName = "Person",
@@ -1745,6 +1792,7 @@ public sealed class StandardCrudServiceWriteTests
         var descriptor = DescriptorWithRequiredFields();
         return new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings(descriptor.ResourceKey),
             ResourceKey = descriptor.ResourceKey,
             ModuleId = descriptor.ModuleId,
             ModelName = descriptor.ModelName,
@@ -1994,6 +2042,12 @@ public sealed class StandardCrudServiceWriteTests
             objectKey == "organization.person"
             && action == (supportedAction ?? ObjectOperationAction.Create);
 
+        public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action, string? targetId,
+            IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken token = default)
+        {
+            Assert.IsType<ObjectOperationWriteSource.Declared>(source);
+            return ExecuteAsync(objectKey, action, targetId, values, token);
+        }
         public Task<StandardCrudMutationResult> ExecuteAsync(
             string objectKey,
             ObjectOperationAction action,

@@ -22,7 +22,6 @@ public sealed record DataExecutionFixedBinding(string Kind, string Identity, str
 public sealed record DataExecutionContract(string Key, string ModuleId, string Provider, string Boundary,
     IReadOnlyList<string> FeatureBehaviors, IReadOnlyList<DataExecutionRequirement> Requirements)
 {
-    public bool LegacyActions { get; init; }
     public IReadOnlyList<string> AllowedAdditionalActions { get; init; } = [];
     public IReadOnlyList<string> Branches { get; init; } = [];
     public IReadOnlyList<DataExecutionFixedBinding> FixedBindings { get; init; } = [];
@@ -134,11 +133,11 @@ public static class DataExecutionContracts
                     || binding.Kind == "internal" && (string.IsNullOrWhiteSpace(binding.Caller) || binding.HttpMethod is not null || binding.Route is not null)))
                 throw new InvalidOperationException("DATA_EXECUTION_FIXED_BINDING_INVALID");
             if (contract.Provider.StartsWith("standardCrud.", StringComparison.Ordinal)
-                && (contract.LegacyActions || contract.Requirements[0].Resources.Count != 1
+                && (contract.Requirements[0].Resources.Count != 1
                     || JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(StandardCrudRequirements(contract.Provider, contract.Requirements[0].Resources[0]))))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
             if ((contract.Provider is "entityOwnership.transfer" or "entityOwnership.initialize")
-                && (contract.LegacyActions || contract.AllowedAdditionalActions.Count != 0 || contract.Branches.Count != 0
+                && (contract.AllowedAdditionalActions.Count != 0 || contract.Branches.Count != 0
                     || contract.TargetResource is not null || contract.TargetResources is not null || contract.ProviderModuleId is not null
                     || JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(OwnershipRequirements(contract.Provider, contract.Requirements[0].Resources))
                     || !actions.Any(action => action.Key == "edit" && action.RequiresRead)))
@@ -177,6 +176,14 @@ public static class DataExecutionContracts
         return new(resource + "." + operation, moduleId, provider, "entry", [resource + ".read"], StandardCrudRequirements(provider, resource));
     }
 
+    /// <summary>标准包真实写操作复用同一提供者下限；不生成包未支持的删除或专用命令。</summary>
+    public static DataExecutionContract StandardWrite(string moduleId, string resource, string operation)
+    {
+        if (operation is not ("create" or "update")) throw new ArgumentException("Only existing standard package writes are supported.", nameof(operation));
+        var provider = "standardCrud." + operation;
+        return new(resource + "." + operation, moduleId, provider, "entry",
+            [resource + "." + operation], StandardCrudRequirements(provider, resource));
+    }
     // 标准CRUD执行提供者只在此定义必要权限；绑定声明没有覆盖它的字段。
     private static IReadOnlyList<DataExecutionRequirement> StandardCrudRequirements(string provider, string resource) => provider switch
     {

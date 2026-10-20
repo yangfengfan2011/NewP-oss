@@ -5,14 +5,7 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 
 /// <summary>能力 owner 的固定下限；资源占位只在正式消费者装配时替换，不是客户端策略语言。</summary>
 public sealed record DataExecutionProviderContract(string Key, string ModuleId, string BackendBehaviorKey,
-    string ConsumerBinding, IReadOnlyList<DataExecutionRequirement> Requirements)
-{
-    /// <summary>逐资源隔离既有通用执行，迁移后删除对应项，#321删除过渡机制。</summary>
-    public IReadOnlyList<DataExecutionLegacyConsumer> LegacyConsumers { get; init; } = [];
-}
-
-/// <summary>具体提供者能力的未迁移消费者；不按命名空间或缺失请求头放行。</summary>
-public sealed record DataExecutionLegacyConsumer(string ModuleId, string ResourceKey);
+    string ConsumerBinding, IReadOnlyList<DataExecutionRequirement> Requirements);
 
 /// <summary>通用能力贡献的读取、活动 owner 校验与资源绑定。</summary>
 public static class DataExecutionProviders
@@ -43,7 +36,7 @@ public static class DataExecutionProviders
                 return execution;
             }
             if (provider is null) throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_UNKNOWN");
-            if (execution.Requirements.Count != 0 || execution.LegacyActions || execution.AllowedAdditionalActions.Count != 0
+            if (execution.Requirements.Count != 0 || execution.AllowedAdditionalActions.Count != 0
                 || execution.ProviderModuleId is not null || execution.Branches.Count != 0
                 || provider.ConsumerBinding switch
                 {
@@ -53,7 +46,6 @@ public static class DataExecutionProviders
                         || execution.TargetResources.Distinct(StringComparer.Ordinal).Count() != execution.TargetResources.Count,
                     _ => true
                 }
-                || provider.LegacyConsumers.Any(consumer => consumer.ModuleId == execution.ModuleId && consumer.ResourceKey == execution.TargetResource)
                 || provider.Requirements.Count == 0 || provider.Requirements.Any(requirement => !requirement.Resources.SequenceEqual(["$resource"])))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
             return execution with { ProviderModuleId = provider.ModuleId,

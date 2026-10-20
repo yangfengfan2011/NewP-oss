@@ -49,48 +49,48 @@ public partial interface IDataExecutionAccess
     void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey);
     /// <summary>按正式查询来源取得原数据库读取计划；调用方继续在Count/排序/分页之前组合它。</summary>
     Task<DataScopeReadPlan> GetQueryReadPlanAsync(DataExecutionQueryContext context, string resourceKey,
-        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        CancellationToken cancellationToken = default);
     /// <summary>单对象读取在原SQL位置核对真实入口允许的执行；保留编辑准备与直接查看的不同来源。</summary>
     Task<DataScopeReadPlan> GetObjectReadPlanAsync(IReadOnlyList<DataExecutionBindingReference> bindings,
-        string resourceKey, string role, string objectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        string resourceKey, string role, string objectId, CancellationToken cancellationToken = default);
     /// <summary>固定内部来源在原批量读取位置核对角色、资源和调用者；不借用HTTP位置或逐对象预检。</summary>
     Task<IReadOnlySet<string>> GetInternalReadableIdsAsync(DataExecutionInternalReadBinding binding,
-        string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default);
     /// <summary>内部调用者在原单对象SQL读取位置组合完整read计划；ID只核角色基数，不逐项预检。</summary>
     Task<DataScopeReadPlan> GetInternalReadPlanAsync(DataExecutionInternalReadBinding binding,
-        string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default);
     /// <summary>固定内部查询来源在原SQL过滤位置取得read计划，不伪造对象ID集合或HTTP凭据。</summary>
     Task<DataScopeReadPlan> GetInternalQueryReadPlanAsync(DataExecutionInternalReadBinding binding,
-        string resourceKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        string resourceKey, CancellationToken cancellationToken = default);
     /// <summary>纯固定API在原SQL过滤处核对真实路由/方法及资源后取得read计划，不作为entry缺声明回退。</summary>
     Task<DataScopeReadPlan> GetApiQueryReadPlanAsync(DataExecutionApiQueryContext context,
-        string resourceKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        string resourceKey, CancellationToken cancellationToken = default);
     /// <summary>纯固定API在原详情SQL点核对来源和真实单目标后取得read计划，不作为普通entry的缺声明回退。</summary>
     Task<DataScopeReadPlan> GetApiObjectReadPlanAsync(DataExecutionApiObjectContext context, string resourceKey, string objectId,
-        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        CancellationToken cancellationToken = default);
     /// <summary>固定API在原对象裁决点消费本次角色要求，来源不能作为普通entry缺声明的回退。</summary>
     Task<DataExecutionTargetDecision> EvaluateApiObjectAsync(DataExecutionApiObjectExecutionContext context, string role,
-        DataExecutionTargetInput target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-    /// <summary>通用端点由真实metadata及资源owner选择受控绑定；仅明确登记的旧消费者返回null。</summary>
-    DataExecutionBindingReference? BindResourceEndpoint(string resourceKey) => throw new NotSupportedException();
+        DataExecutionTargetInput target, CancellationToken cancellationToken = default);
+    /// <summary>通用端点由真实metadata及资源owner选择受控绑定；缺少或串用来源均拒绝。</summary>
+    DataExecutionBindingReference BindResourceEndpoint(string resourceKey);
     /// <summary>完整角色先核基数，再按输入顺序裁决；每次枚举均使用当前阶段事实。</summary>
     IAsyncEnumerable<DataExecutionTargetDecision> EvaluateObjectsAsync(DataExecutionBindingReference binding, string role,
-        IReadOnlyList<DataExecutionTargetInput> targets, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        IReadOnlyList<DataExecutionTargetInput> targets, CancellationToken cancellationToken = default);
     /// <summary>正式阶段按当前事实执行单对象角色要求，不复用点击预检允许结果。</summary>
     Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey,
         string role, string objectId, CancellationToken cancellationToken = default);
     /// <summary>真实端点限定有限来源，单目标在原阶段消费匹配来源的角色；不接受客户端角色或允许结果。</summary>
     Task<DataExecutionDecision> EvaluateObjectFromBindingsAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey,
-        string role, string objectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        string role, string objectId, CancellationToken cancellationToken = default);
     /// <summary>对服务端归一化后的真实候选执行候选角色要求，不读取不存在的对象。</summary>
     Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey,
         string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken cancellationToken = default);
     /// <summary>在候选补齐身份、归属和审计字段后消费本次写绑定，不要求新对象已可读。</summary>
     Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionWriteContext source, string resourceKey, string role,
-        IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => throw new NotSupportedException();
+        IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default);
 
     /// <summary>在原旧值保护位置核对单次写来源与实际目标，再按有效要求执行现有对象裁决。</summary>
     Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionWriteContext source, string role,
-        DataExecutionWriteFacts before, CancellationToken token = default) => throw new NotSupportedException();
+        DataExecutionWriteFacts before, CancellationToken token = default);
 
 }

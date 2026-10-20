@@ -37,6 +37,10 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var anchor = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "Capacity295Anchor");
         var read = fixture.FeatureCatalog.Single(point => point.ModuleId == "Part" && point.Kind == "navigation" && point.Key == "part.parts");
         var manage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Part" && point.Key == "authorize" && point.ActionScope == "list.rowActions");
+        var manageSource = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part");
+        var viewSource = Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
+            item => item.Execution == "part.part.authorization.view" && item.ViewKey == "part.part.list" && item.ActionKey == "viewAuthorization"
+                && item.FeaturePositions.Contains(read.Position, StringComparer.Ordinal));
         var saveRules = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Capacity295", "容量角色", "capacity295", "容量账号", read, manage);
         using var ordinary = actor.Client;
@@ -81,19 +85,19 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var path = "/api/part/parts/" + anchor.Id + "/permissions";
         var configuration = new DataScopeObjectDto("part.part", anchor.Id, roles.Select((id, index) => new DataScopeDirectSubjectDto(
             "Capacity295Subject" + index, "role", id, 0, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" })).ToArray());
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, configuration))
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, configuration, manageSource))
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         int historyBefore;
         using (var scope = fixture.Services.CreateScope())
             historyBefore = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("BusinessChange").CountAsync();
-        await MeasureAsync("catalog", () => FeatureHttpTestRequests.ReadAsync(ordinary, read, path + "/catalog"));
+        await MeasureAsync("catalog", () => FeatureHttpTestRequests.ReadAsync(ordinary, read, path + "/catalog", viewSource));
         var candidates = await MeasureAsync("role-candidates-page", () => FeatureHttpTestRequests.ReadAsync(ordinary, manage,
-            path + "/subjects/role?query=" + Uri.EscapeDataString("容量角色") + "&page=1"));
+            path + "/subjects/role?query=" + Uri.EscapeDataString("容量角色") + "&page=1", manageSource));
         Assert.Equal(20, candidates.GetProperty("items").GetArrayLength());
         Assert.True(candidates.GetProperty("hasMore").GetBoolean());
-        var stored = await MeasureAsync("configuration", () => FeatureHttpTestRequests.ReadAsync(ordinary, manage, path));
+        var stored = await MeasureAsync("configuration", () => FeatureHttpTestRequests.ReadAsync(ordinary, manage, path, manageSource));
         Assert.Equal(size, stored.GetProperty("subjects").GetArrayLength());
-        var inspection = await MeasureAsync("explanation", () => FeatureHttpTestRequests.ReadAsync(ordinary, read, path + "/explanation"));
+        var inspection = await MeasureAsync("explanation", () => FeatureHttpTestRequests.ReadAsync(ordinary, read, path + "/explanation", viewSource));
         Assert.Equal(size, inspection.GetProperty("subjectNames").GetArrayLength());
         var readExplanation = inspection.GetProperty("actions").EnumerateArray().Single(action => action.GetProperty("key").GetString() == "read");
         Assert.Equal("object", readExplanation.GetProperty("reason").GetString());
@@ -123,11 +127,11 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var replacement = configuration with { Subjects = configuration.Subjects.Select(subject => subject with { Priority = 1, ExpiresAt = "2099-01-01T00:00:00Z" }).ToArray() };
         await MeasureAsync("full-replacement", async () =>
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, replacement);
+            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, replacement, manageSource);
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
             return JsonSerializer.SerializeToElement(new { status = (int)response.StatusCode });
         });
-        var baseline = await FeatureHttpTestRequests.ReadAsync(admin, manage, path);
+        var baseline = await FeatureHttpTestRequests.ReadAsync(admin, manage, path, manageSource);
         var recordCount = await TargetRecordsAsync();
         var flushed = false;
         using (var scope = fixture.Services.CreateScope())
@@ -141,20 +145,21 @@ public sealed partial class DataScopePermissionCostSqlServerTests
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "test"))
             };
+            var execution = OwnedResourceReadHttpRequests.BindManagementContext(fixture, accessor.HttpContext, manage, replacement.ResourceKey, replacement.ObjectId);
             fixture.Fault.AfterRegister = async (_, token) => { await executor.FlushAsync(token); flushed = true; cancel.Cancel(); token.ThrowIfCancellationRequested(); };
             try
             {
                 await MeasureAsync("flush-then-cancel", async () =>
                 {
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scope.ServiceProvider.GetRequiredService<IDataScopeObjectAuthorization>()
-                        .ReplaceAsync(replacement.ResourceKey, replacement.ObjectId, replacement with { Subjects = replacement.Subjects.Select(subject => subject with { Priority = 2 }).ToArray() }, cancel.Token));
+                        .ReplaceAsync(replacement.ResourceKey, replacement.ObjectId, replacement with { Subjects = replacement.Subjects.Select(subject => subject with { Priority = 2 }).ToArray() }, execution, cancel.Token));
                     return JsonSerializer.SerializeToElement(new { flushed, cancelled = cancel.IsCancellationRequested });
                 });
             }
             finally { fixture.Fault.AfterRegister = null; accessor.HttpContext = previous; }
         }
         Assert.True(flushed);
-        Assert.Equal(baseline.GetRawText(), (await FeatureHttpTestRequests.ReadAsync(admin, manage, path)).GetRawText());
+        Assert.Equal(baseline.GetRawText(), (await FeatureHttpTestRequests.ReadAsync(admin, manage, path, manageSource)).GetRawText());
         Assert.Equal(recordCount, await TargetRecordsAsync());
 
         DataScopeRuleDto Node(string rootId, string? parent, int level)

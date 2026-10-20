@@ -11,19 +11,16 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class ExampleAuthorizationExecutionSqlServerTests
 {
-    // 未迁移的账号/角色仍按具体资源登记旧generic能力，不能被首条Example迁移意外关闭。
-    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "实际账号与角色通用授权保持旧入口资格和完整保存")]
-    public async Task ExistingIdentityAndRole_KeepExplicitLegacyGenericManagement()
+    // 账号/角色都使用已迁移的真实管理来源，不能回退为仅功能资格。
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "实际账号与角色通用授权保持正式来源、原入口资格和完整保存")]
+    public async Task ExistingIdentityAndRole_KeepFormalGenericManagement()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var catalog = fixture.Services.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeResourceCatalog>();
-        var legacy = plan.Modules.SelectMany(module => module.DataExecutionProviders).Single(provider => provider.Key == "authorization.object.manage").LegacyConsumers;
-        Assert.All(legacy, consumer =>
-        {
-            Assert.Contains(catalog.Resources, resource => resource.ModuleId == consumer.ModuleId && resource.ResourceKey == consumer.ResourceKey);
-            Assert.Contains(plan.FeatureCatalog, point => point.ModuleId == consumer.ModuleId && point.BehaviorKey == consumer.ResourceKey + ".authorize");
-        });
+        Assert.All(new[] { "identity.account", "authorization.role" }, key =>
+            Assert.Contains(plan.ActionDataAccessCatalog, declaration => declaration.Provider == "authorization.object.manage"
+                && declaration.Resources.SequenceEqual([key])));
         using var admin = await fixture.LoginAdministratorAsync(); var http = new FeatureHttpTestRequests(fixture);
         var identity = plan.FeatureCatalog.First(point => point.BehaviorKey == "identity.account.authorize");
         var role = plan.FeatureCatalog.First(point => point.BehaviorKey == "authorization.role.authorize");
@@ -33,13 +30,14 @@ public sealed class ExampleAuthorizationExecutionSqlServerTests
         foreach (var target in new[] { (Key: "identity.account", Id: actor.AccountId, Point: identity), (Key: "authorization.role", Id: actor.RoleId, Point: role) })
         {
             var path = "/api/authorization/data-scope/objects/" + target.Key + "/" + target.Id;
-            using var eligible = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point, HttpMethod.Get, path + "/eligibility");
+            var source = OwnedResourceReadHttpRequests.ForExecution(fixture, target.Point, target.Key + ".authorization.manage", "authorization.object.manage", target.Key);
+            using var eligible = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point, HttpMethod.Get, path + "/eligibility", dataAccess: source);
             Assert.Equal(HttpStatusCode.OK, eligible.StatusCode);
-            using var saved = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point, HttpMethod.Put, path, new DataScopeObjectDto(target.Key, target.Id, []));
+            using var saved = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point, HttpMethod.Put, path, new DataScopeObjectDto(target.Key, target.Id, []), source);
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
-            using var read = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point, HttpMethod.Get, path);
+            using var read = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point, HttpMethod.Get, path, dataAccess: source);
             Assert.Equal(HttpStatusCode.OK, read.StatusCode);
-            using var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point == identity ? role : identity, HttpMethod.Get, path);
+            using var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point == identity ? role : identity, HttpMethod.Get, path, dataAccess: source);
             Assert.Equal(HttpStatusCode.Forbidden, crossed.StatusCode);
         }
     }

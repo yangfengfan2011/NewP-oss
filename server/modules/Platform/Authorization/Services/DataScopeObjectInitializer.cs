@@ -10,14 +10,6 @@ public sealed class DataScopeObjectInitializer(DataScopeObjectGrants grants,
     IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, DataScopeObjectInitializationSources sources) : IDataScopeObjectInitializer
 {
     /// <inheritdoc/>
-    public Task<bool> InitializeFromParentAsync(string resourceKey, string parentObjectId, string newObjectId, CancellationToken token = default) =>
-        throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceRequired");
-
-    /// <inheritdoc/>
-    public Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resourceKey, IReadOnlyList<string> parentObjectIds, string newObjectId,
-        CancellationToken token = default) => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceRequired");
-
-    /// <inheritdoc/>
     public async Task<bool> InitializeFromParentAsync(string resourceKey, string parentObjectId, string newObjectId,
         DataScopeObjectInitializationSource source, CancellationToken token = default) =>
         (await InitializeFromParentsAsync(resourceKey, [parentObjectId], newObjectId, source, token)).Initialized;

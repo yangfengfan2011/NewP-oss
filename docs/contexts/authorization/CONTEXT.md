@@ -92,13 +92,19 @@ _Avoid_: 动作字符串集合、点击允许凭证、跨请求授权缓存
 
 Example 标准 CRUD 已使用执行合同：创建针对服务端归一化后的候选，编辑的准备读取与提交前旧值判权分阶段表示，删除保留最终读取和 delete。固定下限由 Standard CRUD 提供者定义，owner Capsule 仅绑定执行身份与实际资源；真实端点在装配时核对 provider，入口不能用直接 actions 改写下限。列表与详情声明引用各自读取执行，数据库侧过滤继续由原读取计划负责。存在声明不意味着额外点击预检；正式请求独立核对声明、功能位置及实际目标。写后独立读取只决定返回详情还是成功回执，不推翻已提交的创建或编辑。
 
-共享写入器按资源 owner 登记的具体操作选择正式执行或 `LegacyDataExecutions`。未登记写入拒绝，不依据请求是否带声明猜测路径。Organization 四资源、Part 和 Document 已采用正式写入来源；HTTP 来源核对真实入口，内部来源核对固定调用者、执行、资源及目标，仍在原候选或受保护旧值位置判权。Workspace 组合创建、编辑与删除在原外层位置及目标点消费正式要求，再以 owner 的 Declared 来源进入原候选或旧值判权，保留原两处裁决。Part、Document 真副本调用仍使用逐调用者、动作登记的独立 typed legacy 来源，不因缺少声明放行。Workspace 私有文件夹详情分别使用明确的 entry、固定 API 或可信内部来源，未登记的旧详情调用拒绝；#321 清除剩余过渡登记与直接接线。底层调用的逐方法允许理由及待迁移归属由 `DataScopeDecisionBoundaryTests` 的实际 IL 调用清单核对，不能用命名空间豁免掩盖新增消费者。
+共享写入器只消费正式 `DataExecutions` 与显式 `ObjectOperationWriteSource.Declared`。HTTP 来源核对真实入口，内部来源核对固定调用者、执行、资源及目标，仍在原候选或受保护旧值位置判权；不存在缺声明选择旧路径、逐调用者 legacy 登记或无执行器构造。Workspace 组合写与 Part、Document 真副本分别在原外层和 owner 判权位置消费正式要求，不用外层允许替代内层裁决。Workspace 私有详情分别使用明确的 entry、固定 API 或可信内部来源，未登记的普通详情调用拒绝。
+
+标准数据包由真实 Blueprint producer 生成 list、create、update，以及实际 DetailView 的 read 合同；无 DetailView 时 descriptor 显式将 read 指向同一 update.prepare，缺少 read 映射仍拒绝，不在端点或服务中猜测别名。已有 enable/disable 复用原 UpdateAsync 及其 update.submit 要求，authorize 非呈现功能动作通过资源短引用消费 Authorization 唯一下限；不生成新按钮或新能力。`dataAccess` 只引用 execution/resources 及被允许的 additionalActions，旧 actions 与执行 LegacyActions 写法拒绝。
+
+底层调用由 `DataScopeDecisionBoundaryTests` 扫描实际 IL 调用位置，变量、常量和具体实现调用均可见。允许的实际位置仅为统一执行器、完整读取边界和独立写后观察，并逐位置说明动作来源；完整读取 resolver 同时核真实接口、DI 和 fixed internal 合同的引用，不能新增任意允许清单。Workspace 权限目标的完整读取保留原 Link 可读 404、独立 data-read 403、根约束的顺序与 SQL；纯外部 AddReference 使用自己的固定 API parent/target 要求，不能借界面声明。
 
 通用对象授权能力的固定下限由 Authorization 的活动 provider 贡献，Example、Organization 四资源、账号、角色、Part 和 Document 只绑定各自资源。Workspace 的异构 LID 入口使用执行 owner 模式，明确引用 Folder、Part、Document 资源集，不能冒充其中每个资源的 owner；全部资源均核对活动目录及模块依赖。单资源 owner 通过 `resourceKey` 短引用，执行 owner 集合通过 `resources` 短数组引用固定能力，两者互斥；消费者不能改写能力的要求、阶段、形状或分支。通用 Authorization 端点只消费自己明确登记的能力，仍核实际资源 owner 与原 authorize 功能位置；Workspace 集合来源只能为所属 Folder 的通用管理使用，不能借到 Part/Document 的独立管理入口。
 
 Part、Document 和 Workspace 的既有只读权限页及行入口分别携带自己的查看声明，保持原完整 read，不新增 authorize 功能或数据资格。owner 的 explanation、catalog、字面 subjects/user 也接受管理来源的辅助 view 角色，仍只执行原 read；其他主体候选、eligibility、完整配置及保存执行 read + authorize。通用对象管理端点的所有辅助读取保持 read + authorize，Example 的既有“查看授权”也不降格。单对象与批量保存沿原图锁、全部 ACL 锁和事务重验，成功后自身失权不追加回读。共享输入按声明身份隔离草稿、取消及未知提交状态；批量准备允许合法空筛选，但空结果也先核声明、功能位置与允许零目标的准备角色，保存和显式核对保留原非空集合守卫。
 
-正式 DI 的对象权限查询和 owner 单／批量管理必须显式提交执行来源，新重载的 null 或空来源拒绝；旧无来源 ABI 只为明确的手工低层构造保留，不能由正式装配回退，#321 删除该兼容与测试专用 legacy 登记。纯 API 与可信内部执行使用各自固定绑定，不能作为界面缺声明的回退。Workspace 既有无界面候选、空间根详情及兼容位置 API 以真实 RouteEndpoint、HTTP method、endpoint module 和活动资源登记核对来源，在原 SQL 位置取得同一读取计划。
+对象权限查询、单／批量管理、候选准备与父授权初始化只保留显式来源接口，null 或空来源在配置读取与锁之前拒绝。执行接口不提供迁移期默认实现，生产服务组合必须提供真实执行器。纯 API 与可信内部执行使用各自固定绑定，不能作为界面缺声明的回退。Workspace 的无界面候选、空间根详情、兼容位置与 AddReference API 核真实 RouteEndpoint、HTTP method、endpoint module、活动 provider/资源及依赖；查询在原 SQL 位置取得同一计划，对象动作在原裁决位置消费角色。
+
+回滚须同时恢复一致的合同、声明、服务调用与装配版本；保留原权限配置、审计与已发布迁移，不恢复缺声明放行或仅功能授权的旧数据路径。
 
 可信内部对象执行只接受正式 internal 合同及精确固定调用者，复用同一角色裁决器。资源 owner 可在原读取阶段完成后提供受控当前事实；执行器核对同一请求、主体、目标、阶段及来源引用，不接收允许布尔值或跨请求结果缓存。Document 文件摘要反馈、正式下载、文件 owner 下载校验和锁内释放各自建立本阶段事实；上传、取消和首次／幂等确认保持原凭据与事务证明，不新增对象 read。
 

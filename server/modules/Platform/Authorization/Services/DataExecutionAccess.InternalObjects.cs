@@ -12,7 +12,7 @@ public sealed partial class DataExecutionAccess
         if (http.HttpContext?.User.Identity?.IsAuthenticated != true)
             throw new ActionDataAccessException(401, "ActionDataAccess.SubjectRequired");
         var source = plan.Modules.SelectMany(module => module.DataExecutions).SingleOrDefault(contract => contract.Key == binding.Execution);
-        if (source is null || source.Boundary != "internal" || source.Provider != binding.Provider || source.LegacyActions
+        if (source is null || source.Boundary != "internal" || source.Provider != binding.Provider
             || string.IsNullOrWhiteSpace(binding.Member) || !binding.Caller.GetMethods(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static
                 | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic).Any(method => method.Name == binding.Member)
             || !source.FixedBindings.Any(item => item.Kind == "internal" && item.Identity == source.Key && item.Caller == binding.CallerIdentity))

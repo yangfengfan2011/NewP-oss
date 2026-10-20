@@ -47,14 +47,14 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
     public void StandardDataReadBindings_UseDeclaredEntityAndExistingEditPosition()
     {
         var descriptor = BuildDescriptor();
-        Assert.Equal("Partner.AssetCatalog.Asset.read", descriptor.DataExecutions["read"]);
-        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == descriptor.DataExecutions["read"]);
+        Assert.Equal("Partner.AssetCatalog.Asset.update", descriptor.DataExecutions["read"]);
+        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == descriptor.DataExecutions["read"] && item.ActionKey == "edit");
         Assert.Equal(new[] { Point("edit").Position }, read.FeaturePositions);
         Assert.Equal("rowActions", read.Surface);
         Assert.Equal("edit", read.ActionKey);
-        Assert.Equal("standardCrud.read", read.Provider);
-        var required = Assert.Single(read.Requirements!);
-        Assert.Equal(("target", "read", "object"), (required.Role, required.Stage, required.Shape));
+        Assert.Equal("standardCrud.update", read.Provider);
+        var required = Assert.Single(read.Requirements!, requirement => requirement.Stage == "prepare");
+        Assert.Equal(("target", "prepare", "object"), (required.Role, required.Stage, required.Shape));
         Assert.Equal(new[] { "read" }, Assert.Single(required.AnyOf));
         var action = Assert.Single(_plan.DataActionCatalog, action => action.Key == "read");
         Assert.NotEqual("Partner.AssetCatalog", action.ModuleId);
@@ -76,7 +76,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         await app.StartAsync();
         using var client = app.GetTestClient();
         // 未声明Detail View时，详情仍由已有edit预取声明消费，不产生新入口。
-        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.read"
+        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.update"
             && item.FeaturePositions.Contains(Point("edit").Position));
         using (var missing = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, "/api/standard/partner-asset-catalog/assets/Asset_1"))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
@@ -87,11 +87,62 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         Assert.Equal(instant, fields.GetProperty("CreatedAt").GetDateTime());
         Assert.Equal("2026/9/4 15:24:26", fields.GetProperty("CreatedAt_DisplayValue").GetString());
         Assert.False(fields.TryGetProperty("CreatedBy_DisplayValue", out _));
-        var rejected = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post, "/api/standard/partner-asset-catalog/assets", new { Name = "Other", CreatedBy_DisplayValue = "forged" });
+        var rejected = await WriteAsync(client, Point("create"), HttpMethod.Post, "/api/standard/partner-asset-catalog/assets", new { Name = "Other", CreatedBy_DisplayValue = "forged" });
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
         Assert.Equal(0, repository.CreateCallCount);
     }
 
+    [Fact]
+    public async Task InstalledProjection_WritesRequireTheirOwnExecutionBeforeBusinessRules()
+    {
+        var repository = new RecordingRepository();
+        await using var app = BuildApplication(repository);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        using var missing = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
+            "/api/standard/partner-asset-catalog/assets", new { Name = "真实模板候选", SerialNo = "RETIRE321" });
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Equal(0, repository.CreateCallCount);
+        var create = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.create");
+        var update = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.update"
+            && item.FeaturePositions.Contains(Point("edit").Position));
+        using (var swapped = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
+            "/api/standard/partner-asset-catalog/assets", new { Name = "真实模板候选" }, dataAccess: update))
+            Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
+        using var created = await WriteAsync(client, Point("create"), HttpMethod.Post,
+            "/api/standard/partner-asset-catalog/assets", new { Name = "真实模板候选", SerialNo = "RETIRE321" });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (string)Assert.Single(repository.Rows)["EID"]!;
+        var path = "/api/standard/partner-asset-catalog/assets/" + id;
+        using (var missingRead = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, path))
+            Assert.Equal(HttpStatusCode.BadRequest, missingRead.StatusCode);
+        using (var wrongRead = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, path, dataAccess: create))
+            Assert.Equal(HttpStatusCode.BadRequest, wrongRead.StatusCode);
+        using (var prepare = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, path, dataAccess: update))
+            Assert.Equal(HttpStatusCode.OK, prepare.StatusCode);
+        using (var missingSubmit = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put, path, new { Name = "未声明" }))
+            Assert.Equal(HttpStatusCode.BadRequest, missingSubmit.StatusCode);
+        using var submitted = await WriteAsync(client, Point("edit"), HttpMethod.Put, path, new { Name = "已提交" });
+        Assert.Equal(HttpStatusCode.OK, submitted.StatusCode);
+        Assert.Equal("已提交", Assert.Single(repository.Rows)["Name"]);
+        Assert.Equal(1, repository.UpdateCallCount);
+    }
+    // 字段测试沿真实producer选择对应写来源，不让字段失败被缺声明400遮蔽。
+    private Task<HttpResponseMessage> WriteAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object body) =>
+        FeatureHttpTestRequests.SendAsync(client, point, method, path, body, dataAccess:
+            Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset." + (point.Key == "create" ? "create" : "update")
+                && item.FeaturePositions.Contains(point.Position)));
+    [Fact]
+    [Trait("Category", "ModuleMetadataConsumer")]
+    public void InstalledProjection_ExistingAuthorizeHasItsOwnProviderBinding()
+    {
+        BuildDescriptor();
+        var source = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Provider == "authorization.object.manage");
+        Assert.Equal("authorize", source.ActionKey);
+        Assert.Equal("featureActions", source.Surface);
+        Assert.Equal(new[] { Point("authorize").Position }, source.FeaturePositions);
+        Assert.Equal(new[] { "read", "authorize" }, Assert.Single(Assert.Single(source.Requirements!, role => role.Stage == "submit").AnyOf));
+    }
     private sealed class Presentation : ICP.Platform.Presentation.IRequestPresentationContextAccessor
     {
         public ICP.Platform.Presentation.RequestPresentationContext? Current => new("zh-CN", "Asia/Taipei");
@@ -109,13 +160,13 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         await app.StartAsync();
         var client = app.GetTestClient();
 
-        var missingResponse = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
+        var missingResponse = await WriteAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets",
             new Dictionary<string, object?> { ["SerialNo"] = "S-001" });
-        var nullResponse = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
+        var nullResponse = await WriteAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets",
             new Dictionary<string, object?> { ["Name"] = null, ["SerialNo"] = "S-002" });
-        var blankResponse = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
+        var blankResponse = await WriteAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets",
             new Dictionary<string, object?> { ["Name"] = "   ", ["SerialNo"] = "S-003" });
 
@@ -133,14 +184,14 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         await using var app = BuildApplication(repository);
         await app.StartAsync();
         var client = app.GetTestClient();
-        var createdResponse = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
+        var createdResponse = await WriteAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets",
             new Dictionary<string, object?> { ["Name"] = "正式资产", ["SerialNo"] = "S-004" });
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
         var row = Assert.Single(repository.Rows);
         var id = Assert.IsType<string>(row["EID"]);
 
-        var omittedResponse = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put,
+        var omittedResponse = await WriteAsync(client, Point("edit"), HttpMethod.Put,
             $"/api/standard/partner-asset-catalog/assets/{id}",
             new Dictionary<string, object?> { ["SerialNo"] = "S-005" });
 
@@ -148,10 +199,10 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         Assert.Equal("正式资产", row["Name"]);
         Assert.Equal("S-005", row["SerialNo"]);
 
-        var nullResponse = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put,
+        var nullResponse = await WriteAsync(client, Point("edit"), HttpMethod.Put,
             $"/api/standard/partner-asset-catalog/assets/{id}",
             new Dictionary<string, object?> { ["Name"] = null });
-        var blankResponse = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put,
+        var blankResponse = await WriteAsync(client, Point("edit"), HttpMethod.Put,
             $"/api/standard/partner-asset-catalog/assets/{id}",
             new Dictionary<string, object?> { ["Name"] = "  " });
 
@@ -171,19 +222,19 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         using var client = app.GetTestClient();
         var body = new { Name = "原名称", SerialNo = "STATE", IsEnabled = false };
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/standard/partner-asset-catalog/assets", body)).StatusCode);
-        using var created = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post, "/api/standard/partner-asset-catalog/assets", body);
+        using var created = await WriteAsync(client, Point("create"), HttpMethod.Post, "/api/standard/partner-asset-catalog/assets", body);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var row = Assert.Single(repository.Rows);
         var path = "/api/standard/partner-asset-catalog/assets/" + row["EID"];
         Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Point("disable"), HttpMethod.Post, path + "/enable")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(client, Point("enable"), HttpMethod.Post, path + "/enable", new { Name = "不得写入", IsEnabled = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await WriteAsync(client, Point("enable"), HttpMethod.Post, path + "/enable", new { Name = "不得写入", IsEnabled = false })).StatusCode);
         Assert.Equal("原名称", row["Name"]);
         Assert.Equal(true, row["IsEnabled"]);
         Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Point("enable"), HttpMethod.Put, path, new { Name = "越权" })).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put, path, new { Name = "合法编辑", IsEnabled = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await WriteAsync(client, Point("edit"), HttpMethod.Put, path, new { Name = "合法编辑", IsEnabled = false })).StatusCode);
         Assert.Equal("合法编辑", row["Name"]);
         Assert.Equal(false, row["IsEnabled"]);
-        Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(client, Point("disable"), HttpMethod.Post, path + "/disable")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await WriteAsync(client, Point("disable"), HttpMethod.Post, path + "/disable", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Point(), HttpMethod.Delete, path)).StatusCode);
     }
 
@@ -208,7 +259,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         builder.Services.AddSingleton<IDataScopeReadPlanProvider, FixtureReadPlan>();
         builder.Services.AddScoped<IDataExecutionAccess>(services => ActivatorUtilities.CreateInstance<DataExecutionAccess>(services,
             _plan, services.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
-            new UnexpectedObjectDecisions(), new UnexpectedObjectDecisions()));
+            new PackageDecisions(), new PackageDecisions()));
         builder.Services.AddAuthorization(options => options.AddPolicy(DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
         builder.Services.AddSingleton<IFeatureDecisionSource>(new DeclaredFeatures(_points));
         builder.Services.AddStandardCrudKernel();
@@ -395,11 +446,11 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         }
     }
 
-    private sealed class UnexpectedObjectDecisions : IDataScopeObjectAccess, IDataScopeObjectDecisionProvider
+    private sealed class PackageDecisions : IDataScopeObjectAccess, IDataScopeObjectDecisionProvider
     {
-        public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default) => throw new NotSupportedException();
-        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string action, CancellationToken token = default) => throw new NotSupportedException();
-        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string action, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default) => Task.FromResult(true);
+        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string action, CancellationToken token = default) => Task.FromResult(true);
+        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string action, CancellationToken token = default) => Task.FromResult(true);
     }
 
     private sealed class UnusedQueryExecutor : IPlatformQueryExecutor

@@ -1,16 +1,9 @@
 {
-  "ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter.CheckExistingScopeAsync[0] -> IsAllowedAsync": "明确LegacyDataExecutions或逐caller/action的LegacyObjectOperationBindings隔离的尚未迁移执行；来源独立于Values，迁移目标缺source拒绝；#321删除。 动作来源为显式旧路径的固定read。",
-  "ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter.CheckExistingScopeAsync[1] -> IsAllowedAsync": "明确LegacyDataExecutions或逐caller/action的LegacyObjectOperationBindings隔离的尚未迁移执行；来源独立于Values，迁移目标缺source拒绝；#321删除。 动作来源为调用者固定edit/delete，先核具体legacy操作。",
-  "ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter.PrepareCreateCandidateAsync[0] -> IsCandidateAllowedAsync": "明确LegacyDataExecutions或逐caller/action的LegacyObjectOperationBindings隔离的尚未迁移执行；来源独立于Values，迁移目标缺source拒绝；#321删除。",
   "ICP.Platform.Crud.Runtime.StandardCrudService.BuildMutationDetailAsync[0] -> IsAllowedAsync": "写后独立读取观察；只决定详情或成功回执，不重复写前授权。",
-  "ICP.Platform.Modules.Authorization.Services.ActionDataAccess.IsAllowedAsync[0] -> IsAllowedAsync": "履历已在#309迁移到固定read合同；旧公开适配器现无正式履历调用，仅待#321随过渡机制核清退役。",
   "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateCandidateRequirementAsync[0] -> IsCandidateAllowedAsync": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
   "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateObjectRequirementAsync[0] -> IsAllowedAsync": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
   "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateResolvedObjectsAsync.lambda[0] -> IsAllowedAsync": "公共角色执行器仅消费正式装配的当前阶段common/按资源AnyOf要求；真身份来自当前owner解析器，业务调用者不传动作或允许结果。",
   "ICP.Platform.Modules.Authorization.Services.DataScopeObjectAccess.IsReadableAsync[0] -> IsAllowedAsync": "底层完整对象读取裁决；保留read和资源owner读取约束。",
-  "ICP.Platform.Modules.Authorization.Services.DataScopeObjectManagement.CheckDataAsync[0] -> IsAllowedAsync": "仅供手工无执行器低层构造及明确legacyExampleAuthorization测试输入的完整read兼容；全部内建通用和owner管理已消费正式来源，正式DI旧ABI及新重载空来源均拒绝，#321删除兼容构造。",
-  "ICP.Platform.Modules.Authorization.Services.DataScopeObjectManagement.CheckDataAsync[1] -> IsAllowedAsync": "仅供手工无执行器低层构造及明确legacyExampleAuthorization测试输入的authorize兼容；全部内建通用和owner管理已消费正式来源，正式DI旧ABI及新重载空来源均拒绝，#321删除兼容构造。",
   "ICP.Platform.Modules.Document.DocumentFiles.RequireReadAsync[0] -> IsAllowedAsync": "Document owner原full-read与存在核验；read/download由实际入口先核正式绑定，复制原读取点已采用固定内部合同。同阶段事实供受控resolver消费，不加SQL或改原时点。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveTargetsAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.WritablePositionAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。"
+  "ICP.Platform.Modules.Workspace.WorkspacePermissionTargetReadResolver.ResolveAsync[0] -> IsAllowedAsync": "实际登记的完整read解析器；合同固定workspace.permission.targets.read及Key、caller，原Link端点read404后独立read403，同位SQL与根约束不变；动作固定read。"
 }

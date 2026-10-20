@@ -21,16 +21,17 @@ public sealed class StandardCrudServiceReadTests
             [new Dictionary<string, object?> { ["EID"] = "person-1", ["CreatedBy"] = "actor-1", ["UpdatedBy"] = "actor-1" }]);
         var directory = new RecordingUserDirectory();
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(
                 [],
                 userDisplayNameDirectory: directory),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person", ModuleId = "Organization", ModelName = "Person",
             Route = "api/organization/persons", IdField = "EID", DisplayField = "EID",
             FieldSet = new StandardCrudFieldSet(["EID"], ["EID", "CreatedBy", "UpdatedBy"], [], []),
@@ -78,6 +79,7 @@ public sealed class StandardCrudServiceReadTests
             3, 1, 20, null, null, ["EID", .. fields, .. displayFields.Select(field => field.Field)], displayFields));
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.company"),
             ResourceKey = "organization.company", ModuleId = "Organization", ModelName = "Company", Route = "api/organization/companies",
             IdField = "EID", DisplayField = "EID", FieldSet = new StandardCrudFieldSet(["EID", .. fields], ["EID", .. fields], [], []),
             DisplayProjectionPlan = new ModelDisplayProjectionPlan("Company", fields.Select(field => (FieldDisplayProjectionPlan)
@@ -86,16 +88,16 @@ public sealed class StandardCrudServiceReadTests
         };
         var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             executor,
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(
                 [],
                 userDisplayNameDirectory: directory,
                 presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")),
                 textCatalog: TextCatalog()),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.ListAsync(descriptor, new StandardCrudListQuery());
         Assert.Equal(1, directory.Calls);
@@ -134,6 +136,7 @@ public sealed class StandardCrudServiceReadTests
         var directory = new RecordingUserDirectory { Failure = new InvalidOperationException("must not call") };
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("test.audit"),
             ResourceKey = "test.audit", ModuleId = "Organization", ModelName = "Company", Route = "api/companies",
             IdField = "EID", DisplayField = "EID", FieldSet = new StandardCrudFieldSet(["EID"], ["EID", "CreatedBy"], [], []),
             DisplayProjectionPlan = new ModelDisplayProjectionPlan("Company", [new LookupFieldDisplayProjectionPlan(
@@ -142,16 +145,16 @@ public sealed class StandardCrudServiceReadTests
         var writeRepository = new InMemoryStandardCrudRepository(
             [new Dictionary<string, object?> { ["EID"] = "1", ["CreatedBy"] = actor }]);
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(
                 [],
                 userDisplayNameDirectory: directory,
                 presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext(locale, "Asia/Taipei")),
                 textCatalog: TextCatalog()),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var detail = await service.GetDetailAsync(descriptor, "1");
         Assert.Equal(expected, detail!.Fields["CreatedBy_DisplayValue"]);
@@ -176,16 +179,17 @@ public sealed class StandardCrudServiceReadTests
             new FixedPresentationContextAccessor(new RequestPresentationContext("en-US", "Asia/Taipei")),
             new TemporalDisplayFormatter());
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(
                 [],
                 temporalDisplayProjectionExecutor: executor),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
         var descriptor = new StandardCrudDescriptor
         {
+            DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
             ResourceKey = "organization.person",
             ModuleId = "Organization",
             ModelName = "Person",
@@ -241,12 +245,12 @@ public sealed class StandardCrudServiceReadTests
             new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME")
         ]));
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             executor,
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [new KeywordQueryCustomizer()],
             new DisplayValueProjection([new PersonDisplayResolver()]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.ListAsync(
             Descriptor(),
@@ -272,12 +276,12 @@ public sealed class StandardCrudServiceReadTests
         var executor = DisplayValueQueryExecutor();
         var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             executor,
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new PersonDisplayResolver()]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.ListAsync(
             Descriptor(),
@@ -315,12 +319,12 @@ public sealed class StandardCrudServiceReadTests
         ]);
         var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             executor,
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.ListAsync(
             descriptor,
@@ -339,12 +343,12 @@ public sealed class StandardCrudServiceReadTests
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new PersonDisplayResolver()]),
-            [new FailingSummaryProvider()]);
+            [new FailingSummaryProvider()], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var detail = await service.GetDetailAsync(Descriptor(summaryKeys: ["userLink"]), "person-1");
 
@@ -357,10 +361,10 @@ public sealed class StandardCrudServiceReadTests
     {
         var repository = new InMemoryStandardCrudRepository(
             [new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }]);
-        var service = new StandardCrudService(repository, EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], []), [], new DisplayValueProjection([new PersonDisplayResolver()]),
+        var service = new StandardCrudService(new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository, EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()), [], new DisplayValueProjection([new PersonDisplayResolver()]),
             [new FailingSummaryProvider(new ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException(
-                "identity.account", new IOException("authorization unavailable")))]);
+                "identity.account", new IOException("authorization unavailable")))], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         await Assert.ThrowsAsync<ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException>(
             () => service.GetDetailAsync(Descriptor(summaryKeys: ["userLink"]), "person-1"));
@@ -380,12 +384,12 @@ public sealed class StandardCrudServiceReadTests
             }
         ]);
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new PersonDisplayResolver()]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var detail = await service.GetDetailAsync(Descriptor(), "person-1");
 
@@ -402,12 +406,12 @@ public sealed class StandardCrudServiceReadTests
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var options = await service.OptionsAsync(Descriptor(), new StandardCrudListQuery());
 
@@ -422,12 +426,12 @@ public sealed class StandardCrudServiceReadTests
         var executor = DisplayValueQueryExecutor();
         var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             executor,
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new RawOverwritingDisplayResolver()]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
             Descriptor(),
@@ -443,12 +447,12 @@ public sealed class StandardCrudServiceReadTests
     {
         var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             DisplayValueQueryExecutor(),
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new ExtraFieldDisplayResolver()]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
             Descriptor(),
@@ -466,12 +470,12 @@ public sealed class StandardCrudServiceReadTests
     {
         var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             DisplayValueQueryExecutor(),
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new FixedDisplayValueResolver(invalidDisplayValue)]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
             Descriptor(),
@@ -489,12 +493,12 @@ public sealed class StandardCrudServiceReadTests
     {
         var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            writeRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             DisplayValueQueryExecutor(),
-            new StandardCrudDefaultWriter(writeRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new FixedDisplayValueResolver(displayValue)]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var result = await service.ListAsync(
             Descriptor(),
@@ -532,12 +536,12 @@ public sealed class StandardCrudServiceReadTests
             new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME")
         ]));
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             executor,
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new BrokenPersonDisplayResolver()]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
             Descriptor(),
@@ -573,12 +577,12 @@ public sealed class StandardCrudServiceReadTests
             new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME")
         ]));
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             executor,
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
             Descriptor(),
@@ -604,12 +608,12 @@ public sealed class StandardCrudServiceReadTests
                 new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME")
             ]));
         var service = new StandardCrudService(
-            repository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             executor,
-            new StandardCrudDefaultWriter(repository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
             Descriptor(),
@@ -628,6 +632,7 @@ public sealed class StandardCrudServiceReadTests
         IReadOnlyList<string>? summaryKeys = null,
         IReadOnlyList<PlatformDisplayValueField>? displayValueFields = null) => new()
     {
+        DataExecutions = ICP.Platform.Testing.StandardCrudTestAccess.Bindings("organization.person"),
         ResourceKey = "organization.person",
         ModuleId = "Organization",
         ModelName = "Person",

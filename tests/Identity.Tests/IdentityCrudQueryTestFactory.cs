@@ -23,11 +23,11 @@ internal static class IdentityCrudQueryTestFactory
         var registry = new StandardCrudResourceRegistry([IdentityAccountCrudResource.Create()], plan);
         IStandardCrudRepository crudRepository = context is null
             ? new AccountReadRepository(repository)
-            : new EfStandardCrudRepository(context, new PlatformObjectIdGenerator());
+            : new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), context, new PlatformObjectIdGenerator());
         var crud = new StandardCrudService(
-            crudRepository,
+            new ICP.Platform.Testing.StandardCrudTestAccess(), null, crudRepository,
             executor,
-            new StandardCrudDefaultWriter(crudRepository, [], []),
+            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), crudRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [new IdentityAccountCrudResource()],
             new DisplayValueProjection(
                 [],
@@ -39,7 +39,7 @@ internal static class IdentityCrudQueryTestFactory
                     { "code": "zhs", "locale": "zh-CN" }, { "code": "en", "locale": "en-US" } ],
                   "catalogs": { "zhs": { "Platform.SystemActor": "系统" }, "en": { "Platform.SystemActor": "System" } } }
                 """)),
-            []);
+            [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
         return new IdentityManagementQueryService(repository, crud, temporal, registry);
     }
 

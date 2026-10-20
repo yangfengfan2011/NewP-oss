@@ -16,28 +16,16 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
     private readonly EfPlatformDbContext _dbContext;
     private readonly IPlatformTransactionExecutor? _transactions;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
-    private readonly IDataScopeReadPlanProvider? _readPlans;
-    private readonly IDataExecutionAccess? _executions;
+    private readonly IDataExecutionAccess _executions;
 
-    // 自保存仓储也进入统一提交，调用方不需要额外维护缓存。
-    public EfStandardCrudRepository(
-        EfPlatformDbContext dbContext,
-        IPlatformObjectIdGenerator objectIdGenerator,
-        IPlatformTransactionExecutor? transactions = null,
-        IDataScopeReadPlanProvider? readPlans = null)
+    /// <summary>仓储候选读取必须消费正式执行来源；保存仍进入原统一提交。</summary>
+    public EfStandardCrudRepository(IDataExecutionAccess executions, EfPlatformDbContext dbContext,
+        IPlatformObjectIdGenerator objectIdGenerator, IPlatformTransactionExecutor? transactions = null)
     {
+        _executions = executions ?? throw new ArgumentNullException(nameof(executions));
         _dbContext = dbContext;
         _transactions = transactions;
         _objectIdGenerator = objectIdGenerator;
-        _readPlans = readPlans;
-    }
-
-    /// <summary>正式DI取得读取执行器，保留原仓储构造签名供既有消费者。</summary>
-    public EfStandardCrudRepository(IDataExecutionAccess executions, EfPlatformDbContext dbContext,
-        IPlatformObjectIdGenerator objectIdGenerator, IPlatformTransactionExecutor? transactions = null, IDataScopeReadPlanProvider? readPlans = null)
-        : this(dbContext, objectIdGenerator, transactions, readPlans)
-    {
-        _executions = executions;
     }
 
     /// <summary>
@@ -86,14 +74,11 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         var rows = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .AsNoTracking()
             .AsQueryable();
-        if (request.ReadContext is null && descriptor.DataExecutions.ContainsKey("options"))
+        if (request.ReadContext is null)
             throw new InvalidOperationException("DATA_EXECUTION_QUERY_CONTEXT_REQUIRED");
         if (request.ReadContext is { } bound && bound.TargetSets.SingleOrDefault(set => set.Role == "current")?.Ids.SequenceEqual(currentValueIds) != true)
             throw new InvalidOperationException("DATA_EXECUTION_QUERY_TARGETS_MISMATCH");
-        var readPredicate = request.ReadContext is { } context
-            ? (await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))
-                .GetQueryReadPlanAsync(context, descriptor.ResourceKey, cancellationToken)).Predicate
-            : _readPlans is null ? null : (await _readPlans.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken)).Predicate;
+        var readPredicate = (await _executions.GetQueryReadPlanAsync(request.ReadContext!, descriptor.ResourceKey, cancellationToken)).Predicate;
         if (readPredicate is not null) rows = rows.Where(readPredicate);
         if (!string.IsNullOrWhiteSpace(descriptor.EnabledField))
         {

@@ -65,8 +65,7 @@
         { "role": "target", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "authorize"]] },
         { "role": "target", "stage": "submit", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "authorize"]] },
         { "role": "view", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read"]] }
-      ],
-      "legacyConsumers": []
+      ]
     },
     {
       "key": "authorization.object.view", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "resource-owner",

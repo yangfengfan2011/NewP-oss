@@ -6,7 +6,7 @@ namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>初始化来源只做零SQL事实核对，父读取/编辑与候选创建仍由同一正式执行负责。</summary>
 public sealed class DataScopeObjectInitializationSources(DataScopeCatalog catalog, CanonicalModulePlan plan, IDataExecutionAccess execution,
-    IEnumerable<DataScopeObjectInitializationBinding> declared, IEnumerable<DataScopeObjectInitializationLegacyBinding> legacy,
+    IEnumerable<DataScopeObjectInitializationBinding> declared,
     IEnumerable<DataScopeObjectInitializationCreatedParentsBinding> createdParents,
     ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor transactions)
 {
@@ -27,11 +27,6 @@ public sealed class DataScopeObjectInitializationSources(DataScopeCatalog catalo
                 break;
             case DataScopeObjectInitializationSource.DeclaredFromCreatedParents graph:
                 ValidateCreatedParents(resource, parents, newObjectId, graph);
-                break;
-            case DataScopeObjectInitializationSource.Legacy old:
-                var registrations = legacy.Where(item => item.ResourceKey == resourceKey && item.Caller == old.Caller).ToArray();
-                if (registrations.Length != 1) throw Invalid();
-                ValidateCaller(resource, registrations[0].ModuleId, old.Caller);
                 break;
             default: throw Invalid();
         }

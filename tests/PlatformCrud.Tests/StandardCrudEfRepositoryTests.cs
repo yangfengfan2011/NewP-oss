@@ -15,14 +15,25 @@ namespace ICP.Platform.Crud.Tests;
 public sealed class StandardCrudEfRepositoryTests
 {
     [Fact]
+    public async Task ReadConsumers_RequireExecutorAndLookupSourceBeforeQuery()
+    {
+        await using var db = BuildDbContext();
+        Assert.Throws<ArgumentNullException>(() => new EfStandardCrudRepository(null!, db, new PlatformObjectIdGenerator()));
+        Assert.Throws<ArgumentNullException>(() => new ICP.Platform.Crud.Runtime.RelationTreeReader(db, null!, null!));
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), db, new PlatformObjectIdGenerator());
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.LookupAsync(Descriptor(), new StandardCrudLookupRequest()));
+        Assert.Equal("DATA_EXECUTION_QUERY_CONTEXT_REQUIRED", failure.Message);
+    }
+
+    [Fact]
     public async Task OptionsAsync_UsesConfiguredLabelFields()
     {
         await using var dbContext = BuildDbContext();
         dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
 
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
-        var options = await repository.OptionsAsync(Descriptor(), new StandardCrudListQuery());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
+        var options = await repository.OptionsAsync(Descriptor(), new StandardCrudListQuery { ReadContext = Lookup().ReadContext });
 
         var option = Assert.Single(options);
         Assert.Equal("person-1", option.Value);
@@ -40,11 +51,11 @@ public sealed class StandardCrudEfRepositoryTests
             Row("person-4", "P004", "Alpha Disabled", false));
         await dbContext.SaveChangesAsync();
 
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
 
         var result = await repository.LookupAsync(
             Descriptor(),
-            new StandardCrudLookupRequest(
+            Lookup(
                 Keyword: "alpha",
                 Page: 2,
                 PageSize: 2,
@@ -72,10 +83,10 @@ public sealed class StandardCrudEfRepositoryTests
             Row("person-3", "P003", "Other", true));
         await dbContext.SaveChangesAsync();
 
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
         var result = await repository.LookupAsync(
             Descriptor(),
-            new StandardCrudLookupRequest(Keyword: "alpha", Page: 1, PageSize: 1));
+            Lookup(Keyword: "alpha", Page: 1, PageSize: 1));
 
         Assert.Equal(["person-1"], result.Items.Select(item => item.Value));
         Assert.True(result.HasMore);
@@ -93,10 +104,10 @@ public sealed class StandardCrudEfRepositoryTests
             Row("person-2", "P002", "Visible name", true));
         await dbContext.SaveChangesAsync();
         var plan = new TestReadPlan(row => EF.Property<string>(row, "EID") != "person-1");
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator(), readPlans: plan);
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(reads: plan), dbContext, new PlatformObjectIdGenerator());
 
         var result = await repository.LookupAsync(Descriptor(),
-            new StandardCrudLookupRequest(PageSize: 1, CurrentValueIds: ["person-1", "person-2"]));
+            Lookup(PageSize: 1, CurrentValueIds: ["person-1", "person-2"]));
 
         Assert.Equal("organization.person", plan.ResourceKey);
         Assert.Equal("person-2", Assert.Single(result.Items).Value);
@@ -105,13 +116,20 @@ public sealed class StandardCrudEfRepositoryTests
         Assert.Equal("P002 Visible name", result.CurrentItems.Single(item => item.Value == "person-2").Label);
         plan.ReadDisabled = true;
         var unfiltered = await repository.LookupAsync(Descriptor(),
-            new StandardCrudLookupRequest(PageSize: 1, CurrentValueIds: ["person-1"]));
+            Lookup(PageSize: 1, CurrentValueIds: ["person-1"]));
         Assert.Equal("person-1", Assert.Single(unfiltered.Items).Value);
         Assert.Equal("P001 Hidden name", Assert.Single(unfiltered.CurrentItems).Label);
         plan.Failure = true;
         await Assert.ThrowsAsync<InvalidOperationException>(() => repository.LookupAsync(Descriptor(),
-            new StandardCrudLookupRequest(CurrentValueIds: ["person-1"])));
+            Lookup(CurrentValueIds: ["person-1"])));
     }
+
+    private static StandardCrudLookupRequest Lookup(string? Keyword = null, int Page = 1, int PageSize = 20,
+        IReadOnlyList<string>? CurrentValueIds = null) => new(Keyword, Page, PageSize, CurrentValueIds)
+    {
+        ReadContext = new(new("organization.person.options", "standardCrud.options", "read"), "query")
+        { TargetSets = [new("current", (CurrentValueIds ?? []).Distinct(StringComparer.Ordinal).ToArray())] }
+    };
 
     private sealed class TestReadPlan(Expression<Func<Dictionary<string, object?>, bool>> predicate)
         : IDataScopeReadPlanProvider
@@ -135,10 +153,10 @@ public sealed class StandardCrudEfRepositoryTests
         dbContext.Set<Dictionary<string, object?>>("Person").AddRange(ids.Select(id =>
             Row(id, id, id, true)));
         await dbContext.SaveChangesAsync();
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
 
         var result = await repository.LookupAsync(Descriptor(),
-            new StandardCrudLookupRequest(PageSize: 1, CurrentValueIds: ids));
+            Lookup(PageSize: 1, CurrentValueIds: ids));
 
         Assert.Equal(ids.Length, result.CurrentItems.Count);
         Assert.Equal(ids, result.CurrentItems.Select(item => item.Value).Order(StringComparer.Ordinal));
@@ -153,7 +171,7 @@ public sealed class StandardCrudEfRepositoryTests
             Row("person-2", "P002", "李四", true));
         await dbContext.SaveChangesAsync();
 
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
 
         var exists = await repository.ExistsAsync(
             Descriptor(),
@@ -170,7 +188,7 @@ public sealed class StandardCrudEfRepositoryTests
         dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
 
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
 
         var exists = await repository.ExistsAsync(
             Descriptor(),
@@ -188,7 +206,7 @@ public sealed class StandardCrudEfRepositoryTests
         dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", " P001 ", "张三", true));
         await dbContext.SaveChangesAsync();
 
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
 
         var exists = await repository.ExistsAsync(
             Descriptor(),
@@ -205,7 +223,7 @@ public sealed class StandardCrudEfRepositoryTests
         dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
 
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
 
         var exists = await repository.ExistsAsync(
             Descriptor(),
@@ -219,7 +237,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task CreateAsync_WhenIdIsMissing_GeneratesModelNamePrefixedEid()
     {
         await using var dbContext = BuildDbContext();
-        var repository = new EfStandardCrudRepository(
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(),
             dbContext,
             new FixedObjectIdGenerator("Person_00000000000000000000000000000001"));
 
@@ -239,7 +257,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task CreateAsync_WhenRequiredLongFieldUsesClrDefault_ProjectsTheManagedValue()
     {
         await using var dbContext = BuildDbContext();
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
         var descriptor = Descriptor();
 
         var created = await repository.CreateAsync(
@@ -260,7 +278,7 @@ public sealed class StandardCrudEfRepositoryTests
         await using var dbContext = BuildDbContext();
         dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
         var expected = new DateTime(2026, 8, 9, 2, 3, 4, DateTimeKind.Utc);
 
         var updated = await repository.UpdateAsync(
@@ -278,7 +296,7 @@ public sealed class StandardCrudEfRepositoryTests
         await using var dbContext = BuildDbContext();
         dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
-        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var repository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
 
         await repository.UpdateAsync(
             Descriptor(),
@@ -300,7 +318,7 @@ public sealed class StandardCrudEfRepositoryTests
         await dbContext.SaveChangesAsync();
         dbContext.ChangeTracker.Clear();
         ICP.Platform.Crud.Abstractions.IStandardCrudRepository repository =
-            new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+            new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), dbContext, new PlatformObjectIdGenerator());
         var descriptor = Descriptor(concurrencyRevisionField: "Revision");
 
         var stale = await repository.UpdateAsync(

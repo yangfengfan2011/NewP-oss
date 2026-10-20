@@ -35,7 +35,6 @@ public sealed class PartObjectCopyExecutionContractTests
                 Assert.DoesNotContain("document.document", requirement.Resources);
             });
         });
-        Assert.Empty(PartCrudDescriptor.Create().LegacyObjectOperationBindings);
         var part = Assert.Single(result.Plan.Modules, module => module.ModuleId == "Part");
         var source = Assert.Single(part.DataExecutions, item => item.Key == "part.part.copy.source");
         Assert.Equal("internal", source.Boundary);

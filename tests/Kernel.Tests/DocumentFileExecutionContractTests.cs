@@ -73,13 +73,10 @@ public sealed class DocumentFileExecutionContractTests
         Assert.Equal("document.files.currentRead", target.ReadResolverKey);
         Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.Execution is "document.document.internal.create" or "document.document.update" or "document.document.delete" or "document.files.release");
         var descriptor = ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create();
-        Assert.Empty(descriptor.LegacyDataExecutions);
-        Assert.Empty(descriptor.LegacyObjectOperationBindings);
     }
 
     [Theory]
     [InlineData("requirements")]
-    [InlineData("legacy")]
     [InlineData("provider")]
     public void DownloadConsumer_CannotReplaceItsOwnerRequirements(string problem)
     {
@@ -92,8 +89,7 @@ public sealed class DocumentFileExecutionContractTests
             DataExecutions = owner.DataExecutions.Select(contract => contract.Key != "document.files.download" ? contract : problem switch
             {
                 "requirements" => contract with { Requirements = [new("target", "read", "object", ["document.document"], [["read"]])] },
-                "legacy" => contract with { LegacyActions = true },
-                _ => contract
+                    _ => contract
             }).ToArray()
         };
         Assert.False(new CanonicalModulePlanCompiler().Compile("document-files-invalid", candidates).IsSuccess);

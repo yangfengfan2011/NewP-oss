@@ -40,7 +40,7 @@ public sealed partial class DataExecutionAccess
         if (binding.Execution != source.Binding.Execution || binding.Provider != source.Binding.Provider
             || source.Binding.Stage != "submit" || source.Binding.Branch is not null
             || contract is null || contract.Boundary != "internal" || contract.Provider != binding.Provider
-            || contract.ModuleId != resource.ModuleId || contract.LegacyActions
+            || contract.ModuleId != resource.ModuleId
             || !contract.FixedBindings.Any(item => item.Kind == "internal" && item.Identity == contract.Key && item.Caller == binding.CallerIdentity)
             || !binding.Caller.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static)
                 .Any(method => method.Name == binding.Member)

@@ -128,9 +128,11 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
     internal static ActionDataAccessRequirement OwnershipDeclaration(BusinessAuditHostFixture fixture, string execution, FeaturePoint point) =>
         fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Single(item => item.Surface != "read"
             && (item.BusinessBinding == execution || item.Execution == execution) && item.FeaturePositions.Contains(point.Position));
-    // 待补齐查询明确指定自己的原read合同，不按HTTP路径或缺头猜测来源。
-    internal static ActionDataAccessRequirement OwnershipReadDeclaration(BusinessAuditHostFixture fixture, string execution, FeaturePoint point) =>
-        new FeatureHttpTestRequests(fixture).ReadDeclaration(execution, point);
+    // 读取指定原合同；同执行的多个PageRef由实际ViewKey精确区分，不按路径或缺头猜来源。
+    internal static ActionDataAccessRequirement OwnershipReadDeclaration(BusinessAuditHostFixture fixture, string execution, FeaturePoint point,
+        string? viewKey = null) => fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Single(item =>
+            item.Execution == execution && item.BusinessBinding is null && item.Surface == "read"
+            && (viewKey is null || item.ViewKey == viewKey) && item.FeaturePositions.Contains(point.Position));
     internal static async Task<JsonElement> ReadOkAsync(HttpResponseMessage response)
     {
         var text = await response.Content.ReadAsStringAsync();

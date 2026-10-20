@@ -36,7 +36,7 @@ public sealed class EntityOwnershipTransferNotificationSqlServerHttpApiTests
         Assert.Equal("WorkspaceFolder", location.GetProperty("modelKey").GetString());
         var sourceUrl = $"/api/workspace/content/{location.GetProperty("sourceLinkId").GetString()}/properties?queryScope="
             + Uri.EscapeDataString(location.GetProperty("position").GetRawText());
-        using (var opened = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Get, sourceUrl, dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.read", browse)))
+        using (var opened = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Get, sourceUrl, dataAccess: OwnershipReadDeclaration(fixture, "workspace.properties.read", browse, "workspace.content.receivedProperties")))
             Assert.Equal(target.Id, (await ReadOkAsync(opened)).GetProperty("objectId").GetString());
         var senderNotifications = await FeatureHttpTestRequests.ReadAsync(ownerClient, notifications, "/api/workspace/transfers/notifications");
         Assert.Empty(senderNotifications.GetProperty("items").EnumerateArray());
@@ -45,9 +45,9 @@ public sealed class EntityOwnershipTransferNotificationSqlServerHttpApiTests
             + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         using (var denied = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, originalUrl,
                    new DataScopeObjectDto("workspace.folder", target.Id, [new("deny-notification-recipient", "user", recipient.AccountId, 0,
-                       new Dictionary<string, string> { ["read"] = "deny" })])))
+                       new Dictionary<string, string> { ["read"] = "deny" })]), OwnershipDeclaration(fixture, "workspace.content.authorization.manage", manage)))
             Assert.True(denied.StatusCode == HttpStatusCode.NoContent, await denied.Content.ReadAsStringAsync());
-        using (var stale = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Get, sourceUrl, dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.read", browse)))
+        using (var stale = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Get, sourceUrl, dataAccess: OwnershipReadDeclaration(fixture, "workspace.properties.read", browse, "workspace.content.receivedProperties")))
             Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);
         var hidden = await FeatureHttpTestRequests.ReadAsync(recipientClient, notifications, "/api/workspace/transfers/notifications");
         var unavailable = Assert.Single(hidden.GetProperty("items").EnumerateArray());

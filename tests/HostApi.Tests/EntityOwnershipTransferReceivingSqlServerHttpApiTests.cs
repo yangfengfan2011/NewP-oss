@@ -61,7 +61,7 @@ public sealed class EntityOwnershipTransferReceivingSqlServerHttpApiTests
         // 同一EID在新的普通边可达；原私人位置仍然不是接收人的可用来源。
         using (var reached = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, "/api/workspace/folders/" + first.Id, dataAccess: folderRead))
             Assert.Equal(first.Id, (await ReadOkAsync(reached)).GetProperty("id").GetString());
-        using (var originalPrivate = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, Properties(position, first.LinkId), dataAccess: folderRead))
+        using (var originalPrivate = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, Properties(position, first.LinkId), dataAccess: OwnershipReadDeclaration(fixture, "workspace.properties.read", read, "workspace.content.properties")))
             Assert.Equal(HttpStatusCode.NotFound, originalPrivate.StatusCode);
         var page = await FeatureHttpTestRequests.ReadAsync(recipientClient, notices, "/api/workspace/transfers/notifications");
         var location = Assert.Single(page.GetProperty("items").EnumerateArray()).GetProperty("location");

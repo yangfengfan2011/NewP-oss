@@ -72,7 +72,8 @@ public sealed class EntityOwnershipTransferPreparationSqlServerHttpApiTests
         {
             using var configured = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
                 $"/api/part/parts/{target.Id}/permissions", new DataScopeObjectDto("part.part", target.Id,
-                    [new("prepare-owner", "user", owner.AccountId, 0, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = edit })]));
+                    [new("prepare-owner", "user", owner.AccountId, 0, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = edit })]),
+                OwnershipDeclaration(fixture, "part.part.authorization.manage", manage));
             Assert.True(configured.StatusCode == HttpStatusCode.NoContent, await configured.Content.ReadAsStringAsync());
         }
     }

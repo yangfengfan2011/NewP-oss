@@ -19,8 +19,8 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed partial class DocumentFilesSqlServerHttpApiTests
 {
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "独立Document创建只消费自身正式声明，完整首版仍同事务生成，关闭的更新删除URL不扩权")]
-    public async Task DocumentEntryCreate_RequiresOwnDeclarationAndPreservesClosedWrites()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "独立Document新按钮只检查完整候选且缺借身份写前拒绝，首版同事务与关闭写URL保持")]
+    public async Task DocumentEntryCreate_UsesOwnButtonAndPreservesClosedWrites()
     {
         await using var fixture = await ControlledFixtureAsync();
         using var admin = await fixture.LoginAdministratorAsync();
@@ -32,15 +32,18 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/document/documents", values))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.document.create"
-            && item.ViewKey == "document.document.list" && item.Surface == "pageActions" && item.ActionKey == "create"
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.ViewKey == "document.document.list"
+            && item.Surface == "pageActions" && item.ActionKey == "create"
             && item.FeaturePositions.Contains(create.Position));
         var read = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.document.read"
             && item.ViewKey == "document.document.detail");
-        using (var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/document/documents", values, read))
+        using (var crossed = await SendButtonAsync(read.Id, create.Position, values))
             Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);
-        using var created = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/document/documents", values, declaration);
-        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        using var created = await SendButtonAsync(declaration.Id, create.Position, values);
+        Assert.True(created.StatusCode == HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        Assert.Equal("document.document.create", declaration.BusinessBinding);
+        Assert.Equal("Document", declaration.Object);
+        Assert.Equal(["create"], declaration.Actions);
         var id = BusinessAuditSqlServerHttpApiTests.Id(await created.Content.ReadFromJsonAsync<JsonElement>());
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
@@ -51,11 +54,40 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         Assert.Equal(version["EID"], document["LatestVersionId"]);
         Assert.Equal(iteration["EID"], version["CurrentIterationId"]);
         Assert.Equal(actor.AccountId, document["CreatedBy"]);
+        Assert.Equal(actor.AccountId, document["OwnerId"]);
+        // 真候选按本次字段拒绝，不能因已持有创建按钮而略过候选判定；没有首版/版次或文件残留。
+        const string deniedCode = "DOC-CANDIDATE-DENIED-333";
+        await SaveRuleAsync(fixture, admin, "DocumentCandidate333", "document.document", "ECODE", deniedCode, "create");
+        using (var denied = await SendButtonAsync(declaration.Id, create.Position, new { ECODE = deniedCode, ENAME = "候选拒绝" }))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using (var legacy = new HttpRequestMessage(HttpMethod.Post, "/api/document/documents"))
+        {
+            legacy.Headers.Add("X-NewP-Feature", create.Position);
+            legacy.Headers.Add("X-NewP-Data-Declaration", declaration.Id);
+            legacy.Content = JsonContent.Create(new { ECODE = "DOC-LEGACY-REJECTED-333", ENAME = "旧头拒绝" }, options: new JsonSerializerOptions());
+            using var rejected = await ordinary.SendAsync(legacy);
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        }
+        Assert.Equal(1, await db.Set<Dictionary<string, object?>>("Document").CountAsync());
+        Assert.Equal(1, await db.Set<Dictionary<string, object?>>("DocumentVersion").CountAsync());
+        Assert.Equal(1, await db.Set<Dictionary<string, object?>>("DocumentIteration").CountAsync());
+        Assert.Equal(0, await db.Set<Dictionary<string, object?>>("DocumentFileLink").CountAsync());
+        Assert.Equal(0, await db.Set<Dictionary<string, object?>>("FileUsage").CountAsync());
         foreach (var method in new[] { HttpMethod.Put, HttpMethod.Delete })
         {
             using var closed = await FeatureHttpTestRequests.SendAsync(ordinary, create, method, "/api/document/documents/" + id,
                 new { ENAME = "独立URL仍关闭" }, declaration);
             Assert.Equal(HttpStatusCode.Forbidden, closed.StatusCode);
+        }
+
+        // 直接采用正式目录ID验证HTTP协议，不让辅助方法按旧/新投影替调用方选择请求头。
+        async Task<HttpResponseMessage> SendButtonAsync(string buttonId, string position, object input)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/document/documents");
+            request.Headers.Add("X-NewP-Feature", position);
+            request.Headers.Add("X-NewP-Button", buttonId);
+            request.Content = JsonContent.Create(input, options: new JsonSerializerOptions());
+            return await ordinary.SendAsync(request);
         }
     }
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "普通主体的新对象read拒绝不阻断原候选创建、首次确认或相同凭据幂等确认")]

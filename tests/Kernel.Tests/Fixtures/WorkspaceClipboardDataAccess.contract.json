@@ -1639,55 +1639,40 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "transferSelected",
-      "execution": "workspace.folder.transfer",
+      "execution": "",
       "resources": [
         "workspace.folder",
         "part.part",
         "document.document"
       ],
-      "actions": [
-        "edit"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:transferSelected"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.transfer",
+      "objectRequirements": [
         {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "WorkspaceFolder",
+          "actions": [
+            "edit"
           ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
+          "resourceKey": "workspace.folder"
         },
         {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "Part",
+          "actions": [
+            "edit"
           ],
-          "anyOf": [
-            [
-              "edit"
-            ]
+          "resourceKey": "part.part"
+        },
+        {
+          "object": "Document",
+          "actions": [
+            "edit"
           ],
-          "minimumCount": 1,
-          "maximumCount": null
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "entityOwnership.transfer"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/read",
@@ -2213,55 +2198,40 @@
       "viewKey": "workspace.folder.list",
       "surface": "rowActions",
       "actionKey": "transfer",
-      "execution": "workspace.folder.transfer",
+      "execution": "",
       "resources": [
         "workspace.folder",
         "part.part",
         "document.document"
       ],
-      "actions": [
-        "edit"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:transfer"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.transfer",
+      "objectRequirements": [
         {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "WorkspaceFolder",
+          "actions": [
+            "edit"
           ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
+          "resourceKey": "workspace.folder"
         },
         {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "Part",
+          "actions": [
+            "edit"
           ],
-          "anyOf": [
-            [
-              "edit"
-            ]
+          "resourceKey": "part.part"
+        },
+        {
+          "object": "Document",
+          "actions": [
+            "edit"
           ],
-          "minimumCount": 1,
-          "maximumCount": null
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "entityOwnership.transfer"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/rowActions/action:viewAuthorization",

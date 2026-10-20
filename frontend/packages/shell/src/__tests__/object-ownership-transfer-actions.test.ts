@@ -41,7 +41,7 @@ it('does not replay an unknown submission even before the input can render the f
 });
 
 it('isolates the draft and submission by the bound declaration even when the target and feature stay the same', async () => {
-  const selected = ["Part", "Document"].map(moduleId => (declarations as ActionDataAccessRequirement[]).filter(item => item.moduleId === moduleId && item.provider === "entityOwnership.transfer" && item.surface === "rowActions" && item.actionKey === "transfer"));
+  const selected = ["Part", "Document"].map(moduleId => (declarations as ActionDataAccessRequirement[]).filter(item => item.moduleId === moduleId && item.businessBinding?.endsWith(".transfer") && item.surface === "rowActions" && item.actionKey === "transfer"));
   selected.forEach(items => expect(items).toHaveLength(1));
   const [original, changed] = selected.map(items => items[0]);
   expect(original.id).not.toBe(changed.id);
@@ -52,5 +52,7 @@ it('isolates the draft and submission by the bound declaration even when the tar
     input: draft })).rejects.toMatchObject({ status: 409 });
   expect(fetcher).not.toHaveBeenCalled();
   await actions.actionHandlers.transfer({ instance, featurePosition: 'transfer', action: { key: 'transfer', labelKey: '转交', dataAccess: original }, input: draft });
-  expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-NewP-Data-Declaration')).toBe(original.id);
+  const headers = new Headers(fetcher.mock.calls[0][1]?.headers);
+  expect(headers.get('X-NewP-Button')).toBe(original.id);
+  expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
 });

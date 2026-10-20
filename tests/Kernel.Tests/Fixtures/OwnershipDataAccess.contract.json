@@ -293,7 +293,7 @@
     "viewKey": "document.document.list",
     "surface": "rowActions",
     "actionKey": "transfer",
-    "execution": "document.document.transfer",
+    "execution": "",
     "resources": [
       "document.document"
     ],
@@ -303,39 +303,8 @@
     "featurePositions": [
       "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:transfer"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "objects",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "objects",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
-      }
-    ],
-    "provider": "entityOwnership.transfer"
+    "object": "Document",
+    "businessBinding": "document.document.transfer"
   },
   {
     "id": "Part/view:part.part.list/featureActions/action:initializeOwnership",
@@ -631,7 +600,7 @@
     "viewKey": "part.part.list",
     "surface": "rowActions",
     "actionKey": "transfer",
-    "execution": "part.part.transfer",
+    "execution": "",
     "resources": [
       "part.part"
     ],
@@ -641,39 +610,8 @@
     "featurePositions": [
       "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:transfer"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "objects",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "objects",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
-      }
-    ],
-    "provider": "entityOwnership.transfer"
+    "object": "Part",
+    "businessBinding": "part.part.transfer"
   },
   {
     "id": "Workspace/view:workspace.folder.list/featureActions/action:initializeOwnership",
@@ -829,55 +767,40 @@
     "viewKey": "workspace.folder.list",
     "surface": "pageActions",
     "actionKey": "transferSelected",
-    "execution": "workspace.folder.transfer",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "edit"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:transferSelected"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.transfer",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "edit"
         ],
-        "anyOf": [
-          [
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
+        "resourceKey": "workspace.folder"
       },
       {
-        "role": "target",
-        "stage": "submit",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "Part",
+        "actions": [
+          "edit"
         ],
-        "anyOf": [
-          [
-            "edit"
-          ]
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "edit"
         ],
-        "minimumCount": 1,
-        "maximumCount": null
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "entityOwnership.transfer"
+    ]
   },
   {
     "id": "Workspace/view:workspace.folder.list/rowActions/action:initializeOwnership",
@@ -959,54 +882,39 @@
     "viewKey": "workspace.folder.list",
     "surface": "rowActions",
     "actionKey": "transfer",
-    "execution": "workspace.folder.transfer",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "edit"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:transfer"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.transfer",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "edit"
         ],
-        "anyOf": [
-          [
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
+        "resourceKey": "workspace.folder"
       },
       {
-        "role": "target",
-        "stage": "submit",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "Part",
+        "actions": [
+          "edit"
         ],
-        "anyOf": [
-          [
-            "edit"
-          ]
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "edit"
         ],
-        "minimumCount": 1,
-        "maximumCount": null
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "entityOwnership.transfer"
+    ]
   }
 ]

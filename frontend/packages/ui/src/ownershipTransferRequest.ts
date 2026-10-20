@@ -1,4 +1,4 @@
-import { StandardCrudRequestError, type StandardCrudActionInstance, type ActionDataAccessRequirement } from '@icp-platform/sdk';
+import { standardCrudRequestHeaders, StandardCrudRequestError, type StandardCrudActionInstance, type ActionDataAccessRequirement } from '@icp-platform/sdk';
 
 export interface ObjectOwnershipTransferTarget {
   savePath: string;
@@ -18,8 +18,7 @@ export function ownershipTransferSource(target: ObjectOwnershipTransferTarget, f
 
 /** 准备、候选与提交消费同一正式来源，声明只传引用，不进入业务载荷。 */
 export function ownershipTransferHeaders(featurePosition?: string, dataAccess?: ActionDataAccessRequirement): Record<string, string> {
-  return { ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
-    ...(dataAccess?.id ? { 'X-NewP-Data-Declaration': dataAccess.id } : {}) };
+  return standardCrudRequestHeaders({ featurePosition, dataAccess });
 }
 
 class TransferSubmission {

@@ -72,16 +72,19 @@ public sealed class OwnershipTransferExecutionContractTests
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
         var result = new CanonicalModulePlanCompiler().Compile("ownership-formal-bindings", candidates);
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
-        var declarations = result.Plan!.ActionDataAccessCatalog.Where(item => item.Provider is "entityOwnership.transfer" or "entityOwnership.initialize"
-            || item.Execution == "workspace.folder.initializeOwnership").ToArray();
+        var declarations = result.Plan!.ActionDataAccessCatalog.Where(item => item.Provider == "entityOwnership.initialize"
+            || item.Execution == "workspace.folder.initializeOwnership" || item.BusinessBinding?.EndsWith(".transfer", StringComparison.Ordinal) == true).ToArray();
         Assert.NotEmpty(declarations);
-        Assert.All(declarations.Where(item => item.Provider == "entityOwnership.transfer"), declaration =>
+        Assert.DoesNotContain(result.Plan.Modules.SelectMany(module => module.DataExecutions), contract => contract.Provider == "entityOwnership.transfer");
+        Assert.All(declarations.Where(item => item.BusinessBinding is not null), declaration =>
         {
             Assert.False(string.IsNullOrWhiteSpace(declaration.ActionKey));
             Assert.Contains(declaration.Surface, new[] { "rowActions", "pageActions" });
-            Assert.All(declaration.Requirements!, requirement => Assert.Equal(new[] { "edit" }, Assert.Single(requirement.AnyOf)));
+            Assert.Empty(declaration.Execution); Assert.Null(declaration.Provider);
+            Assert.NotEmpty(declaration.GetObjectRequirements());
+            Assert.All(declaration.GetObjectRequirements(), requirement => Assert.Equal(new[] { "edit" }, requirement.Actions));
             Assert.All(declaration.FeaturePositions, position => Assert.Contains(result.Plan.FeatureCatalog,
-                feature => feature.Position == position && feature.BehaviorKey == declaration.Execution));
+                feature => feature.Position == position && feature.BehaviorKey == declaration.BusinessBinding));
         });
         var workspace = Assert.Single(result.Plan.Modules, module => module.ModuleId == "Workspace");
         var initialization = Assert.Single(workspace.DataExecutions, contract => contract.Key == "workspace.folder.initializeOwnership");

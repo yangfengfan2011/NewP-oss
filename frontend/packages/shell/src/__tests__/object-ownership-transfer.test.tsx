@@ -150,7 +150,7 @@ it('keeps a definite permission denial separate from an unknown outcome and bloc
 });
 
 it.each(['target', 'declaration'] as const)('aborts the old read and discards late candidates when the %s changes', async boundary => {
-  const selected = ["Part", "Document"].map(moduleId => (declarations as ActionDataAccessRequirement[]).filter(item => item.moduleId === moduleId && item.provider === "entityOwnership.transfer" && item.surface === "rowActions" && item.actionKey === "transfer"));
+  const selected = ["Part", "Document"].map(moduleId => (declarations as ActionDataAccessRequirement[]).filter(item => item.moduleId === moduleId && item.businessBinding?.endsWith(".transfer") && item.surface === "rowActions" && item.actionKey === "transfer"));
   selected.forEach(items => expect(items).toHaveLength(1));
   const [original, changed] = selected.map(items => items[0]);
   let release: (response: Response) => void = () => {};
@@ -160,7 +160,7 @@ it.each(['target', 'declaration'] as const)('aborts the old read and discards la
     const path = new URL(request.url).pathname;
     if (path.endsWith('/eligibility')) return json({ allowed: true });
     if (path.endsWith('/accounts') && (boundary === 'target' ? path === '/old/accounts'
-      : request.headers.get('X-NewP-Data-Declaration') === original.id)) {
+      : request.headers.get('X-NewP-Button') === original.id)) {
       oldRequest = request; return new Promise<Response>(resolve => { release = resolve; });
     }
     if (path.endsWith('/accounts')) return json([{ accountId: 'current', code: 'current', name: '当前候选', departmentId: null }]);

@@ -847,7 +847,7 @@
       "viewKey": "document.document.list",
       "surface": "rowActions",
       "actionKey": "transfer",
-      "execution": "document.document.transfer",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -857,39 +857,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:transfer"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        }
-      ],
-      "provider": "entityOwnership.transfer"
+      "object": "Document",
+      "businessBinding": "document.document.transfer"
     },
     {
       "id": "Document/view:document.document.list/rowActions/action:viewAuthorization",

@@ -44,7 +44,7 @@ it('carries the actual Part transfer declaration from PageEntry through eligibil
     if (url.pathname.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (url.pathname.endsWith('current-user')) return json(user);
     if (url.pathname.includes('/transfer')) {
-      if (request.headers.get('X-NewP-Data-Declaration') !== declaration.id)
+      if (request.headers.get('X-NewP-Button') !== declaration.id || request.headers.has('X-NewP-Data-Declaration'))
         return json({ code: 'ActionDataAccess.DeclarationInvalid' }, 400);
       if (url.pathname.endsWith('/eligibility')) return json({ allowed: true });
       if (url.pathname.endsWith('/accounts')) return json([{ accountId: 'recipient', code: 'receiver', name: '接收人', departmentId: null }]);
@@ -82,7 +82,7 @@ it('carries the actual Part transfer declaration from PageEntry through eligibil
     .find(item => item.children.length === 0 && item.textContent === '更多')!.click());
   await vi.waitFor(() => expect(requests.some(request => new URL(request.url).pathname.endsWith('/transfer/eligibility'))).toBe(true));
   // 首个资格请求直接校验正式来源，不用菜单等待掩盖丢失的声明。
-  expect(requests.find(request => new URL(request.url).pathname.endsWith('/transfer/eligibility'))!.headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+  expect(requests.find(request => new URL(request.url).pathname.endsWith('/transfer/eligibility'))!.headers.get('X-NewP-Button')).toBe(declaration.id);
   const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')]
     .find(item => item.textContent?.replace(/\s/g, '') === label);
   const transferItem = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '转交');
@@ -102,6 +102,6 @@ it('carries the actual Part transfer declaration from PageEntry through eligibil
   expect(await transferred[0].clone().json()).toEqual({ recipientId: 'recipient' });
   const transferRequests = requests.filter(request => new URL(request.url).pathname.includes('/transfer'));
   expect(transferRequests.some(request => new URL(request.url).pathname.endsWith('/accounts'))).toBe(true);
-  expect(transferRequests.every(request => request.headers.get('X-NewP-Data-Declaration') === declaration.id
-    && request.headers.get('X-NewP-Feature') === transferPosition)).toBe(true);
+  expect(transferRequests.every(request => request.headers.get('X-NewP-Button') === declaration.id
+    && !request.headers.has('X-NewP-Data-Declaration') && request.headers.get('X-NewP-Feature') === transferPosition)).toBe(true);
 });

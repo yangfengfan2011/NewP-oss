@@ -312,39 +312,52 @@
       "providerModuleId": "Authorization"
     },
     {
+      "id": "Authorization/view:authorization.role.detail/pageActions/action:edit",
+      "moduleId": "Authorization",
+      "viewKey": "authorization.role.detail",
+      "surface": "pageActions",
+      "actionKey": "edit",
+      "execution": "",
+      "resources": [
+        "authorization.role"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Authorization/navigation:authorization.roles/surface:detail.pageActions/action:edit"
+      ],
+      "businessBinding": "authorization.role.update"
+    },
+    {
+      "id": "Authorization/view:authorization.role.detail/pageActions/action:permissions",
+      "moduleId": "Authorization",
+      "viewKey": "authorization.role.detail",
+      "surface": "pageActions",
+      "actionKey": "permissions",
+      "execution": "",
+      "resources": [
+        "authorization.role"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Authorization/navigation:authorization.workbench"
+      ],
+      "businessBinding": "authorization.workbench.read"
+    },
+    {
       "id": "Authorization/view:authorization.role.detail/pageActions/action:userRoles",
       "moduleId": "Authorization",
       "viewKey": "authorization.role.detail",
       "surface": "pageActions",
       "actionKey": "userRoles",
-      "execution": "authorization.role.list",
+      "execution": "",
       "resources": [
         "authorization.role"
       ],
-      "actions": [
-        "read"
-      ],
+      "actions": [],
       "featurePositions": [
         "Authorization/navigation:authorization.roles/surface:detail.pageActions/action:userRoles"
       ],
-      "requirements": [
-        {
-          "role": "query",
-          "stage": "read",
-          "shape": "query",
-          "resources": [
-            "authorization.role"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 0,
-          "maximumCount": null
-        }
-      ],
-      "provider": "standardCrud.list"
+      "businessBinding": "authorization.role.userRoles"
     },
     {
       "id": "Authorization/view:authorization.role.detail/read",
@@ -384,6 +397,22 @@
       "provider": "standardCrud.read"
     },
     {
+      "id": "Authorization/view:authorization.role.list/pageActions/action:create",
+      "moduleId": "Authorization",
+      "viewKey": "authorization.role.list",
+      "surface": "pageActions",
+      "actionKey": "create",
+      "execution": "",
+      "resources": [
+        "authorization.role"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Authorization/navigation:authorization.roles/surface:list.pageActions/action:create"
+      ],
+      "businessBinding": "authorization.role.create"
+    },
+    {
       "id": "Authorization/view:authorization.role.list/read",
       "moduleId": "Authorization",
       "viewKey": "authorization.role.list",
@@ -397,7 +426,9 @@
         "read"
       ],
       "featurePositions": [
-        "Authorization/navigation:authorization.roles"
+        "Authorization/navigation:authorization.roles",
+        "Authorization/navigation:authorization.roles/surface:detail.pageActions/action:userRoles",
+        "Authorization/navigation:authorization.roles/surface:list.rowActions/action:userRoles"
       ],
       "requirements": [
         {
@@ -419,39 +450,52 @@
       "provider": "standardCrud.list"
     },
     {
+      "id": "Authorization/view:authorization.role.list/rowActions/action:edit",
+      "moduleId": "Authorization",
+      "viewKey": "authorization.role.list",
+      "surface": "rowActions",
+      "actionKey": "edit",
+      "execution": "",
+      "resources": [
+        "authorization.role"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Authorization/navigation:authorization.roles/surface:list.rowActions/action:edit"
+      ],
+      "businessBinding": "authorization.role.update"
+    },
+    {
+      "id": "Authorization/view:authorization.role.list/rowActions/action:permissions",
+      "moduleId": "Authorization",
+      "viewKey": "authorization.role.list",
+      "surface": "rowActions",
+      "actionKey": "permissions",
+      "execution": "",
+      "resources": [
+        "authorization.role"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Authorization/navigation:authorization.workbench"
+      ],
+      "businessBinding": "authorization.workbench.read"
+    },
+    {
       "id": "Authorization/view:authorization.role.list/rowActions/action:userRoles",
       "moduleId": "Authorization",
       "viewKey": "authorization.role.list",
       "surface": "rowActions",
       "actionKey": "userRoles",
-      "execution": "authorization.role.list",
+      "execution": "",
       "resources": [
         "authorization.role"
       ],
-      "actions": [
-        "read"
-      ],
+      "actions": [],
       "featurePositions": [
         "Authorization/navigation:authorization.roles/surface:list.rowActions/action:userRoles"
       ],
-      "requirements": [
-        {
-          "role": "query",
-          "stage": "read",
-          "shape": "query",
-          "resources": [
-            "authorization.role"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 0,
-          "maximumCount": null
-        }
-      ],
-      "provider": "standardCrud.list"
+      "businessBinding": "authorization.role.userRoles"
     },
     {
       "id": "Authorization/view:authorization.workbench/read",
@@ -504,6 +548,34 @@
         }
       ],
       "provider": "authorization.backend"
+    },
+    {
+      "id": "Authorization/view:feature%3AdataScope.save/featureActions/action:dataScope.save",
+      "moduleId": "Authorization",
+      "viewKey": "feature:dataScope.save",
+      "surface": "featureActions",
+      "actionKey": "dataScope.save",
+      "execution": "",
+      "resources": [],
+      "actions": [],
+      "featurePositions": [
+        "Authorization/navigation:authorization.dataScope/action:dataScope.save"
+      ],
+      "businessBinding": "authorization.dataScope.save"
+    },
+    {
+      "id": "Authorization/view:feature%3Asave/featureActions/action:save",
+      "moduleId": "Authorization",
+      "viewKey": "feature:save",
+      "surface": "featureActions",
+      "actionKey": "save",
+      "execution": "",
+      "resources": [],
+      "actions": [],
+      "featurePositions": [
+        "Authorization/navigation:authorization.workbench/action:save"
+      ],
+      "businessBinding": "authorization.workbench.save"
     }
   ],
   "identityFeatures": [
@@ -907,6 +979,86 @@
       "providerModuleId": "Authorization"
     },
     {
+      "id": "Identity/view:identity.account.detail/pageActions/action:credentialReset",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.detail",
+      "surface": "pageActions",
+      "actionKey": "credentialReset",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:detail.pageActions/action:credentialReset"
+      ],
+      "businessBinding": "identity.account.credentialReset"
+    },
+    {
+      "id": "Identity/view:identity.account.detail/pageActions/action:delete",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.detail",
+      "surface": "pageActions",
+      "actionKey": "delete",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:detail.pageActions/action:delete"
+      ],
+      "businessBinding": "identity.account.delete"
+    },
+    {
+      "id": "Identity/view:identity.account.detail/pageActions/action:disable",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.detail",
+      "surface": "pageActions",
+      "actionKey": "disable",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:detail.pageActions/action:disable"
+      ],
+      "businessBinding": "identity.account.disable"
+    },
+    {
+      "id": "Identity/view:identity.account.detail/pageActions/action:edit",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.detail",
+      "surface": "pageActions",
+      "actionKey": "edit",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:detail.pageActions/action:edit"
+      ],
+      "businessBinding": "identity.account.update"
+    },
+    {
+      "id": "Identity/view:identity.account.detail/pageActions/action:enable",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.detail",
+      "surface": "pageActions",
+      "actionKey": "enable",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:detail.pageActions/action:enable"
+      ],
+      "businessBinding": "identity.account.enable"
+    },
+    {
       "id": "Identity/view:identity.account.detail/read",
       "moduleId": "Identity",
       "viewKey": "identity.account.detail",
@@ -944,6 +1096,22 @@
       "provider": "standardCrud.read"
     },
     {
+      "id": "Identity/view:identity.account.list/pageActions/action:create",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.list",
+      "surface": "pageActions",
+      "actionKey": "create",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:list.pageActions/action:create"
+      ],
+      "businessBinding": "identity.account.create"
+    },
+    {
       "id": "Identity/view:identity.account.list/read",
       "moduleId": "Identity",
       "viewKey": "identity.account.list",
@@ -977,6 +1145,86 @@
         }
       ],
       "provider": "standardCrud.list"
+    },
+    {
+      "id": "Identity/view:identity.account.list/rowActions/action:credentialReset",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.list",
+      "surface": "rowActions",
+      "actionKey": "credentialReset",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:list.rowActions/action:credentialReset"
+      ],
+      "businessBinding": "identity.account.credentialReset"
+    },
+    {
+      "id": "Identity/view:identity.account.list/rowActions/action:delete",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.list",
+      "surface": "rowActions",
+      "actionKey": "delete",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:list.rowActions/action:delete"
+      ],
+      "businessBinding": "identity.account.delete"
+    },
+    {
+      "id": "Identity/view:identity.account.list/rowActions/action:disable",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.list",
+      "surface": "rowActions",
+      "actionKey": "disable",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:list.rowActions/action:disable"
+      ],
+      "businessBinding": "identity.account.disable"
+    },
+    {
+      "id": "Identity/view:identity.account.list/rowActions/action:edit",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.list",
+      "surface": "rowActions",
+      "actionKey": "edit",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:list.rowActions/action:edit"
+      ],
+      "businessBinding": "identity.account.update"
+    },
+    {
+      "id": "Identity/view:identity.account.list/rowActions/action:enable",
+      "moduleId": "Identity",
+      "viewKey": "identity.account.list",
+      "surface": "rowActions",
+      "actionKey": "enable",
+      "execution": "",
+      "resources": [
+        "identity.account"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Identity/navigation:identity/navigation:identity.accounts/surface:list.rowActions/action:enable"
+      ],
+      "businessBinding": "identity.account.enable"
     }
   ]
 }

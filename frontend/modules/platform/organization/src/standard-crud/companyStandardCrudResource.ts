@@ -52,7 +52,7 @@ export const companyStandardCrudResource: StandardCrudResourceRegistration<Recor
   ...authorizationActions,
   actionHandlers: {
     ...authorizationActions.actionHandlers,
-    initialize: ({ featurePosition }) => initializeOrganization(featurePosition),
+    initialize: ({ featurePosition, buttonId, dataAccess }) => initializeOrganization(featurePosition, buttonId ?? dataAccess?.id),
   },
   actionEligibilityResolvers: {
     ...authorizationActions.actionEligibilityResolvers,

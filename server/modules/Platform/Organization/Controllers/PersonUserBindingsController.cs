@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
@@ -14,7 +16,7 @@ namespace ICP.Platform.Modules.Organization.Controllers;
 [Route("api/organization/persons")]
 [EndpointModule("Organization")]
 [PlatformRequestValidation]
-public sealed class PersonUserBindingsController(IPersonUserBindingService bindingService) : ControllerBase
+public sealed class PersonUserBindingsController(IPersonUserBindingService bindingService, IButtonBusinessExecutor buttons, PersonBindingButtonHandler handler) : ControllerBase
 {
     /// <summary>绑定动作按其已授权位置搜索候选账号。</summary>
     [HttpGet("{personEid}/user-binding/candidates")]
@@ -36,7 +38,7 @@ public sealed class PersonUserBindingsController(IPersonUserBindingService bindi
 
     /// <summary>在可信主体的绑定动作授权后执行既有不可逆绑定事务。</summary>
     [HttpPut("{personEid}/user-binding")]
-    [RequireFeature("organization.person.linkUser")]
+    [RequireFeature("organization.person.linkUser"), ButtonBusinessHandler(typeof(PersonBindingButtonHandler))]
     public async Task<ActionResult<PersonUserBindingDto>> Bind(
         string personEid,
         [FromBody] BindPersonUserRequest request,
@@ -50,15 +52,16 @@ public sealed class PersonUserBindingsController(IPersonUserBindingService bindi
                 throw new PersonUserBindingException(PersonUserBindingFailureCodes.InvalidActor);
             }
 
-            return Ok(await bindingService.BindAsync(
-                personEid,
-                request,
-                new PersonUserBindingActor(actorId, HttpContext.TraceIdentifier),
-                cancellationToken));
+            return Ok(await buttons.ExecuteAsync(handler, new PersonBindingButtonInput(personEid, request,
+                new PersonUserBindingActor(actorId, HttpContext.TraceIdentifier)), cancellationToken));
         }
         catch (PersonUserBindingException exception)
         {
             return BindingProblem(exception);
+        }
+        catch (ActionDataAccessException exception)
+        {
+            return ActionDataAccessProblem.ToResult(exception, exception.Code);
         }
         catch (PlatformCacheUnavailableException exception)
         {

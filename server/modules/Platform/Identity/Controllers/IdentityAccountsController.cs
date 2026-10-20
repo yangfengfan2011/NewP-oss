@@ -2,6 +2,7 @@ using ICP.Platform.Persistence.Transactions;
 using System.Security.Claims;
 using System.ComponentModel.DataAnnotations;
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Application;
@@ -20,27 +21,30 @@ namespace ICP.Platform.Modules.Identity.Controllers;
 public sealed class IdentityAccountsController : ControllerBase
 {
     private readonly IIdentityManagementQueryService _queries;
-    private readonly IIdentityAccountApplicationService _accounts;
+    private readonly IButtonBusinessExecutor _buttons;
+    private readonly IdentityAccountButtonHandler _handler;
 
+    // 读取保留独立目录，写命令统一交实际注册的按钮业务处理器。
     public IdentityAccountsController(
         IIdentityManagementQueryService queries,
-        IIdentityAccountApplicationService accounts)
+        IButtonBusinessExecutor buttons, IdentityAccountButtonHandler handler)
     {
         _queries = queries;
-        _accounts = accounts;
+        _buttons = buttons;
+        _handler = handler;
     }
 
     /// <summary>创建账号并一次性返回凭据，调用前同时满足位置与 Host 管理资格。</summary>
     [HttpPost]
     [Authorize(Policy = "AdminOnly")]
-    [RequireFeature("identity.account.create")]
+    [RequireFeature("identity.account.create"), ButtonBusinessHandler(typeof(IdentityAccountButtonHandler))]
     public async Task<ActionResult<IdentityCredentialIssuanceResponse>> Create(
         [FromBody] CreateIdentityAccountRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await _accounts.CreateAsync(
+            var result = await _buttons.ExecuteAsync<CreateIdentityAccountCommand, CreateIdentityAccountCommand, IdentityAccountCreationResult>(_handler,
                 new CreateIdentityAccountCommand(request.ECODE, request.ENAME, Actor()),
                 cancellationToken);
             Response.Headers.CacheControl = "no-store";
@@ -50,6 +54,10 @@ public sealed class IdentityAccountsController : ControllerBase
                 new IdentityCredentialIssuanceResponse(
                     IdentityAccountResponse.From(result.Account),
                     result.TemporaryCredential));
+        }
+        catch (ActionDataAccessException exception)
+        {
+            return ActionDataAccessProblem.ToResult(exception, exception.Code);
         }
         catch (PlatformCacheUnavailableException exception)
         {
@@ -132,7 +140,7 @@ public sealed class IdentityAccountsController : ControllerBase
     /// <summary>按编辑位置修改显示名称，保留既有 Revision 校验。</summary>
     [HttpPut("{accountEid}")]
     [Authorize(Policy = "AdminOnly")]
-    [RequireFeature("identity.account.update")]
+    [RequireFeature("identity.account.update"), ButtonBusinessHandler(typeof(IdentityAccountButtonHandler))]
     public async Task<ActionResult<IdentityAccountResponse>> UpdateName(
         string accountEid,
         [FromBody] UpdateIdentityAccountRequest request,
@@ -140,10 +148,14 @@ public sealed class IdentityAccountsController : ControllerBase
     {
         try
         {
-            var account = await _accounts.UpdateNameAsync(
+            var account = await _buttons.ExecuteAsync<UpdateIdentityAccountNameCommand, UpdateIdentityAccountNameCommand, IdentityAccountSnapshot>(_handler,
                 new UpdateIdentityAccountNameCommand(accountEid, request.ENAME, request.ExpectedRevision, Actor()),
                 cancellationToken);
             return Ok(IdentityAccountResponse.From(account));
+        }
+        catch (ActionDataAccessException exception)
+        {
+            return ActionDataAccessProblem.ToResult(exception, exception.Code);
         }
         catch (PlatformCacheUnavailableException exception)
         {
@@ -165,7 +177,7 @@ public sealed class IdentityAccountsController : ControllerBase
     {
         try
         {
-            var account = await _accounts.SetStatusAsync(
+            var account = await _buttons.ExecuteAsync<SetIdentityAccountStatusCommand, SetIdentityAccountStatusCommand, IdentityAccountSnapshot>(_handler,
                 new SetIdentityAccountStatusCommand(
                     accountEid,
                     request.TargetStatus,
@@ -174,6 +186,10 @@ public sealed class IdentityAccountsController : ControllerBase
                     Actor()),
                 cancellationToken);
             return Ok(IdentityAccountResponse.From(account));
+        }
+        catch (ActionDataAccessException exception)
+        {
+            return ActionDataAccessProblem.ToResult(exception, exception.Code);
         }
         catch (PlatformCacheUnavailableException exception)
         {
@@ -186,13 +202,13 @@ public sealed class IdentityAccountsController : ControllerBase
     }
 
     /// <summary>启用位置只接受 Enabled，保留账号自身及人员绑定保护。</summary>
-    [HttpPut("{accountEid}/status/enable"), Authorize(Policy = "AdminOnly"), RequireFeature("identity.account.enable")]
+    [HttpPut("{accountEid}/status/enable"), Authorize(Policy = "AdminOnly"), RequireFeature("identity.account.enable"), ButtonBusinessHandler(typeof(IdentityAccountButtonHandler))]
     public Task<ActionResult<IdentityAccountResponse>> Enable(string accountEid, [FromBody] SetIdentityAccountStatusRequest request,
         CancellationToken cancellationToken) => request.TargetStatus == IdentityAccountStatus.Enabled
             ? SetStatus(accountEid, request, cancellationToken) : Task.FromResult<ActionResult<IdentityAccountResponse>>(DirectionProblem());
 
     /// <summary>停用位置只接受 Disabled，复用账号停用及会话撤销事务。</summary>
-    [HttpPut("{accountEid}/status/disable"), Authorize(Policy = "AdminOnly"), RequireFeature("identity.account.disable")]
+    [HttpPut("{accountEid}/status/disable"), Authorize(Policy = "AdminOnly"), RequireFeature("identity.account.disable"), ButtonBusinessHandler(typeof(IdentityAccountButtonHandler))]
     public Task<ActionResult<IdentityAccountResponse>> Disable(string accountEid, [FromBody] SetIdentityAccountStatusRequest request,
         CancellationToken cancellationToken) => request.TargetStatus == IdentityAccountStatus.Disabled
             ? SetStatus(accountEid, request, cancellationToken) : Task.FromResult<ActionResult<IdentityAccountResponse>>(DirectionProblem());
@@ -217,7 +233,7 @@ public sealed class IdentityAccountsController : ControllerBase
     /// <summary>按删除位置执行不可恢复删除，保留账号自身保护。</summary>
     [HttpPost("{accountEid}/delete")]
     [Authorize(Policy = "AdminOnly")]
-    [RequireFeature("identity.account.delete")]
+    [RequireFeature("identity.account.delete"), ButtonBusinessHandler(typeof(IdentityAccountButtonHandler))]
     public async Task<ActionResult<IdentityAccountResponse>> Delete(
         string accountEid,
         [FromBody] IdentityAccountSecurityCommandRequest request,
@@ -225,10 +241,14 @@ public sealed class IdentityAccountsController : ControllerBase
     {
         try
         {
-            var account = await _accounts.DeleteAsync(
+            var account = await _buttons.ExecuteAsync<DeleteIdentityAccountCommand, DeleteIdentityAccountCommand, IdentityAccountSnapshot>(_handler,
                 new DeleteIdentityAccountCommand(accountEid, request.ExpectedRevision, request.Reason, Actor()),
                 cancellationToken);
             return Ok(IdentityAccountResponse.From(account));
+        }
+        catch (ActionDataAccessException exception)
+        {
+            return ActionDataAccessProblem.ToResult(exception, exception.Code);
         }
         catch (PlatformCacheUnavailableException exception)
         {
@@ -243,7 +263,7 @@ public sealed class IdentityAccountsController : ControllerBase
     /// <summary>按重置位置签发一次性凭据，保留本地管理员维护边界。</summary>
     [HttpPost("{accountEid}/credential-reset")]
     [Authorize(Policy = "AdminOnly")]
-    [RequireFeature("identity.account.credentialReset")]
+    [RequireFeature("identity.account.credentialReset"), ButtonBusinessHandler(typeof(IdentityAccountButtonHandler))]
     public async Task<ActionResult<IdentityCredentialIssuanceResponse>> ResetCredential(
         string accountEid,
         [FromBody] IdentityAccountSecurityCommandRequest request,
@@ -251,13 +271,17 @@ public sealed class IdentityAccountsController : ControllerBase
     {
         try
         {
-            var result = await _accounts.ResetCredentialAsync(
+            var result = await _buttons.ExecuteAsync<ResetIdentityCredentialCommand, ResetIdentityCredentialCommand, IdentityCredentialResetResult>(_handler,
                 new ResetIdentityCredentialCommand(accountEid, request.ExpectedRevision, request.Reason, Actor()),
                 cancellationToken);
             Response.Headers.CacheControl = "no-store";
             return Ok(new IdentityCredentialIssuanceResponse(
                 IdentityAccountResponse.From(result.Account),
                 result.TemporaryCredential));
+        }
+        catch (ActionDataAccessException exception)
+        {
+            return ActionDataAccessProblem.ToResult(exception, exception.Code);
         }
         catch (PlatformCacheUnavailableException exception)
         {

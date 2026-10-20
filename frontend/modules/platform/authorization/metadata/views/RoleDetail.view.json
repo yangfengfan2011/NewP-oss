@@ -48,8 +48,7 @@
         "labelKey": "UserRoles",
         "key": "userRoles",
         "handlerKey": "userRoles",
-        "dataAccess": { "execution": "authorization.role.list", "resources": ["authorization.role"] },
-        "readBehaviors": ["authorization.userRoles.read"],
+        "readBehaviors": ["authorization.userRoles.read", "authorization.role.read"],
         "inputKey": "userRoles",
         "confirmMessageKey": "ConfirmUserRoles"
       }

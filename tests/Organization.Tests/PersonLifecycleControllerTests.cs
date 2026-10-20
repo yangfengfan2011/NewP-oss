@@ -40,7 +40,7 @@ public sealed class PersonLifecycleControllerTests
         Assert.NotNull(problem.Extensions["current"]);
     }
 
-    private static PersonLifecycleController Controller(IPersonLifecycleService service) => new(service)
+    private static PersonLifecycleController Controller(IPersonLifecycleService service) => new(new DirectCommandExecutor(), new PersonLifecycleButtonHandler(service))
     {
         ControllerContext = new ControllerContext
         {
@@ -62,4 +62,10 @@ public sealed class PersonLifecycleControllerTests
             PersonLifecycleActor actor,
             CancellationToken cancellationToken = default) => ValueTask.FromException<PersonLifecycleDto>(exception);
     }
+}
+
+internal sealed class DirectCommandExecutor : ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor
+{
+    public Task<TResult> ExecuteAsync<TInput, TState, TResult>(ICP.Platform.Authorization.Contracts.IButtonBusinessHandler<TInput, TState, TResult> handler,
+        TInput input, CancellationToken token = default) => handler.WithinBoundaryAsync(input, "", (state, inner) => handler.ExecuteAsync(state, inner), token);
 }

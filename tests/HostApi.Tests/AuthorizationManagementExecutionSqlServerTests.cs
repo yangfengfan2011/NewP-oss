@@ -26,7 +26,7 @@ public sealed class AuthorizationManagementExecutionSqlServerTests
             "role311-manager", "普通角色管理主体", read, create, edit, member, workbench, saveFeatures);
         using var ordinary = actor.Client;
         var role = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/authorization/roles",
-            new { Code = "TARGET311", Name = "不可读的管理目标" });
+            new { Code = "TARGET311", Name = "不可读的管理目标" }, http.Declaration("authorization.role.create", create));
         var id = role.GetProperty("id").GetString()!;
         var manage = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.role.authorize");
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
@@ -46,22 +46,29 @@ public sealed class AuthorizationManagementExecutionSqlServerTests
         }
         // 普通角色管理原本不依赖目标数据 read/edit，也不新增点击预检。
         using (var changed = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
-            "/api/authorization/roles/" + id, new { Name = "仅功能资格编辑", IsEnabled = true }))
+            "/api/authorization/roles/" + id, new { Name = "仅功能资格编辑", IsEnabled = true }, http.Declaration("authorization.role.update", edit)))
             Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
         using (var created = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
-            "/api/authorization/roles", new { Code = "CREATED311", Name = "仅功能资格创建" }))
+            "/api/authorization/roles", new { Code = "CREATED311", Name = "仅功能资格创建" }, http.Declaration("authorization.role.create", create)))
             Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         using (var deleted = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Delete,
             "/api/authorization/roles/" + id)) Assert.Equal(HttpStatusCode.Forbidden, deleted.StatusCode);
         using (var assigned = await FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Put,
-            "/api/authorization/users/" + actor.AccountId + "/roles", new { RoleCodes = new[] { "Role311Manager", "TARGET311" } }))
+            "/api/authorization/users/" + actor.AccountId + "/roles", new { RoleCodes = new[] { "Role311Manager", "TARGET311" } }, http.Declaration("authorization.role.userRoles", member)))
             Assert.Equal(HttpStatusCode.NoContent, assigned.StatusCode);
         using (var configured = await FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Get,
             "/api/authorization/users/" + actor.AccountId + "/roles"))
             Assert.Contains("TARGET311", (await configured.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("roleCodes").EnumerateArray().Select(value => value.GetString()));
         using (var saved = await FeatureHttpTestRequests.SendAsync(ordinary, saveFeatures, HttpMethod.Put,
-            "/api/authorization/workbench/roles/" + id, new { positions = Array.Empty<string>() }))
+            "/api/authorization/workbench/roles/" + id, new { positions = Array.Empty<string>() }, http.Declaration("authorization.workbench.save", saveFeatures)))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+
+        using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
+            "/api/authorization/roles/" + id, new { Name = "缺身份", IsEnabled = true }))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using (var borrowed = await FeatureHttpTestRequests.SendAsync(ordinary, saveFeatures, HttpMethod.Put,
+            "/api/authorization/workbench/roles/" + id, new { positions = Array.Empty<string>() }, http.Declaration("authorization.role.update", edit)))
+            Assert.Equal(HttpStatusCode.BadRequest, borrowed.StatusCode);
 
         var observations = new List<(string Source, HttpStatusCode Status, JsonElement? Body)>();
         foreach (var (source, feature, path) in new[]

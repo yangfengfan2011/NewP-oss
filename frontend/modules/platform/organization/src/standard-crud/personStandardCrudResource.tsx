@@ -165,7 +165,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
 
       await deletePerson(id, featurePosition, dataAccess, buttonId);
     },
-    disable: async ({ id, input, featurePosition }) => {
+    disable: async ({ id, input, featurePosition, buttonId, dataAccess }) => {
       if (!id) {
         throw new StandardCrudRequestError('缺少人员标识，无法停用。', 400, {}, { code: 'Organization.Person.InvalidId' });
       }
@@ -178,9 +178,9 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
       await setPersonLifecycleStatus(id, {
         isEnabled: false,
         reason,
-      }, featurePosition);
+      }, featurePosition, buttonId ?? dataAccess?.id);
     },
-    enable: async ({ id, featurePosition }) => {
+    enable: async ({ id, featurePosition, buttonId, dataAccess }) => {
       if (!id) {
         throw new StandardCrudRequestError('缺少人员标识，无法启用。', 400, {}, { code: 'Organization.Person.InvalidId' });
       }
@@ -188,7 +188,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
       await setPersonLifecycleStatus(id, {
         isEnabled: true,
         reason: '人员中心恢复人员',
-      }, featurePosition);
+      }, featurePosition, buttonId ?? dataAccess?.id);
     },
   },
 };

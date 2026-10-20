@@ -442,12 +442,13 @@ export async function setPersonLifecycleStatus(
   personId: string,
   input: { isEnabled: boolean; reason: string },
   featurePosition?: string,
+  buttonId?: string,
 ): Promise<void> {
   await requestJson<unknown>(
     `/api/organization/persons/${encodeURIComponent(personId)}/status/${input.isEnabled ? "enable" : "disable"}`,
     {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...standardCrudRequestHeaders({ featurePosition, buttonId }) },
       body: JSON.stringify(input),
     },
     input.isEnabled ? '恢复人员失败' : '停用人员失败',
@@ -471,12 +472,13 @@ export async function bindPersonUser(
   personEid: string,
   input: { accountEid: string; expectedRevision: number; reason: string },
   featurePosition?: string,
+  buttonId?: string,
 ): Promise<PersonUserBindingDto> {
   return requestJson<PersonUserBindingDto>(
     `/api/organization/persons/${encodeURIComponent(personEid)}/user-binding`,
     {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...standardCrudRequestHeaders({ featurePosition, buttonId }) },
       body: JSON.stringify(input),
     },
     '绑定账号失败',
@@ -484,9 +486,9 @@ export async function bindPersonUser(
 }
 
 /** 初始化只由用户显式发起；身份、名称和保留部门标识均由服务端决定。 */
-export async function initializeOrganization(featurePosition?: string): Promise<void> {
+export async function initializeOrganization(featurePosition?: string, buttonId?: string): Promise<void> {
   await requestJson<unknown>('/api/organization/initialization', {
-    method: 'POST', headers: { Accept: 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
+    method: 'POST', headers: { Accept: 'application/json', ...standardCrudRequestHeaders({ featurePosition, buttonId }) },
   }, '初始化组织失败');
 }
 

@@ -180,6 +180,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
       {currentInputAction?.inputKey && actionInputs[currentInputAction.inputKey] ? (
         <StandardCrudActionReviewDialog
           action={currentInputAction}
+          dataAccessDeclarations={context.dataAccessDeclarations}
           title={currentInputAction.labelKey}
           confirmMessage={currentInputAction.confirmMessage}
           inputRenderer={actionInputs[currentInputAction.inputKey]}

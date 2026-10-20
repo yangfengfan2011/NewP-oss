@@ -164,8 +164,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         if (!historicalUpgrade && workspaceDelivery)
         {
             var company = features.OrganizationTab("companies");
-            await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/organization/initialization", null,
-                features.Action(company, "initialize", "list.pageActions").Position, token);
+            await WorkspaceAcceptanceFixture.SendButtonAsync(administrator, features,
+                features.Action(company, "initialize", "list.pageActions"), HttpMethod.Post, "/api/organization/initialization", null, token);
         }
         var part = features.Behavior("Part", "part.part.read");
         var granted = new List<FeaturePoint> { part, features.Action(part, "create", "list.pageActions") };
@@ -188,7 +188,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             granted.Add(features.Behavior("Document", "document.document.download"));
             AddWorkspacePageGrants(features, granted);
         }
-        var actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, runId, registerSecret, granted, token);
+        var actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, runId, registerSecret, granted, token, preparation);
         using var ordinary = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(ordinary, actor, token);
         string oldId;

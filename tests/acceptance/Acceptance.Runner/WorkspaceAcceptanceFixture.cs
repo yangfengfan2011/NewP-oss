@@ -89,13 +89,14 @@ internal static class WorkspaceAcceptanceFixture
 
     internal static async Task<WorkspaceAcceptanceActor> PrepareAsync(HttpClient administrator,
         AcceptanceFeatureCatalog features, string runId, Action<string> registerSecret,
-        IReadOnlyList<FeaturePoint> grantedFeatures, CancellationToken token)
+        IReadOnlyList<FeaturePoint> grantedFeatures, CancellationToken token,
+        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.CurrentRelease)
     {
         var suffix = runId[..8];
         var ecode = $"workspace.{suffix}";
-        var account = await SendAsync(administrator, HttpMethod.Post, "/api/identity/accounts",
+        var account = await SendPreparationCommandAsync(HttpMethod.Post, "/api/identity/accounts",
             new { ECODE = ecode, ENAME = $"工作空间验收账号 {suffix}" },
-            features.Action(features.Behavior("Identity", "identity.account.read"), "create", "list.pageActions").Position, token);
+            features.Action(features.Behavior("Identity", "identity.account.read"), "create", "list.pageActions"));
         var accountData = account.GetProperty("account");
         var accountId = accountData.GetProperty("eid").GetString()!;
         var temporaryCredential = account.GetProperty("temporaryCredential").GetString()!;
@@ -103,40 +104,46 @@ internal static class WorkspaceAcceptanceFixture
         var password = "Aa1!" + Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         registerSecret(password);
 
-        var company = await SendAsync(administrator, HttpMethod.Post, "/api/organization/companies",
+        var company = await SendPreparationCommandAsync(HttpMethod.Post, "/api/organization/companies",
             new { ECODE = $"WS-{suffix}", ENAME = $"工作空间验收公司 {suffix}", SortOrder = "9999" },
-            features.Action(features.OrganizationTab("companies"), "create", "list.pageActions").Position, token,
-            features.Declaration(features.Action(features.OrganizationTab("companies"), "create", "list.pageActions"),
+            features.Action(features.OrganizationTab("companies"), "create", "list.pageActions"),
+            () => features.Declaration(features.Action(features.OrganizationTab("companies"), "create", "list.pageActions"),
                 "organization.company.create", "standardCrud.create", "organization.company"));
         var companyId = EntityId(company);
-        var department = await SendAsync(administrator, HttpMethod.Post, "/api/organization/departments",
+        var department = await SendPreparationCommandAsync(HttpMethod.Post, "/api/organization/departments",
             new { ECODE = $"WS-{suffix}", ENAME = $"工作空间验收部门 {suffix}", CompanyId = companyId, SortOrder = "9999" },
-            features.Action(features.OrganizationTab("departments"), "create", "list.pageActions").Position, token,
-            features.Declaration(features.Action(features.OrganizationTab("departments"), "create", "list.pageActions"),
+            features.Action(features.OrganizationTab("departments"), "create", "list.pageActions"),
+            () => features.Declaration(features.Action(features.OrganizationTab("departments"), "create", "list.pageActions"),
                 "organization.department.create", "standardCrud.create", "organization.department"));
-        var person = await SendAsync(administrator, HttpMethod.Post, "/api/organization/persons",
+        var person = await SendPreparationCommandAsync(HttpMethod.Post, "/api/organization/persons",
             new { PersonNo = $"WS-{suffix}", ENAME = $"工作空间验收人员 {suffix}", CompanyId = companyId,
                 DepartmentId = EntityId(department), EmploymentStatus = "Active", IsEnabled = true },
-            features.Action(features.OrganizationTab("persons"), "create", "list.pageActions").Position, token,
-            features.Declaration(features.Action(features.OrganizationTab("persons"), "create", "list.pageActions"),
+            features.Action(features.OrganizationTab("persons"), "create", "list.pageActions"),
+            () => features.Declaration(features.Action(features.OrganizationTab("persons"), "create", "list.pageActions"),
                 "organization.person.create", "standardCrud.create", "organization.person"));
-        await SendAsync(administrator, HttpMethod.Put, $"/api/organization/persons/{EntityId(person)}/user-binding",
+        await SendPreparationCommandAsync(HttpMethod.Put, $"/api/organization/persons/{EntityId(person)}/user-binding",
             new { accountEid = accountId, expectedRevision = accountData.GetProperty("revision").GetInt64(), reason = "准备工作空间普通验收主体" },
-            features.Action(features.OrganizationTab("persons"), "linkUser", "detail.custom").Position, token);
+            features.Action(features.OrganizationTab("persons"), "linkUser", "detail.custom"));
 
         var roleCode = $"WorkspaceGate{suffix}";
         var roleEntry = features.Behavior("Authorization", "authorization.role.read");
-        var role = await SendAsync(administrator, HttpMethod.Post, "/api/authorization/roles",
+        var role = await SendPreparationCommandAsync(HttpMethod.Post, "/api/authorization/roles",
             new { Code = roleCode, Name = $"工作空间验收角色 {suffix}" },
-            features.Action(roleEntry, "create", "list.pageActions").Position, token);
+            features.Action(roleEntry, "create", "list.pageActions"));
         var roleId = role.GetProperty("id").GetString()!;
-        await SendAsync(administrator, HttpMethod.Put, $"/api/authorization/workbench/roles/{roleId}",
-            new { positions = features.GrantSet(grantedFeatures.ToArray()) }, features.Behavior("Authorization", "authorization.workbench.save").Position, token);
-        await SendAsync(administrator, HttpMethod.Put, $"/api/authorization/users/{accountId}/roles",
-            new { RoleCodes = new[] { roleCode } }, features.Action(roleEntry, "userRoles", "list.rowActions").Position, token);
+        await SendPreparationCommandAsync(HttpMethod.Put, $"/api/authorization/workbench/roles/{roleId}",
+            new { positions = features.GrantSet(grantedFeatures.ToArray()) }, features.Behavior("Authorization", "authorization.workbench.save"));
+        await SendPreparationCommandAsync(HttpMethod.Put, $"/api/authorization/users/{accountId}/roles",
+            new { RoleCodes = new[] { roleCode } }, features.Action(roleEntry, "userRoles", "list.rowActions"));
         using var ordinary = CreateClient(administrator.BaseAddress!.Port);
         await LoginAndChangePasswordAsync(ordinary, ecode, temporaryCredential, password, token);
         return new(accountId, ecode, password);
+
+        // 历史升级输入保持冻结；当前发行物的准备必须使用同一正式目录中的实际按钮。
+        Task<JsonElement> SendPreparationCommandAsync(HttpMethod method, string path, object body, FeaturePoint point,
+            Func<string>? historicalDeclaration = null) => preparation == PublishedWorkspacePreparation.HistoricalUpgrade
+                ? SendAsync(administrator, method, path, body, point.Position, token, historicalDeclaration?.Invoke())
+                : SendButtonAsync(administrator, features, point, method, path, body, token);
     }
 
     // 只用当前普通主体的正式命令准备个人来源孤立对象；移除的是查询返回的 LID，不是实体 EID。
@@ -320,14 +327,20 @@ internal static class WorkspaceAcceptanceFixture
             null, entryPosition, token, features.ReadDeclaration("Workspace", "workspace.folder.list", entryPosition));
     }
 
+    // 显式正向准备先解析实际按钮；原始SendAsync继续允许测试遗漏身份，不按URL补全。
+    internal static Task<JsonElement> SendButtonAsync(HttpClient client, AcceptanceFeatureCatalog features, FeaturePoint point,
+        HttpMethod method, string path, object? body, CancellationToken token) =>
+        SendAsync(client, method, path, body, point.Position, token, buttonId: features.Button(point));
+
     // 正式命令保留空请求体；所有写请求取得同会话防伪令牌，Secure Cookie 仅在 loopback client 显式回放。
     internal static async Task<JsonElement> SendAsync(HttpClient client, HttpMethod method, string path,
-        object? body, string? featurePosition, CancellationToken token, string? dataDeclaration = null)
+        object? body, string? featurePosition, CancellationToken token, string? dataDeclaration = null, string? buttonId = null)
     {
         using var request = new HttpRequestMessage(method, path);
         if (body is not null) request.Content = JsonContent.Create(body, options: new JsonSerializerOptions());
         if (featurePosition is not null) request.Headers.Add("X-NewP-Feature", featurePosition);
         if (dataDeclaration is not null) request.Headers.Add("X-NewP-Data-Declaration", dataDeclaration);
+        if (buttonId is not null) request.Headers.Add("X-NewP-Button", buttonId);
         if (method != HttpMethod.Get)
         {
             using var antiforgeryResponse = await client.GetAsync("/api/auth/antiforgery-token", token);

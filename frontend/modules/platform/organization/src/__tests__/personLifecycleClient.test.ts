@@ -31,13 +31,13 @@ describe('person lifecycle client', () => {
     await setPersonLifecycleStatus('Person/1', {
       isEnabled,
       reason: '人员中心停用人员',
-    }, 'declared-action-position');
+    }, 'declared-action-position', 'person-status-button');
 
     expect(platformFetchMock).toHaveBeenCalledWith(
       `/api/organization/persons/Person%2F1/status/${isEnabled ? 'enable' : 'disable'}`,
       expect.objectContaining({
         method: 'PUT',
-        headers: expect.objectContaining({ 'X-NewP-Feature': 'declared-action-position' }),
+        headers: expect.objectContaining({ 'X-NewP-Feature': 'declared-action-position', 'X-NewP-Button': 'person-status-button' }),
         body: JSON.stringify({
           isEnabled,
           reason: '人员中心停用人员',

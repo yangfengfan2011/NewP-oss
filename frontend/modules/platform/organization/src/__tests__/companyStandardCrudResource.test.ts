@@ -22,11 +22,12 @@ describe('company standard CRUD resource', () => {
       companyId: 'company', departmentId: 'department', companyCreated: true, departmentCreated: true,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     expect(companyStandardCrudResource.actionHandlers?.initialize).toBeTypeOf('function');
-    await companyStandardCrudResource.actionHandlers!.initialize({ featurePosition: 'organization.company.initialize' });
+    await companyStandardCrudResource.actionHandlers!.initialize({ featurePosition: 'organization.company.initialize', buttonId: 'actual-initialize-button' });
     const writes = fetchSpy.mock.calls.map(call => call[0]).filter((request): request is Request => request instanceof Request && request.method === 'POST');
     expect(writes).toHaveLength(1);
     expect(writes[0]?.url).toContain('/api/organization/initialization');
     expect(writes[0]?.headers.get('X-NewP-Feature')).toBe('organization.company.initialize');
+    expect(writes[0]?.headers.get('X-NewP-Button')).toBe('actual-initialize-button');
   });
 
   it('binds the company list to the standard mutation lifecycle without handlers or revision', () => {

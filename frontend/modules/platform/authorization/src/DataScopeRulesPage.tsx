@@ -6,7 +6,7 @@ import EditOutlined from '@ant-design/icons/EditOutlined';
 import type { InputRef } from 'antd';
 import { nextRuleName, trimRuleNames, validateRuleNames } from './dataScopeRuleNames';
 import { formatRequestError, platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
-import { StandardCrudRequestError, type PageProps } from '@icp-platform/sdk';
+import { StandardCrudRequestError, standardCrudRequestHeaders, type ActionDataAccessRequirement, type PageProps } from '@icp-platform/sdk';
 import { requestRole } from './roleResource';
 import { type DataScopeSubject, type SubjectType } from './DataScopeSubjectEditor';
 import { describeDataScopeCondition, type DataScopeBusinessType, type DataScopeCondition, type DataScopeResourceField } from './DataScopeConditionEditor';
@@ -21,7 +21,7 @@ import { AntdLocaleProvider } from '@icp-platform/ui/locale';
 type Subject = DataScopeSubject;
 interface Rule { id: string; rootId: string; parentId: string | null; name: string; enabled: boolean; resourceKey: string;
   condition: DataScopeCondition; subjects: Subject[]; children: Rule[] }
-interface Catalog { subjectTypes?: SubjectType[]; contextValues?: { key: string; title: string; valueType: string }[];
+interface Catalog { buttons: ActionDataAccessRequirement[]; subjectTypes?: SubjectType[]; contextValues?: { key: string; title: string; valueType: string }[];
   contextBindings?: { modelKey: string; field: string; contextKey: string }[]; actions: { key: string; title: string; enabled: boolean }[];
   businessConditions?: DataScopeBusinessType[];
   features: { behaviorKey: string; position: string }[];
@@ -91,6 +91,8 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   const shownRules = draft ? rules.some(rule => rule.id === draft.id)
     ? rules.map(rule => rule.id === draft.id ? draft : rule) : [...rules, draft] : rules;
   const savePosition = catalog?.features.find(feature => feature.behaviorKey === 'authorization.dataScope.save')?.position;
+  const saveButtons = catalog?.buttons?.filter(button => button.businessBinding === 'authorization.dataScope.save' && savePosition && button.featurePositions.includes(savePosition));
+  const saveButton = saveButtons?.length === 1 ? saveButtons[0] : undefined;
   const readOnly = !savePosition || !hasFeature(savePosition);
   const read = useCallback((path: string, signal?: AbortSignal) => requestRole(platformFetch as typeof fetch, endpoint + path,
     { headers: { 'X-NewP-Feature': entry }, signal }, '规则'), [entry]);
@@ -122,12 +124,13 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   const save = useCallback(async () => {
     if (editing) { void message.warning(<DataScopeMessage messageKey="FinishEditor" />); return false; }
     if (!draft || !savePosition || readOnly || pending.current) return false;
+    if (!saveButton) { setError(new Error(t('AuthorizationMessages.SaveUnavailable', '保存按钮身份不可用'))); return false; }
     pending.current = true; setSaving(true); setError(''); setConditionErrorPath('');
     try {
       validateRuleNames(draft, rules);
       const candidate = trimRuleNames(orderRuleSubjects(draft, true));
       await requestRole(platformFetch as typeof fetch, `${endpoint}/rules/${encodeURIComponent(draft.id)}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': savePosition }, body: JSON.stringify(candidate),
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...standardCrudRequestHeaders({ featurePosition: savePosition, dataAccess: saveButton }) }, body: JSON.stringify(candidate),
       }, '规则');
       setDraft(candidate); setSaved(candidate);
       setNameEditingId(undefined);
@@ -148,7 +151,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
       return false;
     }
     finally { pending.current = false; setSaving(false); }
-  }, [draft, rules, savePosition, readOnly, message, editing]);
+  }, [draft, rules, savePosition, saveButton, readOnly, message, editing, t]);
   useEffect(() => { reportState({ dirty: dirty || editing, submitting: saving }, reset, save); }, [dirty, editing, saving, reset, save, reportState]);
   const choose = (rule: Rule, nodeId = rule.id) => {
     if (dirty) { setPendingRule(rule); setPendingSelection(nodeId); }
@@ -198,11 +201,12 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   };
   const deleteSavedRoot = async () => {
     if (!draft || pending.current || !savePosition || readOnly) return;
+    if (!saveButton) { setError(new Error(t('AuthorizationMessages.SaveUnavailable', '保存按钮身份不可用'))); return; }
     if (!saved) { setDraft(undefined); setSelectedId(undefined); setDeleteRoot(false); return; }
     pending.current = true; setSaving(true); setError('');
     try {
       await requestRole(platformFetch as typeof fetch, `${endpoint}/rules/${encodeURIComponent(draft.id)}`, {
-        method: 'DELETE', headers: { 'X-NewP-Feature': savePosition },
+        method: 'DELETE', headers: { ...standardCrudRequestHeaders({ featurePosition: savePosition, dataAccess: saveButton }) },
       }, '规则');
       setRules(current => current.filter(rule => rule.id !== draft.id));
       setDraft(undefined); setSaved(undefined); setSelectedId(undefined); setDeleteRoot(false);

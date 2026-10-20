@@ -96,7 +96,7 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   }
   const roleOptions = fetcher.mock.calls.filter(([url, init]) => String(url).includes('/roles/query') && new Headers(init?.headers).get('X-NewP-Feature') === memberPosition);
   expect(roleOptions.length).toBeGreaterThanOrEqual(3);
-  const roleInputRead = formalDataAccessFor(detail.view.key, 'pageActions', 'userRoles');
+  const roleInputRead = formalDataAccessFor(list.view.key, 'read');
   for (const [, init] of roleOptions) expect(new Headers(init?.headers).get('X-NewP-Data-Declaration')).toBe(roleInputRead.id);
   const roleDetails = fetcher.mock.calls.filter(([url, init]) => String(url).endsWith('/roles/role-1') && !init?.method);
   expect(roleDetails.length).toBeGreaterThan(0);

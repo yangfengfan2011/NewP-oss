@@ -20,6 +20,7 @@ window.getComputedStyle = element => originalStyle(element);
 afterEach(() => { vi.clearAllMocks(); access.positions = ['read', 'save']; });
 const json = (value: unknown) => new Response(JSON.stringify(value));
 const role = (id: string) => ({ id, code: id, displayName: id, isEnabled: true });
+const buttons = [{ id: 'capsule-save-button', businessBinding: 'authorization.workbench.save', featurePositions: ['save'] }];
 const points = [{ position: 'read', title: '读取', behaviorKey: 'authorization.workbench.read', entryDependencies: [], parentPosition: null },
   { position: 'save', title: '保存', behaviorKey: 'authorization.workbench.save', entryDependencies: ['read'], parentPosition: 'read' }];
 
@@ -27,7 +28,7 @@ it('当前语言重译目录、草稿及已成功提示而不重放保存', asyn
   const entries = JSON.parse(roleDictionary).RoleView as Record<string, Record<string, string>>;
   const catalogs = Object.fromEntries(['zhs', 'en'].map(language => [language, Object.fromEntries(Object.entries(entries).map(([key, values]) => [`RoleView.${key}`, values[language]]))]));
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT' ? new Response(null, { status: 204 }) : json(url.endsWith('/catalog')
-    ? { points: [{ ...points[0], titleKey: 'RoleView.WorkbenchTitle' }, points[1]] }
+    ? { buttons, points: [{ ...points[0], titleKey: 'RoleView.WorkbenchTitle' }, points[1]] }
     : url.includes('/roles?') ? { items: [], total: 0 } : { role: { ...role('one'), displayName: '业务角色' }, positions: [] })));
   function Driver() { const { currentLanguage, setLanguage } = useLocalization(); return <button onClick={() => setLanguage(currentLanguage === 'en' ? 'zhs' : 'en')}>switch</button>; }
   let lifecycle!: Parameters<PageProps['reportState']>;
@@ -57,6 +58,7 @@ it('当前语言重译目录、草稿及已成功提示而不重放保存', asyn
     expect(document.body.textContent).toContain('授权已保存');
     expect(lifecycle[0].dirty).toBe(false);
     expect(fetcher.mock.calls.filter(call => call[1]?.method === 'PUT')).toHaveLength(1);
+    expect(new Headers(fetcher.mock.calls.find(call => call[1]?.method === 'PUT')![1].headers).get('X-NewP-Button')).toBe('capsule-save-button');
     expect(fetcher.mock.calls.filter(call => String(call[0]).endsWith('/catalog'))).toHaveLength(1);
   } finally { await act(async () => root.unmount()); container.remove(); localStorage.clear(); }
 });
@@ -65,7 +67,7 @@ it('preserves draft after unknown save and failed role load, and does not refetc
   let finish!: () => void;
   fetcher.mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') return new Promise((_resolve, reject) => { finish = () => reject(new TypeError('offline')); });
-    if (url.endsWith('/catalog')) return Promise.resolve(json({ points, canSave: true }));
+    if (url.endsWith('/catalog')) return Promise.resolve(json({ buttons, points, canSave: true }));
     if (url.includes('/roles?')) return Promise.resolve(json({ items: ['one', 'two'].map(id => ({ EID: id, ECODE: id, ENAME: id, IsEnabled: true })), total: 2 }));
     if (url.endsWith('/one')) return Promise.resolve(json({ role: role('one'), positions: [] }));
     return Promise.reject(new Error('load failed'));
@@ -92,6 +94,7 @@ it('preserves draft after unknown save and failed role load, and does not refetc
     await act(async () => { saved = lifecycle[2]!(); });
     await act(async () => { void lifecycle[2]!(); });
     expect(fetcher.mock.calls.filter(call => call[1]?.method === 'PUT')).toHaveLength(1);
+    expect(new Headers(fetcher.mock.calls.find(call => call[1]?.method === 'PUT')![1].headers).get('X-NewP-Button')).toBe('capsule-save-button');
     await act(async () => { finish(); await saved; });
     expect(container.textContent).toContain('操作结果未知');
     expect(lifecycle[0].dirty).toBe(true);
@@ -109,7 +112,7 @@ it('preserves draft after unknown save and failed role load, and does not refetc
 it('discards a late response after switching to another role', async () => {
   let finish!: (value: Response) => void;
   fetcher.mockImplementation((url: string) => {
-    if (url.endsWith('/catalog')) return Promise.resolve(json({ points, canSave: true }));
+    if (url.endsWith('/catalog')) return Promise.resolve(json({ buttons, points, canSave: true }));
     if (url.includes('/roles?')) return Promise.resolve(json({ items: ['one', 'two'].map(id => ({ EID: id, ECODE: id, ENAME: id, IsEnabled: true })), total: 2 }));
     if (url.endsWith('/one')) return new Promise(resolve => { finish = resolve; });
     return Promise.resolve(json({ role: role('two'), positions: [] }));

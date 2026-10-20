@@ -10,6 +10,42 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspaceAcceptanceFixtureTests
 {
+    [Fact]
+    public async Task ButtonPreparation_UsesActualManifestIdentityAndRawTransportPreservesMissingIdentity()
+    {
+        var compiled = new CanonicalModulePlanCompiler().Compile("button-preparation",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
+        var plan = compiled.Plan!;
+        var features = new AcceptanceFeatureCatalog(plan.FeatureCatalog, plan.ActionDataAccessCatalog);
+        var create = features.Action(features.Behavior("Identity", "identity.account.read"), "create", "list.pageActions");
+        var identity = features.Button(create);
+        var buttons = new List<string?>();
+        using var client = new HttpClient(new Handler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/auth/antiforgery-token")
+                return Json(HttpStatusCode.OK, "{\"requestToken\":\"fixture-token\"}");
+            Assert.Equal(create.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+            buttons.Add(request.Headers.TryGetValues("X-NewP-Button", out var values) ? Assert.Single(values) : null);
+            return Json(HttpStatusCode.Created, "{}");
+        })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
+
+        await WorkspaceAcceptanceFixture.SendButtonAsync(client, features, create, HttpMethod.Post,
+            "/api/identity/accounts", new { ECODE = "fixture", ENAME = "准备" }, CancellationToken.None);
+        await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/identity/accounts",
+            new { ECODE = "fixture", ENAME = "遗漏" }, create.Position, CancellationToken.None);
+        Assert.Equal(new string?[] { identity, null }, buttons);
+        var duplicate = new AcceptanceFeatureCatalog(plan.FeatureCatalog,
+            [.. plan.ActionDataAccessCatalog, plan.ActionDataAccessCatalog.Single(button => button.Id == identity)]);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => WorkspaceAcceptanceFixture.SendButtonAsync(client,
+            duplicate, create, HttpMethod.Post, "/api/identity/accounts", null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => WorkspaceAcceptanceFixture.SendButtonAsync(client,
+            new AcceptanceFeatureCatalog(plan.FeatureCatalog, []), create, HttpMethod.Post,
+            "/api/identity/accounts", null, CancellationToken.None));
+        Assert.Equal(2, buttons.Count);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

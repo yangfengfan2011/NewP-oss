@@ -56,6 +56,12 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<FeatureCatalogSynchronizer>();
         services.AddScoped<ICP.Platform.Kernel.ModulePlanning.IFeatureCatalogSynchronizer>(provider => provider.GetRequiredService<FeatureCatalogSynchronizer>());
         services.AddScoped<RoleFeatureAssignments>();
+        services.AddScoped<RoleCreateButtonHandler>();
+        services.AddScoped<RoleUpdateButtonHandler>();
+        services.AddScoped<UserRolesButtonHandler>();
+        services.AddScoped<FeatureGrantsButtonHandler>();
+        services.AddScoped<RuleSaveButtonHandler>();
+        services.AddScoped<RuleDeleteButtonHandler>();
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, BusinessAuditRoleNames>();
         services.AddScoped<IUserRoleAssignments, UserRoleAssignments>();
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, BusinessAuditAccountNames>();

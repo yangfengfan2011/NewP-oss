@@ -781,7 +781,7 @@ describe('organization person center list layout', () => {
     expect(serviceMocks.setPersonLifecycleStatus).toHaveBeenCalledWith('person-1', {
       isEnabled: false,
       reason: '人员中心停用人员',
-    }, 'ui-fixture:list.rowActions:disable');
+    }, 'ui-fixture:list.rowActions:disable', formalDataAccessFor('organization.person.list', 'rowActions', 'disable').id);
     expect(document.querySelector('.ant-message')?.textContent).toContain('操作失败，请稍后重试。');
   });
 });

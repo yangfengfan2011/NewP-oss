@@ -12,7 +12,7 @@ namespace ICP.Platform.Acceptance;
 internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId, bool includeSpaceLifecycle = false,
     Func<IPage, CancellationToken, Task>? browserJourney = null,
     Func<AcceptanceFeatureCatalog, IReadOnlyList<FeaturePoint>>? selectFeatures = null,
-    Func<HttpClient, AcceptanceFeatureCatalog, WorkspaceAcceptanceActor, CancellationToken, Task>? prepareJourney = null,
+    Func<HttpClient, AcceptanceFeatureCatalog, WorkspaceAcceptanceActor, Action<string>, CancellationToken, Task>? prepareJourney = null,
     PublishedComponentAcceptanceFixture? publishedFixture = null,
     bool includeBrowser = true, bool browserAsAdministrator = false)
     : AcceptanceRunner(repositoryRoot, runDirectory, runId)
@@ -54,7 +54,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 using var publishedAdministrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
                 await WorkspaceAcceptanceFixture.LoginAsync(publishedAdministrator, publishedFixture.Administrator, token);
                 var publishedFeatures = await AcceptanceFeatureCatalog.LoadAsync(publishedAdministrator, token);
-                await prepareJourney(publishedAdministrator, publishedFeatures, target.Actor, token);
+                await prepareJourney(publishedAdministrator, publishedFeatures, target.Actor, RegisterSecret, token);
             }
             return;
         }
@@ -115,7 +115,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         }
         _actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, _runId, RegisterSecret, grantedFeatures, token);
 
-        if (prepareJourney is not null) await prepareJourney(administrator, features, _actor, token);
+        if (prepareJourney is not null) await prepareJourney(administrator, features, _actor, RegisterSecret, token);
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "initialization.json"),
             new { catalog = ReusableSqlServerDatabase.Catalog, devRun = _devRun, actorId = _actor.AccountId, formalInitialization = true }, token);
     }

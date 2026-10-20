@@ -18,7 +18,7 @@ public sealed class IdentityManagementControllerTests
     [Fact]
     public async Task StatusDirectionMismatch_PreservesValidationShapeAndProvidesMessageFacts()
     {
-        var controller = new IdentityAccountsController(new RecordingManagementQueryService(), new UnusedAccountApplicationService())
+        var controller = new IdentityAccountsController(new RecordingManagementQueryService(), null!, null!)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -35,7 +35,7 @@ public sealed class IdentityManagementControllerTests
     public async Task List_DefaultsToFirstTwentyAndForwardsConfirmedFilters()
     {
         var queries = new RecordingManagementQueryService();
-        var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
+        var controller = new IdentityAccountsController(queries, null!, null!);
 
         var result = await controller.List(
             query: "  ali  ",
@@ -69,7 +69,7 @@ public sealed class IdentityManagementControllerTests
         {
             SearchResult = new IdentityManagementAccountPage([], 3, 50, 121)
         };
-        var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
+        var controller = new IdentityAccountsController(queries, null!, null!);
 
         var result = await controller.List(
             query: null,
@@ -110,7 +110,7 @@ public sealed class IdentityManagementControllerTests
         {
             AccountResult = AccountView()
         };
-        var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
+        var controller = new IdentityAccountsController(queries, null!, null!);
 
         var result = await controller.GetSnapshot("account-1", CancellationToken.None);
 
@@ -143,7 +143,7 @@ public sealed class IdentityManagementControllerTests
                     new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc))
             ], 2, 10, 23)
         };
-        var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
+        var controller = new IdentityAccountsController(queries, null!, null!);
 
         var result = await controller.GetSecurityEvents("account-1", page: 2, pageSize: 10, CancellationToken.None);
 

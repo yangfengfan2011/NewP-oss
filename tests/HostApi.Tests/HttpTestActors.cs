@@ -63,12 +63,12 @@ internal static class HttpTestActors
             administrator,
             http.Role("create"),
             "/api/authorization/roles",
-            new { Code = roleCode, Name = roleName });
+            new { Code = roleCode, Name = roleName }, http.Declaration("authorization.role.create", http.Role("create")));
         var account = await FeatureHttpTestRequests.CreateAsync(
             administrator,
             http.Identity("create"),
             "/api/identity/accounts",
-            new { ECODE = accountCode, ENAME = accountName });
+            new { ECODE = accountCode, ENAME = accountName }, http.Declaration("identity.account.create", http.Identity("create")));
         var accountId = account.GetProperty("account").GetProperty("eid").GetString()!;
         await PrepareOrganizationAsync(administrator, http, account.GetProperty("account"));
         using var assignment = await FeatureHttpTestRequests.SendAsync(
@@ -76,7 +76,7 @@ internal static class HttpTestActors
             http.Role("userRoles"),
             HttpMethod.Put,
             $"/api/authorization/users/{accountId}/roles",
-            new { RoleCodes = new[] { roleCode } });
+            new { RoleCodes = new[] { roleCode } }, http.Declaration("authorization.role.userRoles", http.Role("userRoles")));
         Assert.True(
             assignment.StatusCode == HttpStatusCode.NoContent,
             await assignment.Content.ReadAsStringAsync());
@@ -120,7 +120,7 @@ internal static class HttpTestActors
             http.Declaration("organization.person.create", http.Organization("persons", "create", "list.pageActions"))));
         using var binding = await FeatureHttpTestRequests.SendAsync(administrator, http.Organization("persons", "linkUser", "detail.custom"),
             HttpMethod.Put, $"/api/organization/persons/{person}/user-binding",
-            new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "准备普通测试主体" });
+            new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "准备普通测试主体" }, http.Declaration("organization.person.linkUser", http.Organization("persons", "linkUser", "detail.custom")));
         Assert.True(binding.IsSuccessStatusCode, await binding.Content.ReadAsStringAsync());
     }
 }

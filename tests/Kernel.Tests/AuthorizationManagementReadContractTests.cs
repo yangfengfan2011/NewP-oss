@@ -23,10 +23,15 @@ public sealed class AuthorizationManagementReadContractTests
         })
         {
             var source = Assert.Single(plan.ActionDataAccessCatalog, item => item.ViewKey == view && item.Surface == surface && item.ActionKey == "userRoles");
-            Assert.Equal("authorization.role.list", source.Execution);
-            Assert.Equal("standardCrud.list", source.Provider);
-            Assert.Equal("Authorization/navigation:authorization.roles/surface:" + featureSurface + "/action:userRoles", Assert.Single(source.FeaturePositions));
-            var query = Assert.Single(source.Requirements!);
+            Assert.Equal("authorization.role.userRoles", source.BusinessBinding);
+            Assert.Null(source.Object); Assert.Empty(source.Actions);
+            var position = "Authorization/navigation:authorization.roles/surface:" + featureSurface + "/action:userRoles";
+            Assert.Contains(position, source.FeaturePositions);
+            var read = Assert.Single(plan.ActionDataAccessCatalog, item => item.ViewKey == "authorization.role.list" && item.Surface == "read");
+            Assert.Equal("authorization.role.list", read.Execution);
+            Assert.Equal("standardCrud.list", read.Provider);
+            Assert.Contains(position, read.FeaturePositions);
+            var query = Assert.Single(read.Requirements!);
             Assert.Equal("query", query.Shape); Assert.Equal("read", query.Stage);
             Assert.Equal("read", Assert.Single(Assert.Single(query.AnyOf)));
         }
@@ -43,9 +48,9 @@ public sealed class AuthorizationManagementReadContractTests
         Assert.DoesNotContain(plan.FeatureCatalog, point => point.Key == "delete" && point.ModuleId == "Authorization");
         var json = JsonSerializer.Serialize(new { moduleId = "Authorization",
                 features = plan.FeatureCatalog.Where(item => item.ModuleId == "Authorization"),
-                dataAccess = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Authorization" && item.BusinessBinding is null),
+                dataAccess = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Authorization"),
                 identityFeatures = plan.FeatureCatalog.Where(item => item.ModuleId == "Identity"),
-                identityDataAccess = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Identity" && item.BusinessBinding is null) },
+                identityDataAccess = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Identity") },
                 new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
         if (Environment.GetEnvironmentVariable("NEWP_AUTHORIZATION_READ_FIXTURE_EXPORT") is { Length: > 0 } path) File.WriteAllText(path, json);
         else

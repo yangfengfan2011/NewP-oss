@@ -32,6 +32,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<ICP.Platform.Persistence.Ownership.IAccountOwnershipDirectory, OrganizationAccountOwnershipDirectory>();
         services.AddScoped<ICP.Platform.Persistence.Ownership.ITransactionalAccountOwnershipDirectory, TransactionalAccountOwnershipDirectory>();
         services.AddScoped<OrganizationInitializationService>();
+        services.AddScoped<OrganizationInitializationButtonHandler>();
         services.AddScoped<ICP.Platform.Identity.Contracts.IIdentityAdmissionPolicy, OrganizationAdmissionPolicy>();
         services.AddScoped<OrganizationAdmissionCommitParticipant>();
         foreach (var model in new[] { "Company", "Department", "Position", "Person" })
@@ -75,6 +76,8 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IPositionDirectory, PlatformQueryPositionDirectory>();
         services.AddScoped<IPersonUserBindingRepository, EfPersonUserBindingRepository>();
         services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();
+        services.AddScoped<PersonLifecycleButtonHandler>();
+        services.AddScoped<PersonBindingButtonHandler>();
         services.AddScoped<PersonLifecycleActionCore>();
         services.AddScoped<PersonUserBindingActionCore>();
         services.AddScoped<PersonUserBindingService>(static provider => new PersonUserBindingService(

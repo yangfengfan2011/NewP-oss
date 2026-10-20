@@ -9,11 +9,13 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 [ApiController, Route("api/authorization/workbench"), EndpointModule("Authorization")]
 [ServiceFilter(typeof(DataExecutionExceptionFilter))]
 public sealed class FeatureWorkbenchController(RoleManagementQuery roles, ActiveFeatureCatalog catalog,
-    RoleFeatureAssignments assignments) : ControllerBase
+    RoleFeatureAssignments assignments, IButtonBusinessExecutor buttons, FeatureGrantsButtonHandler handler,
+    ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan plan) : ControllerBase
 {
     /// <summary>公开完整活动目录，不以操作者已有授权裁剪可配置目录；动态资格由当前主体投影提供。</summary>
     [HttpGet("catalog"), RequireFeature("authorization.workbench.read")]
-    public IActionResult Catalog() => Ok(new FeatureCatalogResponse(catalog.Snapshot.Points));
+    public IActionResult Catalog() => Ok(new FeatureCatalogResponse(catalog.Snapshot.Points, plan.ActionDataAccessCatalog.Where(button =>
+        button.ModuleId == "Authorization" && button.ViewKey.StartsWith("feature:", StringComparison.Ordinal)).ToArray()));
 
     /// <summary>角色名称或代码搜索复用正式数据库分页查询。</summary>
     [HttpGet("roles"), RequireFeature("authorization.workbench.read")]
@@ -30,13 +32,13 @@ public sealed class FeatureWorkbenchController(RoleManagementQuery roles, Active
     }
 
     /// <summary>独立保存动作一次提交完整集合；校验失败保留明确 Problem Details。</summary>
-    [HttpPut("roles/{roleId}"), RequireFeature("authorization.workbench.save")]
+    [HttpPut("roles/{roleId}"), RequireFeature("authorization.workbench.save"), ButtonBusinessHandler(typeof(FeatureGrantsButtonHandler))]
     public async Task<IActionResult> Save(string roleId, [FromBody] FeatureGrantRequest request, CancellationToken cancellationToken)
     {
         try
         {
             if (request.Positions is null) throw new RolePermissionValidationException("必须提供完整功能集合。", "AUTHORIZATION_FEATURE_SET_REQUIRED");
-            await assignments.ReplaceAsync(roleId, request.Positions, cancellationToken);
+            await buttons.ExecuteAsync(handler, new FeatureGrantsButtonInput(roleId, request.Positions), cancellationToken);
             return NoContent();
         }
         catch (RolePermissionValidationException exception)
@@ -52,4 +54,5 @@ public sealed class FeatureWorkbenchController(RoleManagementQuery roles, Active
 /// <summary>角色授权的完整替换请求，空数组明确清空，省略集合无效。</summary>
 public sealed record FeatureGrantRequest(IReadOnlyList<string>? Positions);
 /// <summary>工作台的完整活动目录；不混入过期主体授权快照。</summary>
-public sealed record FeatureCatalogResponse(IReadOnlyList<ICP.Platform.Kernel.ModulePlanning.FeaturePoint> Points);
+public sealed record FeatureCatalogResponse(IReadOnlyList<ICP.Platform.Kernel.ModulePlanning.FeaturePoint> Points,
+    IReadOnlyList<ICP.Platform.Kernel.ModulePlanning.ActionDataAccessRequirement> Buttons);

@@ -10,7 +10,7 @@ namespace ICP.Platform.Modules.Organization.Controllers;
 [ApiController]
 [Route("api/organization/initialization")]
 [EndpointModule("Organization")]
-public sealed class OrganizationInitializationController(OrganizationInitializationService service) : ControllerBase
+public sealed class OrganizationInitializationController(IButtonBusinessExecutor buttons, OrganizationInitializationButtonHandler handler) : ControllerBase
 {
     /// <summary>只有可信内置管理员可见初始化动作；普通授权不会提升该维护身份。</summary>
     [HttpGet("eligibility")]
@@ -20,10 +20,11 @@ public sealed class OrganizationInitializationController(OrganizationInitializat
     /// <summary>在管理员和功能双重资格下显式执行无请求载荷的组织初始化。</summary>
     [HttpPost]
     [Authorize(Policy = "AdminOnly")]
-    [RequireFeature("organization.company.initialize")]
+    [RequireFeature("organization.company.initialize"), ButtonBusinessHandler(typeof(OrganizationInitializationButtonHandler))]
     public async Task<ActionResult<OrganizationInitializationResult>> Initialize(CancellationToken cancellationToken = default)
     {
-        try { return Ok(await service.InitializeAsync(cancellationToken)); }
+        try { return Ok(await buttons.ExecuteAsync(handler, new OrganizationInitializationButtonInput(), cancellationToken)); }
+        catch (ActionDataAccessException exception) { return ActionDataAccessProblem.ToResult(exception, exception.Code); }
         catch (OrganizationInitializationConflictException)
         {
             var problem = new ProblemDetails { Status = 409, Title = "ORGANIZATION_INITIALIZATION_CONFLICT" };

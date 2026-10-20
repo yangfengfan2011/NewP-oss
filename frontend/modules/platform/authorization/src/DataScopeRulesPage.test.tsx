@@ -18,6 +18,7 @@ Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: false, ad
 const originalStyle = window.getComputedStyle.bind(window);
 window.getComputedStyle = element => originalStyle(element);
 afterEach(() => { vi.clearAllMocks(); });
+const buttons = [{ id: 'capsule-rule-button', businessBinding: 'authorization.dataScope.save', featurePositions: ['save'] }];
 const clickText = async (label: string, selector = 'button') => {
   const item = [...document.querySelectorAll(selector)].find(item => item.textContent?.replace(/\s/g, '') === label.replace(/\s/g, '')) as HTMLElement;
   if (!item) throw new Error(`未找到 ${label}`);
@@ -36,7 +37,7 @@ const addCondition = async () => { await clickText('新建条件'); await clickT
 it('saves row order as unique priorities and restores it from an unordered response', async () => {
   const catalog = { actions: [{ key: 'read', title: '读取', enabled: true }],
     subjectTypes: [{ key: 'all', title: '所有用户', requiresId: false }],
-    features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+    buttons, features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
     resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }] };
   let persisted = { id: 'order', rootId: 'order', parentId: null, name: '主体顺序', enabled: true, resourceKey: 'organization.person',
     condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '甲' }, children: [],
@@ -74,7 +75,7 @@ it('offers explicit rename, allocates unused names and blocks duplicate saves', 
     resourceKey: 'organization.person', condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '' }, subjects: [], children: [] };
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
     ? new Response(null, { status: 204 }) : new Response(JSON.stringify(url.endsWith('/catalog')
-      ? { features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }], resources: [
+      ? { buttons, features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }], resources: [
         { resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }] }
       : [saved]))));
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
@@ -138,7 +139,7 @@ it('cycles each opinion independently, preserves it across tabs and only persist
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
     ? new Response(null, { status: 204 }) : new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', title: '读取', enabled: true }, { key: 'edit', title: '编辑', enabled: true }],
-      features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      buttons, features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
       resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [rule]))));
   let lifecycle!: Parameters<PageProps['reportState']>;
@@ -177,7 +178,7 @@ it('loads minimal names for multiple subjects and preserves identity context and
     condition: { type: 'attribute', field: 'CompanyId', operator: 'equal', value: null, contextKey: 'current.company' },
     subjects: [{ id: 'company', type: 'company', subjectId: 'company-id', priority: 1, actions: { read: 'deny' } },
       { id: 'department', type: 'department', subjectId: 'department-id', priority: 20, actions: { read: 'allow' }, matchOptions: { includeDescendants: true } }], children: [] };
-  const catalog = { actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+  const catalog = { actions: [{ key: 'read', enabled: true }], buttons, features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
     subjectTypes: [{ key: 'all', title: '所有用户', requiresId: false }, { key: 'company', title: '公司', requiresId: true },
       { key: 'department', title: '部门', requiresId: true, supportsDescendants: true }],
     contextValues: [{ key: 'current.company', title: '当前公司', valueType: 'String' }],
@@ -228,7 +229,7 @@ it('keeps stable root and subject identities after failed save and distinguishes
     if (init?.method === 'PUT') return new Promise((_resolve, reject) => { fail = () => reject(new TypeError('offline')); });
     return Promise.resolve(new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', title: '读取', enabled: false }],
-      features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      buttons, features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
       resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [])));
   });
@@ -267,7 +268,7 @@ it('keeps the draft and places a server error at the nested condition named in P
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
     ? new Response(JSON.stringify({ title: 'diagnostic only', code: 'DataScope.InvalidConfiguration', reasonKey: 'AuthorizationErrors.DATA_SCOPE_VALUE_TYPE_MISMATCH', args: { conditionPath: '1.2' } }), { status: 400 })
     : new Response(JSON.stringify(url.endsWith('/catalog') ? {
-      actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      actions: [{ key: 'read', enabled: true }], buttons, features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
       resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' },
         fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [rule]))));
@@ -291,7 +292,7 @@ it('edits nested nodes in one root draft and sends the complete tree on save', a
     subjects: [], children: [] };
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
     ? new Response(null, { status: 204 }) : new Response(JSON.stringify(url.endsWith('/catalog') ? {
-      actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      actions: [{ key: 'read', enabled: true }], buttons, features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
       resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' },
         fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [rule, { ...rule, id: 'other', rootId: 'other', name: '另一根' }]))));
@@ -339,7 +340,7 @@ it('selects the failing child and keeps its condition error inline', async () =>
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
     ? new Response(JSON.stringify({ title: 'diagnostic only', code: 'DataScope.InvalidConfiguration', reasonKey: 'AuthorizationErrors.DATA_SCOPE_VALUE_TYPE_MISMATCH', args: { nodeId: 'child', conditionPath: '1.2' } }), { status: 400 })
     : new Response(JSON.stringify(url.endsWith('/catalog') ? {
-      actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      actions: [{ key: 'read', enabled: true }], buttons, features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
       contextValues: [{ key: 'current.person', title: '当前人员', valueType: 'String' }],
       businessConditions: [{ key: 'organization.person.departmentEnabled', title: '人员所属部门已启用',
         modelKeys: ['Person'], hasReadContribution: false }],

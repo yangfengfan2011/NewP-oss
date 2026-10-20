@@ -47,7 +47,7 @@ public sealed class PersonUserBindingsControllerTests
 
     private static PersonUserBindingsController Controller(IPersonUserBindingService service)
     {
-        var controller = new PersonUserBindingsController(service)
+        var controller = new PersonUserBindingsController(service, new DirectCommandExecutor(), new PersonBindingButtonHandler(service))
         {
             ControllerContext = new ControllerContext
             {

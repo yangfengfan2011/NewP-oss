@@ -62,7 +62,7 @@
       }
     ],
     "featureActions": [
-      { "key": "linkUser", "titleKey": "Action_LinkUser", "behaviorKey": "organization.person.linkUser", "readBehaviors": ["organization.person.linkUser.lookup"] }
+      { "key": "linkUser", "handlerKey": "linkUser", "titleKey": "Action_LinkUser", "behaviorKey": "organization.person.linkUser", "readBehaviors": ["organization.person.linkUser.lookup"] }
     ],
     "summaryBlocks": [
       "userBinding",

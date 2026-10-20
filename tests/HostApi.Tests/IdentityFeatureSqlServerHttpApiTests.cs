@@ -31,7 +31,7 @@ public sealed class IdentityFeatureSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.Forbidden, missing.StatusCode);
         using var wrong = await SendAsync(admin, http.Identity(), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "wrong", ENAME = "错位置" });
         Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
-        var created = await CreateAsync(admin, create, "/api/identity/accounts", new { ECODE = "identity-position", ENAME = "位置账号" });
+        var created = await CreateAsync(admin, create, "/api/identity/accounts", new { ECODE = "identity-position", ENAME = "位置账号" }, http.Declaration("identity.account.create", create));
         var account = created.GetProperty("account");
         var id = account.GetProperty("eid").GetString();
         var revision = account.GetProperty("revision").GetInt64();
@@ -51,8 +51,13 @@ public sealed class IdentityFeatureSqlServerHttpApiTests
             new { TargetStatus = "Disabled", ExpectedRevision = revision, Reason = "旧入口" });
         Assert.Equal(HttpStatusCode.Forbidden, legacy.StatusCode);
         using var disabled = await SendAsync(admin, http.Identity("disable"), HttpMethod.Put, $"/api/identity/accounts/{id}/status/disable",
-            new { TargetStatus = "Disabled", ExpectedRevision = revision, Reason = "正式停用" });
+            new { TargetStatus = "Disabled", ExpectedRevision = revision, Reason = "正式停用" }, http.Declaration("identity.account.disable", http.Identity("disable")));
         Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+        using var noButton = await SendAsync(admin, create, HttpMethod.Post, "/api/identity/accounts", new { ECODE = "no-button", ENAME = "缺按钮" });
+        Assert.Equal(HttpStatusCode.BadRequest, noButton.StatusCode);
+        using var crossed = await SendAsync(admin, http.Identity("disable"), HttpMethod.Put, $"/api/identity/accounts/{id}/status/disable",
+            new { TargetStatus = "Disabled", ExpectedRevision = revision, Reason = "借创建按钮" }, http.Declaration("identity.account.create", create));
+        Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(
             fixture,
             admin,

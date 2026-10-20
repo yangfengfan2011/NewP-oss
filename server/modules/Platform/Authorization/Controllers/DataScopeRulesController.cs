@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -7,13 +8,17 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 
 /// <summary>独立规则管理资格由正式功能流水线验证，Controller 不拥有规则语义。</summary>
 [ApiController, Route("api/authorization/data-scope"), EndpointModule("Authorization")]
+[ServiceFilter(typeof(DataExecutionExceptionFilter))]
 public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScopeRules rules, DataScopeIdentities identities,
-    ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan plan) : ControllerBase
+    ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan plan, IButtonBusinessExecutor buttons,
+    RuleSaveButtonHandler saveHandler, RuleDeleteButtonHandler deleteHandler) : ControllerBase
 {
     /// <summary>管理目录包含显式资源身份和动作开关；停用动作仍可配置。</summary>
     [HttpGet("catalog"), RequireFeature("authorization.dataScope.read")]
     public IActionResult Catalog() => Ok(new
     {
+        buttons = plan.ActionDataAccessCatalog.Where(button => button.ModuleId == "Authorization"
+            && button.ViewKey.StartsWith("feature:", StringComparison.Ordinal)).ToArray(),
         actions = catalog.Actions,
         subjectTypes = identities.SubjectTypes,
         contextValues = identities.ContextValues,
@@ -49,13 +54,13 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
         Ok(await rules.ListAsync(page, cancellationToken));
 
     /// <summary>完整校验后保存整根；只有配置校验错误翻译为 400，执行故障继续传播。</summary>
-    [HttpPut("rules/{id}"), RequireFeature("authorization.dataScope.save")]
+    [HttpPut("rules/{id}"), RequireFeature("authorization.dataScope.save"), ButtonBusinessHandler(typeof(RuleSaveButtonHandler))]
     public async Task<IActionResult> Save(string id, DataScopeRuleDto rule, CancellationToken cancellationToken)
     {
         try
         {
             if (id != rule.Id) throw new RolePermissionValidationException("规则身份与目标不一致。", "DATA_SCOPE_RULE_TARGET_MISMATCH", field: "id");
-            await rules.SaveAsync(rule, cancellationToken);
+            await buttons.ExecuteAsync(saveHandler, rule, cancellationToken);
             return NoContent();
         }
         catch (RolePermissionValidationException exception)
@@ -63,10 +68,10 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
     }
 
     /// <summary>删除根规则及完整子树，配置和实际旧值审计共用一次事务。</summary>
-    [HttpDelete("rules/{id}"), RequireFeature("authorization.dataScope.save")]
+    [HttpDelete("rules/{id}"), RequireFeature("authorization.dataScope.save"), ButtonBusinessHandler(typeof(RuleDeleteButtonHandler))]
     public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
     {
-        try { await rules.DeleteAsync(id, cancellationToken); return NoContent(); }
+        try { await buttons.ExecuteAsync(deleteHandler, id, cancellationToken); return NoContent(); }
         catch (RolePermissionValidationException exception)
         { return BadRequest(AuthorizationProblem.From(exception, "DataScope.InvalidConfiguration")); }
     }

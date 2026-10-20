@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
@@ -9,16 +10,24 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 [ApiController]
 [Route("api/authorization/roles")]
 [EndpointModule("Authorization")]
+[ServiceFilter(typeof(DataExecutionExceptionFilter))]
 public class RoleController : ControllerBase
 {
     private readonly IRoleService _roleService;
     private readonly RoleManagementQuery _query;
+    private readonly IButtonBusinessExecutor _buttons;
+    private readonly RoleCreateButtonHandler _create;
+    private readonly RoleUpdateButtonHandler _update;
 
     // 组合普通命令与有界查询，管理动作由各自的位置准入。
-    public RoleController(IRoleService roleService, RoleManagementQuery query)
+    public RoleController(IRoleService roleService, RoleManagementQuery query, IButtonBusinessExecutor buttons,
+        RoleCreateButtonHandler create, RoleUpdateButtonHandler update)
     {
         _roleService = roleService;
         _query = query;
+        _buttons = buttons;
+        _create = create;
+        _update = update;
     }
 
     /// <summary>标准列表在存储侧按代码筛选及分页，旧列表 API 保持原协议。</summary>
@@ -53,12 +62,12 @@ public class RoleController : ControllerBase
 
     /// <summary>创建普通角色，只翻译确定性业务拒绝，依赖异常继续传播。</summary>
     [HttpPost]
-    [RequireFeature("authorization.role.create")]
+    [RequireFeature("authorization.role.create"), ButtonBusinessHandler(typeof(RoleCreateButtonHandler))]
     public async Task<ActionResult<RoleDto>> CreateRole([FromBody] RoleDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            var role = await _roleService.CreateRoleAsync(dto, User.Identity?.Name, cancellationToken);
+            var role = await _buttons.ExecuteAsync(_create, new RoleCreateButtonInput(dto, User.Identity?.Name), cancellationToken);
             return CreatedAtAction(nameof(GetRoleById), new { roleId = role.Id }, role);
         }
         catch (RoleValidationException ex)
@@ -69,12 +78,12 @@ public class RoleController : ControllerBase
 
     /// <summary>保留旧更新协议和管理员保护，只将确定性业务拒绝翻译为请求错误。</summary>
     [HttpPut("{roleId}")]
-    [RequireFeature("authorization.role.update")]
+    [RequireFeature("authorization.role.update"), ButtonBusinessHandler(typeof(RoleUpdateButtonHandler))]
     public async Task<ActionResult<RoleDto>> UpdateRole(string roleId, [FromBody] RoleDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            var role = await _roleService.UpdateRoleAsync(roleId, dto, User.Identity?.Name, cancellationToken);
+            var role = await _buttons.ExecuteAsync(_update, new RoleUpdateButtonInput(roleId, dto, User.Identity?.Name), cancellationToken);
             return Ok(role);
         }
         catch (RoleValidationException ex)

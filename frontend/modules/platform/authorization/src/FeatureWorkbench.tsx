@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Card, Checkbox, Input, List, Modal, Pagination, Space, Spin, Tag, Tree, Typography } from "antd";
 import useMessage from "antd/es/message/useMessage";
 import { formatRequestError, platformFetch, useAuthorization, useLocalization } from "@icp-platform/core";
-import { StandardCrudRequestError, type PageProps } from "@icp-platform/sdk";
+import { StandardCrudRequestError, standardCrudRequestHeaders, type ActionDataAccessRequirement, type PageProps } from "@icp-platform/sdk";
 import { AntdLocaleProvider } from '@icp-platform/ui/locale';
 import { requestRole } from "./roleResource";
 import { buildFeatureTree, changeBranch, featureDiff, featureTreeKeys, type FeaturePoint } from "./featureTree";
@@ -11,7 +11,7 @@ import './featureWorkbench.css';
 interface RoleSummary { id: string; code: string; displayName: string; isEnabled: boolean }
 interface RoleState { role: RoleSummary; positions: string[] }
 interface RolePage { items: { EID: string; ECODE: string; ENAME: string; IsEnabled: boolean }[]; total: number }
-interface Catalog { points: FeaturePoint[] }
+interface Catalog { points: FeaturePoint[]; buttons: ActionDataAccessRequirement[] }
 const endpoint = "/api/authorization/workbench";
 function SavedMessage() { const { t } = useLocalization(); return <>{t('RoleView.Saved', '授权已保存')}</>; }
 
@@ -98,12 +98,14 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
     if (pending.current || readOnly || !current || !catalog || missingEntries.length > 0) return false;
     const action = catalog.points.find(point => point.behaviorKey === "authorization.workbench.save");
     if (!action) { setError(new StandardCrudRequestError('保存功能声明不可用', 0, {}, { reasonKey: 'AuthorizationMessages.SaveUnavailable' })); return false; }
+    const matches = catalog.buttons?.filter(button => button.businessBinding === action.behaviorKey && button.featurePositions.includes(action.position));
+    if (matches?.length !== 1) { setError(new StandardCrudRequestError('保存按钮身份不可用', 0, {}, { reasonKey: 'AuthorizationMessages.SaveUnavailable' })); return false; }
     pending.current = true;
     setSaving(true);
     setError("");
     try {
       await requestRole(platformFetch as typeof fetch, `${endpoint}/roles/${encodeURIComponent(current.role.id)}`, {
-        method: "PUT", headers: { "Content-Type": "application/json", "X-NewP-Feature": action.position },
+        method: "PUT", headers: { "Content-Type": "application/json", ...standardCrudRequestHeaders({ featurePosition: action.position, dataAccess: matches[0] }) },
         body: JSON.stringify({ positions: [...draft] }),
       });
       setCurrent({ ...current, positions: [...draft] });

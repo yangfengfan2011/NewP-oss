@@ -13,7 +13,7 @@ import {
 interface PersonUserBindingCardProps {
   summary: StandardCrudSummaryBlock<PersonUserBindingSummaryData>;
   title?: string;
-  featureAction?: { position: string; allowed: boolean };
+  featureAction?: { position: string; allowed: boolean; buttonId?: string; dataAccess?: import('@icp-platform/sdk').ActionDataAccessRequirement };
 }
 
 export default function PersonUserBindingCard({ summary, title, featureAction }: PersonUserBindingCardProps) {
@@ -71,7 +71,7 @@ export default function PersonUserBindingCard({ summary, title, featureAction }:
         accountEid: selected.accountEid,
         expectedRevision: selected.revision,
         reason,
-      }, featureAction?.position);
+      }, featureAction?.position, featureAction?.buttonId ?? featureAction?.dataAccess?.id);
       setBinding({
         ...binding!,
         accountEid: result.accountEid,

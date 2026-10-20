@@ -15,6 +15,7 @@ function RoleOptions({ selected, onChange, featurePosition, dataAccess }: { sele
     const controller = new AbortController();
     setCatalog(undefined);
     setError('');
+    if (!dataAccess) { setError(new Error(t('AuthorizationMessages.RoleCatalogUnavailable', '角色目录读取声明不可用'))); return () => controller.abort(); }
     void requestRole(platformFetch as typeof fetch, `/api/authorization/roles/query?pageIndex=${page}&pageSize=20`, { signal: controller.signal, ...featureInit(featurePosition, dataAccess) })
       .then(result => {
         if (controller.signal.aborted) return;
@@ -22,7 +23,7 @@ function RoleOptions({ selected, onChange, featurePosition, dataAccess }: { sele
         setCatalog({ items: (result.items as Role[]).filter(role => role.ECODE !== 'LocalAdmin'), total: result.total });
       }).catch((failure: unknown) => { if (!controller.signal.aborted) setError(failure); });
     return () => controller.abort();
-  }, [page, featurePosition, dataAccess]);
+  }, [page, featurePosition, dataAccess, t]);
   if (error) return <Alert type="error" message={formatRequestError(error, t)} />;
   if (!catalog) return <Spin />;
   return <>
@@ -33,7 +34,7 @@ function RoleOptions({ selected, onChange, featurePosition, dataAccess }: { sele
     <Pagination current={page} pageSize={20} total={catalog.total} showSizeChanger={false} onChange={setPage} />
   </>;
 }
-export function UserRoleInput({ value, onChange, featurePosition, dataAccess }: StandardCrudActionInputRenderContext) {
+export function UserRoleInput({ value, onChange, featurePosition, dataAccessDeclarations }: StandardCrudActionInputRenderContext) {
   const { t } = useLocalization();
   const [query, setQuery] = useState('');
   const [accountId, setAccountId] = useState<string>();
@@ -66,6 +67,9 @@ export function UserRoleInput({ value, onChange, featurePosition, dataAccess }: 
   // 共享动作持有输入；用户选择不重新触发目录读取，切换账号取消旧结果。
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, featurePosition]);
+  const roleSources = dataAccessDeclarations?.filter(source => source.viewKey === 'authorization.role.list' && source.surface === 'read'
+    && source.execution === 'authorization.role.list' && featurePosition && source.featurePositions.includes(featurePosition));
+  const roleRead = roleSources?.length === 1 ? roleSources[0] : undefined;
   const selected = isStandardCrudRecord(value) && Array.isArray(value.codes) ? value.codes as string[] : [];
   return <div>
     <Typography.Paragraph>{t('RoleView.AccountHelp', '选择已有普通账号，完整保存已配置角色。停用角色不产生有效权限。')}</Typography.Paragraph>
@@ -74,6 +78,6 @@ export function UserRoleInput({ value, onChange, featurePosition, dataAccess }: 
       options={accounts.map(account => ({ value: account.id, label: `${account.name} (${account.code})${account.status === 'Disabled' ? ' · ' + t('RoleView.DisabledAccount', '停用账号') : ''}` }))} />
     {!!error && <Alert type="error" message={formatRequestError(error, t)} />}
     {loading && <Spin />}
-    {ready && !error && <RoleOptions featurePosition={featurePosition} dataAccess={dataAccess} selected={selected} onChange={codes => onChange({ accountId, codes })} />}
+    {ready && !error && <RoleOptions featurePosition={featurePosition} dataAccess={roleRead} selected={selected} onChange={codes => onChange({ accountId, codes })} />}
   </div>;
 }

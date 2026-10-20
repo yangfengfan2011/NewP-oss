@@ -52,7 +52,7 @@ public sealed class OrganizationFeatureOnlyExecutionTests
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var person = BusinessAuditSqlServerHttpApiTests.Id(await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>());
         var account = (await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
-            new { ECODE = "feature310-target", ENAME = "待绑定账号" })).GetProperty("account");
+            new { ECODE = "feature310-target", ENAME = "待绑定账号" }, http.Declaration("identity.account.create", http.Identity("create")))).GetProperty("account");
         var manage = http.Organization("persons", "authorize", "detail.pageActions");
         using (var configured = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
             "/api/authorization/data-scope/objects/organization.person/" + person,
@@ -72,22 +72,38 @@ public sealed class OrganizationFeatureOnlyExecutionTests
         using (var noFeature = await FeatureHttpTestRequests.SendAsync(ordinary, link, HttpMethod.Put, prefix + "/user-binding", request))
             Assert.Equal(HttpStatusCode.Forbidden, noFeature.StatusCode);
         await http.GrantAsync(admin, actor.RoleId, link, disable, enable);
+        var before = await FeatureHttpTestRequests.ReadTextAsync(admin, http.Organization("persons"), prefix,
+            Binding("organization.person.read", http.Organization("persons")));
+        using (var missingBinding = await FeatureHttpTestRequests.SendAsync(ordinary, link, HttpMethod.Put, prefix + "/user-binding", request))
+            Assert.Equal(HttpStatusCode.BadRequest, missingBinding.StatusCode);
+        using (var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, disable, HttpMethod.Put, prefix + "/status/disable",
+            new { isEnabled = false, reason = "借用绑定按钮" }, Binding("organization.person.linkUser", link)))
+            Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);
+        using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, disable, HttpMethod.Put, prefix + "/status/disable", new { isEnabled = false, reason = "缺少按钮身份" }))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Equal(before, await FeatureHttpTestRequests.ReadTextAsync(admin, http.Organization("persons"), prefix,
+            Binding("organization.person.read", http.Organization("persons"))));
         var read = http.Organization("persons");
         using (var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, prefix, dataAccess: Binding("organization.person.read", read)))
             Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
         // 候选账号来自原Identity管理目录，不能被业务对象read规则截断。
         using (var candidates = await FeatureHttpTestRequests.SendAsync(ordinary, link, HttpMethod.Get, prefix + "/user-binding/candidates?query=feature310-target"))
             Assert.Equal(HttpStatusCode.OK, candidates.StatusCode);
-        using (var bound = await FeatureHttpTestRequests.SendAsync(ordinary, link, HttpMethod.Put, prefix + "/user-binding", request))
+        using (var bound = await FeatureHttpTestRequests.SendAsync(ordinary, link, HttpMethod.Put, prefix + "/user-binding", request, Binding("organization.person.linkUser", link)))
             Assert.Equal(HttpStatusCode.OK, bound.StatusCode);
         foreach (var (feature, enabled) in new[] { (disable, false), (enable, true) })
         {
             using var changed = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Put,
-                prefix + "/status/" + (enabled ? "enable" : "disable"), new { isEnabled = enabled, reason = "无需对象read的原管理命令" });
+                prefix + "/status/" + (enabled ? "enable" : "disable"), new { isEnabled = enabled, reason = "无需对象read的原管理命令" }, Binding("organization.person." + (enabled ? "enable" : "disable"), feature));
             Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
         }
 
+        await http.GrantAsync(admin, actor.RoleId, link, disable);
+        using (var revoked = await FeatureHttpTestRequests.SendAsync(ordinary, enable, HttpMethod.Put, prefix + "/status/enable",
+            new { isEnabled = true, reason = "撤销后提交" }, Binding("organization.person.enable", enable)))
+            Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
+
         ActionDataAccessRequirement? Binding(string execution, FeaturePoint feature) => plan.ActionDataAccessCatalog.SingleOrDefault(item =>
-            item.Execution == execution && item.FeaturePositions.Contains(feature.Position));
+            (item.Execution == execution || item.BusinessBinding == execution) && item.FeaturePositions.Contains(feature.Position));
     }
 }

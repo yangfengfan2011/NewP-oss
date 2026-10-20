@@ -10,12 +10,14 @@ describe('普通角色正式适配器', () => {
   it('创建仅发送允许的字段，编辑保留停用状态且不回写保留身份', async () => {
     const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(new Response('{}'));
     const resource = createRoleResource(fetcher);
-    await resource.dataAdapter.create!({ ECODE: 'ordinary', ENAME: '角色', Description: '说明', IsBuiltIn: true }, undefined, { featurePosition: 'create-position' });
+    await resource.dataAdapter.create!({ ECODE: 'ordinary', ENAME: '角色', Description: '说明', IsBuiltIn: true }, undefined, { featurePosition: 'create-position', buttonId: 'create-button' });
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-NewP-Feature')).toBe('create-position');
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-NewP-Button')).toBe('create-button');
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ Code: 'ordinary', Name: '角色', Description: '说明' });
     fetcher.mockResolvedValue(new Response('{}'));
-    await resource.dataAdapter.update!('role-1', { ENAME: '改名', Description: '新说明', IsBuiltIn: true }, { IsEnabled: false }, { featurePosition: 'edit-position' });
+    await resource.dataAdapter.update!('role-1', { ENAME: '改名', Description: '新说明', IsBuiltIn: true }, { IsEnabled: false }, { featurePosition: 'edit-position', buttonId: 'edit-button' });
     expect(new Headers(fetcher.mock.calls[1][1]?.headers).get('X-NewP-Feature')).toBe('edit-position');
+    expect(new Headers(fetcher.mock.calls[1][1]?.headers).get('X-NewP-Button')).toBe('edit-button');
     expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual({ Name: '改名', Description: '新说明', IsEnabled: false });
   });
   it('列表和详情授权动作只返回工作台预选导航，不再读写旧权限弹窗', async () => {
@@ -37,8 +39,9 @@ describe('普通角色正式适配器', () => {
     const resource = createRoleResource(fetcher);
     await expect(resource.actionHandlers!.userRoles({ input: undefined })).rejects.toThrow('请选择账号');
     expect(fetcher).not.toHaveBeenCalled();
-    await resource.actionHandlers!.userRoles({ input: { accountId: 'user/1', codes: ['shown', 'offpage'] }, featurePosition: 'membership-position' });
+    await resource.actionHandlers!.userRoles({ input: { accountId: 'user/1', codes: ['shown', 'offpage'] }, featurePosition: 'membership-position', buttonId: 'membership-button' });
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-NewP-Feature')).toBe('membership-position');
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-NewP-Button')).toBe('membership-button');
     expect(fetcher.mock.calls[0][0]).toBe('/api/authorization/users/user%2F1/roles');
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ RoleCodes: ['shown', 'offpage'] });
     fetcher.mockRejectedValue(new TypeError('network'));

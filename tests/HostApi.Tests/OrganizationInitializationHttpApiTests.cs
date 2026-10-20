@@ -17,18 +17,21 @@ public sealed class OrganizationInitializationHttpApiTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         using var admin = await fixture.LoginAdministratorAsync();
-        var initialize = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.company.initialize");
+        var http = new FeatureHttpTestRequests(fixture);
+        var initialize = http.Organization("companies", "initialize", "list.pageActions");
         using var allowed = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Get, "/api/organization/initialization/eligibility");
         Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
         Assert.True((await allowed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("allowed").GetBoolean());
-        using var initialized = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Post, "/api/organization/initialization");
+        using (var missing = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Post, "/api/organization/initialization"))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using var initialized = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Post, "/api/organization/initialization", dataAccess: http.Declaration("organization.company.initialize", initialize));
         Assert.True(initialized.StatusCode == HttpStatusCode.OK, await initialized.Content.ReadAsStringAsync());
         var first = await initialized.Content.ReadFromJsonAsync<JsonElement>();
         var companyId = first.GetProperty("companyId").GetString()!;
         var departmentId = first.GetProperty("departmentId").GetString()!;
         Assert.True(first.GetProperty("companyCreated").GetBoolean());
         Assert.True(first.GetProperty("departmentCreated").GetBoolean());
-        using var retry = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Post, "/api/organization/initialization");
+        using var retry = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Post, "/api/organization/initialization", dataAccess: http.Declaration("organization.company.initialize", initialize));
         Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
         var second = await retry.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(companyId, second.GetProperty("companyId").GetString());
@@ -41,7 +44,7 @@ public sealed class OrganizationInitializationHttpApiTests
         using var denied = await FeatureHttpTestRequests.SendAsync(ordinary, initialize, HttpMethod.Get, "/api/organization/initialization/eligibility");
         Assert.Equal(HttpStatusCode.OK, denied.StatusCode);
         Assert.False((await denied.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("allowed").GetBoolean());
-        using var write = await FeatureHttpTestRequests.SendAsync(ordinary, initialize, HttpMethod.Post, "/api/organization/initialization");
+        using var write = await FeatureHttpTestRequests.SendAsync(ordinary, initialize, HttpMethod.Post, "/api/organization/initialization", dataAccess: http.Declaration("organization.company.initialize", initialize));
         Assert.Equal(HttpStatusCode.Forbidden, write.StatusCode);
 
         using var scope = fixture.Services.CreateScope();

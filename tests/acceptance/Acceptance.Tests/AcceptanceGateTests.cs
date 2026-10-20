@@ -14,6 +14,48 @@ namespace ICP.Platform.Acceptance.Tests;
 [Collection(AcceptanceGateCollection.Name)]
 public sealed class AcceptanceGateTests
 {
+    /// <summary>三个纯功能入口共用当前正式准备和资源清理，只覆盖实际发生接线变化的最短用户路径。</summary>
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "当前正式发行的账号改名、组织初始化和人员永久绑定及启停按钮")]
+    public async Task NativeFunctionalCommands_UseFormalDrivers()
+    {
+        var (root, runId) = PrepareRun("native-functional-commands");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        var suffix = runId[..8];
+        var code = "functional326." + suffix;
+        var personNo = "FUNCTION326-" + suffix;
+        var personName = "正式功能人员 " + suffix;
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            prepareJourney: async (client, features, _, registerSecret, token) =>
+            {
+                var createAccount = features.Action(features.Behavior("Identity", "identity.account.read"), "create", "list.pageActions");
+                var account = await WorkspaceAcceptanceFixture.SendButtonAsync(client, features, createAccount,
+                    HttpMethod.Post, "/api/identity/accounts", new { ECODE = code, ENAME = "正式功能账号 " + suffix }, token);
+                registerSecret(account.GetProperty("temporaryCredential").GetString()!);
+                var initialized = await WorkspaceAcceptanceFixture.SendButtonAsync(client, features,
+                    features.Action(features.OrganizationTab("companies"), "initialize", "list.pageActions"),
+                    HttpMethod.Post, "/api/organization/initialization", null, token);
+                await WorkspaceAcceptanceFixture.SendButtonAsync(client, features,
+                    features.Action(features.OrganizationTab("persons"), "create", "list.pageActions"),
+                    HttpMethod.Post, "/api/organization/persons", new
+                    {
+                        PersonNo = personNo, ENAME = personName, EmploymentStatus = "Active", IsEnabled = true,
+                        CompanyId = initialized.GetProperty("companyId").GetString(),
+                        DepartmentId = initialized.GetProperty("departmentId").GetString()
+                    }, token);
+            },
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var driver = new FunctionalCommandPageDriver(page);
+                await driver.RenameAccountAsync(code, "正式功能改名 " + suffix);
+                await driver.InitializeOrganizationAsync();
+                await driver.BindAndChangePersonStatusAsync(personNo, personName, code);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, journey = "functional-commands", browserActor = "administrator" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     /// <summary>岗位列表与查看Drawer各自使用正式编辑按钮；只证明真实控件到API的最短接线。</summary>
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "岗位列表编辑与详情进入编辑消费按钮唯一声明")]
     public async Task PositionButtonExecution_UsesFormalListAndDetailDriver()
@@ -156,11 +198,11 @@ public sealed class AcceptanceGateTests
         string? roleId = null;
         string? accountCode = null;
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
-            prepareJourney: async (client, features, actor, token) =>
+            prepareJourney: async (client, features, actor, _, token) =>
             {
                 var create = features.Action(features.Behavior("Authorization", "authorization.role.read"), "create", "list.pageActions");
-                var role = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/authorization/roles",
-                    new { Code = code, Name = name }, create.Position, token);
+                var role = await WorkspaceAcceptanceFixture.SendButtonAsync(client, features, create,
+                    HttpMethod.Post, "/api/authorization/roles", new { Code = code, Name = name }, token);
                 roleId = role.GetProperty("id").GetString()!;
                 accountCode = actor.ECode;
             },
@@ -190,6 +232,7 @@ public sealed class AcceptanceGateTests
                 await workbench.ClickFirstVisibleFeatureCheckboxAsync();
                 await workbench.SaveAsync(roleId!);
                 await workbench.WaitForRoleButtonEnabledAsync(name, code);
+                await new DataScopeRulesPageDriver(page).CreatePersonRuleAsync("正式规则按钮 " + runId[..8], name);
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = page.Url, journey = "authorization-management-sources", browserActor = "administrator" }, token);
             }).RunAsync(CancellationToken.None);
@@ -242,7 +285,7 @@ public sealed class AcceptanceGateTests
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
             exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
-            prepareJourney: (_, _, _, token) => fixture.PrepareOwnershipLegacyRowsAsync(token),
+            prepareJourney: (_, _, _, _, token) => fixture.PrepareOwnershipLegacyRowsAsync(token),
             browserJourney: async (page, token) =>
             {
                 var crud = new StandardCrudPageDriver(page);
@@ -266,7 +309,7 @@ public sealed class AcceptanceGateTests
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
             exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
-            prepareJourney: (_, _, _, token) => fixture.PrepareOwnershipLegacyRowsAsync(token),
+            prepareJourney: (_, _, _, _, token) => fixture.PrepareOwnershipLegacyRowsAsync(token),
             browserJourney: async (page, token) =>
             {
                 var crud = new StandardCrudPageDriver(page);
@@ -1203,7 +1246,7 @@ public sealed class AcceptanceGateTests
                 return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
                     features.Action(entry, "add", "list.custom", "folder"), features.Action(entry, "remove", "list.rowActions", "folder")];
             },
-            prepareJourney: async (administrator, features, actor, token) =>
+            prepareJourney: async (administrator, features, actor, _, token) =>
             {
                 var entry = features.Behavior("Workspace", "workspace.spaces.access");
                 await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post,
@@ -1263,7 +1306,7 @@ public sealed class AcceptanceGateTests
                     part, document, features.Behavior("Document", "document.document.download"),
                     features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder")];
             },
-            prepareJourney: async (administrator, features, actor, token) =>
+            prepareJourney: async (administrator, features, actor, _, token) =>
             {
                 var entry = features.Behavior("Workspace", "workspace.spaces.access");
                 await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/workspace/spaces/public/initialize", null, entry.Position, token);
@@ -1333,7 +1376,7 @@ public sealed class AcceptanceGateTests
                     features.Action(entry, "add", "list.custom", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
                     organization, features.NodeTab(organization, "company", "information"), features.NodeTab(organization, "department", "information")];
             },
-            prepareJourney: async (administrator, features, actor, token) =>
+            prepareJourney: async (administrator, features, actor, _, token) =>
             {
                 hostPort = administrator.BaseAddress!.Port;
                 preparedActor = actor;
@@ -1410,7 +1453,7 @@ public sealed class AcceptanceGateTests
                 return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
                     features.Action(entry, "add", "list.custom", "folder"), part, features.Action(part, "create", "list.pageActions")];
             },
-            prepareJourney: async (administrator, features, actor, token) =>
+            prepareJourney: async (administrator, features, actor, _, token) =>
             {
                 var entry = features.Behavior("Workspace", "workspace.spaces.access");
                 await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/workspace/spaces/public/initialize", null, entry.Position, token);

@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -9,16 +10,22 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 [ApiController]
 [Route("api/authorization/users")]
 [EndpointModule("Authorization")]
+[ServiceFilter(typeof(DataExecutionExceptionFilter))]
 public class UserRoleController : ControllerBase
 {
     private readonly IUserRoleAssignments _assignments;
     private readonly IIdentityAccountDirectory _accounts;
+    private readonly IButtonBusinessExecutor _buttons;
+    private readonly UserRolesButtonHandler _handler;
 
     // 账号由 Identity 稳定目录提供，控制器只翻译确定性输入错误。
-    public UserRoleController(IUserRoleAssignments assignments, IIdentityAccountDirectory accounts)
+    public UserRoleController(IUserRoleAssignments assignments, IIdentityAccountDirectory accounts,
+        IButtonBusinessExecutor buttons, UserRolesButtonHandler handler)
     {
         _assignments = assignments;
         _accounts = accounts;
+        _buttons = buttons;
+        _handler = handler;
     }
 
     /// <summary>按关键词搜索有界账号候选，停用账号仍可引用。</summary>
@@ -40,12 +47,12 @@ public class UserRoleController : ControllerBase
 
     /// <summary>完整替换普通角色，登记及提交异常继续传播。</summary>
     [HttpPut("{userId}/roles")]
-    [RequireFeature("authorization.role.userRoles")]
+    [RequireFeature("authorization.role.userRoles"), ButtonBusinessHandler(typeof(UserRolesButtonHandler))]
     public async Task<ActionResult> AssignUserRoles(string userId, [FromBody] AssignUserRolesRequest request, CancellationToken cancellationToken)
     {
         try
         {
-            await _assignments.ReplaceAsync(userId, request.RoleCodes, cancellationToken);
+            await _buttons.ExecuteAsync(_handler, new UserRolesButtonInput(userId, request.RoleCodes), cancellationToken);
             return NoContent();
         }
         catch (UserRoleValidationException ex) { return BadRequest(AuthorizationProblem.From(ex)); }

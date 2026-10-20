@@ -16,6 +16,7 @@ vi.mock('../services/organizationService', async (importOriginal) => ({
 }));
 
 import PersonUserBindingCard from '../components/PersonUserBindingCard';
+const bindingButton = { id: 'person-binding-button', moduleId: 'Organization', viewKey: 'organization.person.detail', surface: 'featureActions', actionKey: 'linkUser', execution: '', resources: ['organization.person'], actions: [], featurePositions: ['declared-link-user'], businessBinding: 'organization.person.linkUser' };
 
 function Localized({ children }: { children: ReactNode }) {
   const catalogs = Object.fromEntries(['zhs', 'en'].map(language => [language, Object.fromEntries(Object.entries(dictionary['Organization.Person']).map(([key, value]) => [`Organization.Person.${key}`, value[language as 'zhs' | 'en']]))]));
@@ -55,7 +56,7 @@ describe('PersonUserBindingCard', () => {
     document.body.append(container);
     await act(async () => {
       root = createRoot(container!);
-      root.render(<Localized><PersonUserBindingCard featureAction={{ position: 'declared-link-user', allowed: true }} summary={{
+      root.render(<Localized><PersonUserBindingCard featureAction={{ position: 'declared-link-user', allowed: true, buttonId: bindingButton.id }} summary={{
         status: 'ready',
         data: {
           personEid: 'Person_1', personName: '张三', isPersonEnabled: true,
@@ -98,7 +99,7 @@ describe('PersonUserBindingCard', () => {
 
     expect(bindMock).toHaveBeenCalledWith('Person_1', {
       accountEid: 'User_1', expectedRevision: 7, reason: '入职绑定',
-    }, 'declared-link-user');
+    }, 'declared-link-user', 'person-binding-button');
     expect(document.body.textContent).toContain('已永久绑定');
     expect(document.body.textContent).toContain('alice');
     expect(document.body.textContent).toContain('Alice');
@@ -147,7 +148,7 @@ describe('PersonUserBindingCard', () => {
     await click(button('建立永久绑定'));
     await setValue(document.querySelector<HTMLTextAreaElement>('textarea')!, '尚未提交');
     const update = async (enabled: boolean) => act(async () => root!.render(<Localized><PersonUserBindingCard
-      featureAction={{ position: 'declared-link-user', allowed: true }} summary={{ status: 'ready', data: {
+      featureAction={{ position: 'declared-link-user', allowed: true, buttonId: bindingButton.id }} summary={{ status: 'ready', data: {
         personEid: 'Person_1', personName: '更新后的人员', isPersonEnabled: enabled, accountEid: null,
         boundAt: null, boundBy: null, reason: null, account: null, isAccountAvailable: true, isAccountReadable: true,
       } }} /></Localized>));
@@ -166,7 +167,7 @@ describe('PersonUserBindingCard', () => {
     document.body.append(container);
     await act(async () => {
       root = createRoot(container!);
-      root.render(<Localized><PersonUserBindingCard featureAction={{ position: 'declared-link-user', allowed: true }} summary={{
+      root.render(<Localized><PersonUserBindingCard featureAction={{ position: 'declared-link-user', allowed: true, buttonId: bindingButton.id }} summary={{
         status: 'ready',
         data: {
           personEid: 'Person_1', personName: '张三', isPersonEnabled, accountEid: null,

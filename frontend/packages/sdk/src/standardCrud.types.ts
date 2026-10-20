@@ -349,7 +349,7 @@ export type StandardCrudActionHandler<TDetail = unknown, TRow = unknown> = ((
 /** 摘要渲染上下文；模块只接收规范化摘要块和详情数据，不读取 Host 私有状态。 */
 export interface StandardCrudSummaryRendererContext<TData = unknown> {
   /** 当前 View 已声明专用动作的正式位置及本次有效授权。 */
-  featureActions?: Readonly<Record<string, { position: string; allowed: boolean; dataAccess?: ActionDataAccessRequirement }>>;
+  featureActions?: Readonly<Record<string, { position: string; allowed: boolean; buttonId?: string; dataAccess?: ActionDataAccessRequirement }>>;
   /** 当前View的正式读取声明；摘要独立读取保持该来源，不另选权限位置。 */
   dataAccess?: ActionDataAccessRequirement;
   buttonId?: string;

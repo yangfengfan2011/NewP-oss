@@ -16,10 +16,10 @@ public sealed class RoleControllerTests
     [Fact]
     public async Task AssignmentInputs_ExposeSpecificFactsWithoutChangingRejectionStatus()
     {
-        var workbench = new FeatureWorkbenchController(null!, null!, null!);
+        var workbench = new FeatureWorkbenchController(null!, null!, null!, null!, null!, null!);
         var featureFailure = Assert.IsType<BadRequestObjectResult>(await workbench.Save("role", new FeatureGrantRequest(null), CancellationToken.None));
         Assert.Equal("AUTHORIZATION_FEATURE_SET_REQUIRED", Assert.IsType<ProblemDetails>(featureFailure.Value).Extensions["code"]);
-        var members = new UserRoleController(new UserRoleAssignments(null!, null!, null!, null!, null!, null!), null!);
+        var members = new UserRoleController(null!, null!, new DirectCommandExecutor(), new UserRolesButtonHandler(new UserRoleAssignments(null!, null!, null!, null!, null!, null!)));
         var memberFailure = Assert.IsType<BadRequestObjectResult>(await members.AssignUserRoles("account", new AssignUserRolesRequest { RoleCodes = null! }, CancellationToken.None));
         Assert.Equal("AUTHORIZATION_ROLE_SET_REQUIRED", Assert.IsType<ProblemDetails>(memberFailure.Value).Extensions["code"]);
     }
@@ -77,7 +77,7 @@ public sealed class RoleControllerTests
     {
         var service = new RoleService(repository, new RolePermissionRepository(), new UserRoleRepository(), new PlatformObjectIdGenerator());
         // 写入不消费查询协作者；使用真实业务服务验证异常从持久化一路到 HTTP adapter 的传播。
-        return new RoleController(service, null!) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        return new RoleController(service, null!, new DirectCommandExecutor(), new RoleCreateButtonHandler(service), new RoleUpdateButtonHandler(service)) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
     }
 
     private static async Task<IActionResult> InvokeAsync(RoleController controller, string operation, string target, RoleDto request) =>
@@ -100,4 +100,10 @@ public sealed class RoleControllerTests
         public Task<List<Role>> GetAllAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<List<Role>> GetByIdsAsync(IEnumerable<string> roleIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
+}
+
+internal sealed class DirectCommandExecutor : ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor
+{
+    public Task<TResult> ExecuteAsync<TInput, TState, TResult>(ICP.Platform.Authorization.Contracts.IButtonBusinessHandler<TInput, TState, TResult> handler,
+        TInput input, CancellationToken token = default) => handler.WithinBoundaryAsync(input, "", (state, inner) => handler.ExecuteAsync(state, inner), token);
 }

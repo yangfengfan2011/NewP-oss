@@ -30,6 +30,7 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
     /// <inheritdoc/>
     public override void ConfigureServices(IServiceCollection services)
     {
+        services.AddScoped<IdentityAccountButtonHandler>();
         ArgumentNullException.ThrowIfNull(services);
         services.AddScoped<IDataScopeIdentityProvider, IdentityDataScopeIdentities>();
         services.AddScoped<IDataScopeEnumFieldProvider, IdentityDataScopeEnums>();

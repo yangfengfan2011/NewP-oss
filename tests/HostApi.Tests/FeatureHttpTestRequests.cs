@@ -13,6 +13,11 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
 {
     private IReadOnlyList<ActionDataAccessRequirement> _declarations = [];
 
+    internal FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points, IReadOnlyList<ActionDataAccessRequirement> declarations) : this(points)
+    {
+        _declarations = declarations;
+    }
+
     internal FeatureHttpTestRequests(BusinessAuditHostFixture fixture) : this(fixture.FeatureCatalog)
     {
         _declarations = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog;
@@ -82,6 +87,11 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
         using (request) return await client.SendAsync(request);
     }
 
+    // 正向创建使用本夹具已保存的真实目录；未知或歧义先失败，不触发HTTP，也不按URL猜测身份。
+    internal Task<JsonElement> CreateButtonAsync(HttpClient client, FeaturePoint point, string path, object body,
+        ActionDataAccessRequirement? dataAccess = null) =>
+        CreateAsync(client, point, path, body, dataAccess ?? Declaration(point.BehaviorKey, point));
+
     internal static async Task<JsonElement> CreateAsync(HttpClient client, FeaturePoint point, string path, object body, ActionDataAccessRequirement? dataAccess = null)
     {
         using var response = await SendAsync(client, point, HttpMethod.Post, path, body, dataAccess);
@@ -108,7 +118,8 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
     {
         var positions = RuntimeFeatureCatalogTestSupport.ExpandGrantSet(points);
         using var response = await SendAsync(admin, Workbench("authorization.workbench.save"), HttpMethod.Put,
-            $"/api/authorization/workbench/roles/{roleId}", new { positions });
+            $"/api/authorization/workbench/roles/{roleId}", new { positions },
+            Declaration("authorization.workbench.save", Workbench("authorization.workbench.save")));
         Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
     }
 }

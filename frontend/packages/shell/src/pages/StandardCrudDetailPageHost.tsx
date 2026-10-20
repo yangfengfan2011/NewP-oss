@@ -246,7 +246,7 @@ function StandardCrudDetailPageContent<TDetail>({
       const resolution = features.action(key, 'detail.custom');
       return resolution.kind === 'unresolved'
         ? []
-        : [[key, { position: resolution.position, allowed: resolution.kind === 'allowed', dataAccess: (action as Record<string, unknown>).dataAccess as ActionDataAccessRequirement | undefined }]];
+        : [[key, { position: resolution.position, allowed: resolution.kind === 'allowed', buttonId: (action as Record<string, unknown>).buttonId as string | undefined, dataAccess: (action as Record<string, unknown>).dataAccess as ActionDataAccessRequirement | undefined }]];
     }));
   }, [features, view.featureActions]);
   const presentation = useMemo(() => currentNormalizedDetail
@@ -370,7 +370,8 @@ function StandardCrudDetailPageContent<TDetail>({
             if (operationResultPresenterRegistry.resolve(result)) setPresentedOperationResult(result);
           }}
           refresh={refresh}
-          context={{ id, detail: presentedInteraction.detail.value as TDetail, queryScope: host.input.queryScope, instance: actionInstance }}
+          context={{ id, detail: presentedInteraction.detail.value as TDetail, queryScope: host.input.queryScope, instance: actionInstance,
+            dataAccessDeclarations: runtimeMetadata?.manifest.modules.flatMap(module => module.dataAccess ?? []) }}
         />
       )
       : undefined

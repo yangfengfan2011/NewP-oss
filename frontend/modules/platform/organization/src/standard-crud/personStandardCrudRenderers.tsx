@@ -10,7 +10,7 @@ export function PersonUserBindingSummary({
   title,
   featureAction,
 }: {
-  featureAction?: { position: string; allowed: boolean };
+  featureAction?: { position: string; allowed: boolean; buttonId?: string; dataAccess?: import('@icp-platform/sdk').ActionDataAccessRequirement };
   summary: StandardCrudSummaryBlock<PersonUserBindingSummaryData>;
   title: string;
 }) {

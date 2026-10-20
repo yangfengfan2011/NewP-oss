@@ -143,6 +143,7 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
   return <StandardCrudHostEnvironmentContext.Provider value={environment}>
     {pageKey === 'platform.list' ? <ListPage viewKey={viewKey} registration={registration} />
       : <DetailPage viewKey={viewKey} id={input.recordId ?? null} registration={registration}
-      readSourceKey={typeof input.parameters.detailReadSourceKey === 'string' ? input.parameters.detailReadSourceKey : undefined} />}
+      readSourceKey={typeof input.parameters.detailReadSourceKey === 'string' ? input.parameters.detailReadSourceKey : undefined}
+      readSourceDataAccess={typeof input.parameters.detailReadSourceKey === 'string' ? input.dataAccess : undefined} />}
   </StandardCrudHostEnvironmentContext.Provider>;
 }

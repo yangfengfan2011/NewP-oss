@@ -1,3 +1,4 @@
+import { bindFormalRuntimeMetadata, formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import { toolbarMenuAction, toolbarActionDisabled } from './toolbarTestActions';
 // @vitest-environment jsdom
 import { readFileSync, readdirSync } from 'node:fs';
@@ -59,7 +60,7 @@ async function mount(hasObjectRead: boolean, transferBatch = false) {
     }
     return { moduleId: owner, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features };
   });
-  const entries = buildPageEntriesFromNavDocuments(metadata.navDocuments);
+  const entries = buildPageEntriesFromNavDocuments(bindFormalRuntimeMetadata(metadata).navDocuments);
   const transferFeatures = fixture('WorkspaceTransferFeatures');
   const grants = [notificationFeatures.notificationsPosition, ...(hasObjectRead ? [notificationFeatures.readPosition] : []), ...(transferBatch ? [transferFeatures.batchPosition] : [])];
   const user = { id: 'recipient', ecode: 'recipient', ename: 'Recipient', revision: 1, mustChangePassword: false, featurePositions: grants, timeZoneId: 'UTC' };
@@ -122,8 +123,10 @@ it('opens the received original through the separately qualified Workspace read 
   await vi.waitFor(() => expect(open()).toBeDefined()); act(() => open()!.click());
   await vi.waitFor(() => expect(router.state.location.pathname).toBe('/workspace/transfers/object'));
   await vi.waitFor(() => expect(requests.some(request => new URL(request.url).pathname.endsWith('/received-lid/properties'))).toBe(true));
+  expect(requests.filter(request => new URL(request.url).pathname.endsWith('/received-lid/properties'))).toHaveLength(1);
   const properties = requests.find(request => new URL(request.url).pathname.endsWith('/received-lid/properties'))!;
   expect(properties.headers.get('X-NewP-Feature')).toBe(notificationFeatures.readPosition);
+  expect(properties.headers.get('X-NewP-Data-Declaration')).toBe(formalDataAccessFor('workspace.content.receivedProperties', 'read').id);
   expect(JSON.parse(new URL(properties.url).searchParams.get('queryScope')!)).toEqual(position);
   expect(router.state.location.state?.pageParameters.objectId).toBe('original-eid');
   expect(requests.find(request => new URL(request.url).pathname.endsWith('/notifications'))!.headers.get('X-NewP-Feature')).toBe(notificationFeatures.notificationsPosition);

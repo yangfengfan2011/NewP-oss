@@ -154,7 +154,7 @@ export function bindActionDataAccess(document: RuntimeViewDocument, requirements
   return { ...document, view: bind(view, 'read', '') };
 }
 
-/** 自定义 PageRef 沿实际 pageKey 绑定读取来源，不生成虚构 View 或功能位置。 */
+/** 自定义 PageRef 沿实际标准详情source或自定义pageKey绑定读取来源，不生成虚构 View 或功能位置。 */
 export function bindNavigationDataAccess(document: RuntimeNavItemDocument, requirements: NonNullable<RuntimeMetadataManifest['modules'][number]['dataAccess']>): RuntimeNavItemDocument {
   return { ...document, navigation: { ...document.navigation, items: document.navigation.items.map(item => {
     if (!item.page) return item;
@@ -163,9 +163,11 @@ export function bindNavigationDataAccess(document: RuntimeNavItemDocument, requi
 }
 
 /** 导航与已有页签PageRef消费同一次正式read投影，不从页面类型或首个声明猜来源。 */
-function bindPageReadDataAccess<T extends { pageKey: string; dataAccess?: unknown }>(page: T,
+function bindPageReadDataAccess<T extends { pageKey: string; parameters?: Record<string, unknown>; dataAccess?: unknown }>(page: T,
   requirements: NonNullable<RuntimeMetadataManifest['modules'][number]['dataAccess']>): T {
-  const matches = requirements.filter(requirement => requirement.viewKey === page.pageKey && requirement.surface === 'read' && requirement.actionKey === '');
+  const sourceKey = page.pageKey === 'platform.detail' && typeof page.parameters?.detailReadSourceKey === 'string'
+    ? page.parameters.detailReadSourceKey : page.pageKey;
+  const matches = requirements.filter(requirement => requirement.viewKey === sourceKey && requirement.surface === 'read' && requirement.actionKey === '');
   if (page.dataAccess === undefined && matches.length === 0) return page;
   if (page.dataAccess === undefined || matches.length !== 1) throw new Error(`页面数据声明缺失或冲突：${page.pageKey}`);
   return { ...page, dataAccess: matches[0] };

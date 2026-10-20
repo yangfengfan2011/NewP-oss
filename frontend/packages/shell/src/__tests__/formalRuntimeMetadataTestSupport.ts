@@ -50,8 +50,8 @@ function hasAuthoringReference(value: unknown): boolean {
 export function bindFormalRuntimeMetadata(value: RuntimeMetadataState): RuntimeMetadataState {
   const viewKeys = new Set(value.viewDocuments.map(document => String(document.view.key)));
   for (const document of value.viewDocuments) if (Array.isArray(document.view.tabs))
-    for (const tab of document.view.tabs) if (typeof tab.pageRef?.pageKey === 'string') viewKeys.add(tab.pageRef.pageKey);
-  for (const item of value.navDocuments.flatMap(document => document.navigation.items)) if (item.page) viewKeys.add(item.page.pageKey);
+    for (const tab of document.view.tabs) if (typeof tab.pageRef?.pageKey === 'string') viewKeys.add(tab.pageRef.pageKey === 'platform.detail' && typeof tab.pageRef.parameters?.detailReadSourceKey === 'string' ? tab.pageRef.parameters.detailReadSourceKey : tab.pageRef.pageKey);
+  for (const item of value.navDocuments.flatMap(document => document.navigation.items)) if (item.page) viewKeys.add(item.page.pageKey === 'platform.detail' && typeof item.page.parameters?.detailReadSourceKey === 'string' ? item.page.parameters.detailReadSourceKey : item.page.pageKey);
   const relevant = declarations.filter(item => viewKeys.has(item.viewKey));
   const modules = value.manifest.modules.map(module => ({ ...module,
     dataAccess: uniqueDeclarations([...relevant.filter(item => item.moduleId === module.moduleId), ...(module.dataAccess ?? [])]),

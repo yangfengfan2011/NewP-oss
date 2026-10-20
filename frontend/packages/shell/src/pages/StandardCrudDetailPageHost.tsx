@@ -45,6 +45,7 @@ interface StandardCrudDetailPageHostProps {
   id: string | null;
   registration?: StandardCrudResourceRegistration;
   readSourceKey?: string;
+  readSourceDataAccess?: ActionDataAccessRequirement;
 }
 
 class StandardCrudHostErrorBoundary extends Component<{ children: ReactNode; message: string }, { error: string | null }> {
@@ -111,6 +112,7 @@ export default function StandardCrudDetailPageHost({
   id,
   registration: loadedRegistration,
   readSourceKey,
+  readSourceDataAccess,
 }: StandardCrudDetailPageHostProps): ReactElement {
   const { t } = useLocalization();
   const runtimeMetadata = useRuntimeMetadata();
@@ -137,6 +139,7 @@ export default function StandardCrudDetailPageHost({
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
       readSourceKey={readSourceKey}
+      readSourceDataAccess={readSourceDataAccess}
       viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
     /></CrudLocaleProvider>
@@ -149,11 +152,13 @@ function StandardCrudDetailPageContent<TDetail>({
   view,
   registration: sourceRegistration,
   readSourceKey,
+  readSourceDataAccess,
   viewDocuments,
   modelDocuments,
 }: {
   id: string;
   readSourceKey?: string;
+  readSourceDataAccess?: ActionDataAccessRequirement;
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<Record<string, string>, Record<string, unknown>, TDetail>;
   viewDocuments: MetadataRecord[];
@@ -196,7 +201,9 @@ function StandardCrudDetailPageContent<TDetail>({
     [formSchema.fields, dicKey, t],
   );
   const [editing, setEditing] = useState(false);
-  const readDataAccess = view.dataAccess as ActionDataAccessRequirement | undefined;
+  // 自定义读取来源只能消费本次PageRef声明，不能借目标独立详情的资格。
+  const sourceBound = typeof readSourceDataAccess?.id === 'string' && readSourceDataAccess.id.length > 0;
+  const readDataAccess = readOnly ? (sourceBound ? readSourceDataAccess : undefined) : view.dataAccess as ActionDataAccessRequirement | undefined;
   const editDataAccess = (Array.isArray(view.pageActions) ? view.pageActions : [])
     .find((action: { standardAction?: string }) => action.standardAction === 'edit')?.dataAccess as ActionDataAccessRequirement | undefined;
   const lookupDataAccess = useMemo(() => Object.fromEntries(Object.entries(isStandardCrudRecord(view.lookupBindings) ? view.lookupBindings : {}).flatMap(([key, value]) => {
@@ -208,6 +215,7 @@ function StandardCrudDetailPageContent<TDetail>({
   const detailQuery = useStandardCrudDetailQuery({
     resourceKey: registration.resourceKey,
     id,
+    enabled: !readOnly || sourceBound,
     dataAdapter,
     featurePosition: readPosition,
     dataAccess: readDataAccess,
@@ -367,6 +375,8 @@ function StandardCrudDetailPageContent<TDetail>({
       )
       : undefined
     : undefined;
+
+  if (readOnly && !sourceBound) return <ErrorState message={t('Platform.PageContextInvalid', '页面配置或上下文无效。')} />;
 
   return (
     <>

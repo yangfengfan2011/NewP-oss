@@ -28,7 +28,7 @@ public static class StandardFeatureMetadataCompiler
         foreach (var item in navigation.Values)
             if (Optional(item, "featureKey") is { } featureKey && customFeatures?.SingleOrDefault(feature => feature.Key == featureKey && feature.Kind == "navigation") is { } custom
                 && item.TryGetProperty("page", out var page) && page.TryGetProperty("dataAccess", out _))
-                DataAccess(page, page, "read", "", custom.ReferenceKey ?? custom.Key, Text(page, "pageKey"));
+                DataAccess(page, page, "read", "", custom.ReferenceKey ?? custom.Key, PageReadSourceKey(page));
         foreach (var item in navigation.Values)
             if (Optional(item, "featureOwner") is { } owner && !item.TryGetProperty("redirectTo", out _))
                 View(Text(item, "targetKey"), owner, null, []);
@@ -78,6 +78,7 @@ public static class StandardFeatureMetadataCompiler
         {
             if (!page.TryGetProperty("parameters", out var parameters) || !parameters.TryGetProperty("viewKey", out var key))
                 throw new InvalidOperationException("标准授权入口缺少 View 引用。");
+            DataAccess(page, page, "read", "", owner, PageReadSourceKey(page));
             View(key.GetString()!, owner, scope, chain);
         }
 
@@ -227,10 +228,15 @@ public static class StandardFeatureMetadataCompiler
             }
         }
 
+        // 标准详情的实际替代读取来源拥有自己的身份；普通页面仍沿既有pageKey。
+        string PageReadSourceKey(JsonElement page) => Text(page, "pageKey") == "platform.detail"
+            && page.TryGetProperty("parameters", out var parameters) && Optional(parameters, "detailReadSourceKey") is { } sourceKey
+                ? sourceKey : Text(page, "pageKey");
+
         // 只读导航沿已有PageRef组合投影显式read，不调用View生成新tab功能或改变原读取身份。
         void BindReadPresentation(JsonElement page, string owner, HashSet<string> visited)
         {
-            DataAccess(page, page, "read", "", owner, Text(page, "pageKey"));
+            DataAccess(page, page, "read", "", owner, PageReadSourceKey(page));
             if (!page.TryGetProperty("parameters", out var parameters) || Optional(parameters, "viewKey") is not { } key
                 || !visited.Add(key) || !views.TryGetValue(key, out var target) || Optional(target, "mode") != "tab"
                 || !target.TryGetProperty("tabs", out var tabs)) return;

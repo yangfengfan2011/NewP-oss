@@ -1,3 +1,4 @@
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -33,9 +34,13 @@ const item = { id: 'event-1', eventType: 'dataScope.object.changed', occurredAt:
 const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
 
 async function mount(hasHistory = true, direct = false, editableInput = false, viewer = false, reservedProjection?: string,
-  checkHistory?: (request: Request) => Response | Promise<Response>, omitDataAccess = false) {
+  checkHistory?: (request: Request) => Response | Promise<Response>, omitDataAccess = false, invalidPropertiesSource = false) {
   const metadata = authoring();
   const positions = installHistoryFeatures(metadata).Workspace;
+  if (invalidPropertiesSource) {
+    const tabs = metadata.viewDocuments.find(document => document.view.key === 'workspace.folder.tabs')!.view.tabs as Array<{ key: string; pageRef: { dataAccess?: unknown } }>;
+    tabs.find(tab => tab.key === 'information')!.pageRef.dataAccess = { id: '' };
+  }
   if (omitDataAccess) {
     const actions = metadata.viewDocuments.find(document => document.view.key === 'workspace.folder.list')!.view.rowActions as Array<Record<string, unknown>>;
     delete actions.find(action => action.key === 'history')!.dataAccess;
@@ -341,4 +346,20 @@ it.each(['Part', 'Document'] as const)('does not offer independent %s history wi
   await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
   expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].some(entry => entry.textContent?.trim() === '履历')).toBe(false);
   expect(requests.some(request => new URL(request.url).pathname.includes('/history'))).toBe(false);
+});
+
+it('uses the actual Workspace properties PageRef declaration for the readonly owning Part adapter', async () => {
+  const { container, requests, positions } = await mount(true, false, false, true);
+  await vi.waitFor(() => expect(container.textContent).toContain('Source Part'));
+  expect(requests.filter(request => new URL(request.url).pathname.endsWith('/part-occurrence/properties'))).toHaveLength(1);
+  const request = requests.find(request => new URL(request.url).pathname.endsWith('/part-occurrence/properties'))!;
+  expect(request.headers.get('X-NewP-Feature')).toBe(positions.readPosition);
+  expect(request.headers.get('X-NewP-Data-Declaration')).toBe(formalDataAccessFor('workspace.content.properties', 'read').id);
+  expect(requests.some(request => new URL(request.url).pathname.startsWith('/api/part/'))).toBe(false);
+});
+it('rejects an unbound properties PageRef instead of borrowing the independent Part detail declaration', async () => {
+  const { container, requests } = await mount(true, false, false, true, undefined, undefined, false, true);
+  await vi.waitFor(() => expect(container.textContent).toContain('页面配置或上下文无效'));
+  expect(requests.some(request => new URL(request.url).pathname.endsWith('/properties'))).toBe(false);
+  expect(requests.some(request => new URL(request.url).pathname.startsWith('/api/part/'))).toBe(false);
 });

@@ -141,7 +141,6 @@ public sealed partial class DataExecutionQueryRoleTests
     }
 
     [Theory]
-    [InlineData("workspace.properties.detail", nameof(WorkspaceContents.ReadPropertiesAsync))]
     [InlineData("workspace.editValues.detail", nameof(WorkspaceContents.ReadEditValuesAsync))]
     [InlineData("workspace.objectCopy.detail", nameof(WorkspaceContents.PrepareObjectCopyAsync))]
     public async Task InternalDetailRole_RequiresTheConcreteMemberAndExactlyOneRealId(string execution, string member)

@@ -41,6 +41,84 @@
       "providerModuleId": "Authorization"
     },
     {
+      "id": "Workspace/view:workspace.content.properties/read",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.content.properties",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "workspace.properties.read",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "read",
+          "shape": "object",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.content.receivedProperties/read",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.content.receivedProperties",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "workspace.properties.read",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "read",
+          "shape": "object",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
       "id": "Workspace/view:workspace.folder.detail/read",
       "moduleId": "Workspace",
       "viewKey": "workspace.folder.detail",

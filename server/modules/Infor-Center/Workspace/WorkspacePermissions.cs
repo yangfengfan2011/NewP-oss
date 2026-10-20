@@ -8,17 +8,15 @@ public sealed record WorkspaceSourceProperties(string ResourceKey, string Object
 
 public sealed partial class WorkspaceContents
 {
-    /// <summary>来源属性只在当前完整位置中解析真实对象，再复用其正式descriptor与共享只读详情。</summary>
+    /// <summary>属性先核真实PageRef外部来源，再按原位置解析与两读取得对象；详情仍在原计划点读取。</summary>
     public async Task<WorkspaceSourceProperties?> ReadPropertiesAsync(string actor, WorkspacePosition position, string linkId, CancellationToken token)
     {
+        DataExecutionBindingReference[] sources = [new("workspace.properties.read", "workspace.backend", "read")];
+        ValidatePermissionSources(sources);
         var target = await ResolvePermissionTargetAsync(actor, position, linkId, token);
         var descriptor = target.ResourceKey == folderDescriptor.Value.ResourceKey ? folderDescriptor.Value
             : resources.FindByResourceKey(target.ResourceKey) ?? throw new InvalidOperationException("Workspace object descriptor unavailable.");
-        var detail = target.ResourceKey == folderDescriptor.Value.ResourceKey
-            ? await crud.GetDetailFromEntryAsync(descriptor, target.ObjectId,
-                [new("workspace.folder.read", "workspace.backend", "read")], token)
-            : await crud.GetDetailFromSourceAsync(descriptor, target.ObjectId,
-                new("workspace.properties.detail", "workspace.backend", typeof(WorkspaceContents), nameof(ReadPropertiesAsync)), token);
+        var detail = await crud.GetDetailFromEntryAsync(descriptor, target.ObjectId, sources, token);
         return detail is null ? null : new(target.ResourceKey, target.ObjectId, detail);
     }
 

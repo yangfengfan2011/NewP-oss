@@ -33,27 +33,27 @@ public sealed class DataScopeObjectSqlServerTests
         var id = BusinessAuditSqlServerHttpApiTests.Id(created);
         var endpoint = $"/api/authorization/data-scope/objects/organization.person/{id}";
         var alias = $"/api/authorization/data-scope/objects/organization.person/{id.ToLowerInvariant()}";
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get, alias))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Get, alias))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, alias,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, alias,
             new DataScopeObjectDto("organization.person", id.ToLowerInvariant(), [])))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var config = new DataScopeObjectDto("organization.person", id,
             [new("ObjectSwitchSubject", "user", actor.AccountId, 1,
                 new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "deny" })]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, config))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, config))
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         using (var ordinary = await LoginCurrentAsync("object-switch"))
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
 
         await fixture.RestartWithActionAsync("authorize", false);
         using (var ordinary = await LoginCurrentAsync("object-switch"))
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using (var administrator = await LoginCurrentAsync("admin"))
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(administrator, manage, HttpMethod.Put, endpoint,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(administrator, manage, HttpMethod.Put, endpoint,
                 config with { Subjects = [config.Subjects[0] with
                 { Actions = new Dictionary<string, string> { ["read"] = "deny", ["authorize"] = "allow" } }] });
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
@@ -63,7 +63,7 @@ public sealed class DataScopeObjectSqlServerTests
         {
             using var readResponse = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}");
             Assert.Equal(HttpStatusCode.OK, readResponse.StatusCode);
-            using var manageResponse = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint);
+            using var manageResponse = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint);
             Assert.Equal(HttpStatusCode.OK, manageResponse.StatusCode);
         }
         await fixture.RestartWithActionAsync("read", true);
@@ -71,7 +71,7 @@ public sealed class DataScopeObjectSqlServerTests
         {
             using var readResponse = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}");
             Assert.Equal(HttpStatusCode.NotFound, readResponse.StatusCode);
-            using var manageResponse = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint);
+            using var manageResponse = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint);
             Assert.Equal(HttpStatusCode.NotFound, manageResponse.StatusCode);
         }
 
@@ -138,9 +138,9 @@ public sealed class DataScopeObjectSqlServerTests
                 new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow" }),
              new("TransferredAuthorize", "user", readerActor.AccountId, 1,
                 new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow" })]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, allow))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, allow))
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
-        using (var response = await FeatureHttpTestRequests.SendAsync(readerOnly, manage, HttpMethod.Get, endpoint))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(readerOnly, manage, HttpMethod.Get, endpoint))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -148,13 +148,13 @@ public sealed class DataScopeObjectSqlServerTests
             "/api/authorization/data-scope/rules/ObjectScopeRule", rule with
             { Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "allow" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint,
             allow with { Subjects = [allow.Subjects[0] with
             { Actions = new Dictionary<string, string> { ["read"] = "deny", ["authorize"] = "allow" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint,
             allow with { Subjects = [allow.Subjects[0] with
             { Actions = new Dictionary<string, string> { ["read"] = "unset", ["authorize"] = "allow" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -165,22 +165,22 @@ public sealed class DataScopeObjectSqlServerTests
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, allow))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, allow))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         // 两个不同且都匹配的规范选择器竞争；不能用技术ID伪造重复all项。
         var samePriority = allow with { Subjects = [
             new("ObjectPriorityAllow", "all", null, 2, new Dictionary<string, string> { ["read"] = "allow" }),
             new("ObjectPriorityDeny", "user", actor.AccountId, 2, new Dictionary<string, string> { ["read"] = "deny" })] };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, samePriority))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, samePriority))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint,
             samePriority with { Subjects = [samePriority.Subjects[0] with { Priority = 3 }, samePriority.Subjects[1]] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, allow))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, allow))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await http.SendButtonAsync(ordinary,
             http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{id}"))
@@ -195,11 +195,11 @@ public sealed class DataScopeObjectSqlServerTests
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint + "/eligibility"))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint + "/eligibility"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint + "/catalog"))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint + "/catalog"))
         {
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var catalog = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -207,36 +207,36 @@ public sealed class DataScopeObjectSqlServerTests
             Assert.Contains(catalog.GetProperty("subjectTypes").EnumerateArray(), item => item.GetProperty("key").GetString() == "user");
             Assert.False(catalog.TryGetProperty("status", out _));
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get,
             endpoint + "/subjects/user?currentIds=" + actor.AccountId))
         {
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var subjects = await response.Content.ReadFromJsonAsync<JsonElement>();
             Assert.Contains(subjects.GetProperty("currentValues").EnumerateArray(), item => item.GetProperty("id").GetString() == actor.AccountId);
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint + "/subjects/user?page=0"))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint + "/subjects/user?page=0"))
             await AssertInvalidConfigurationAsync(response, "主体目录页码无效。");
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, endpoint,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Put, endpoint,
             allow with { ObjectId = "different-target" }))
             await AssertInvalidConfigurationAsync(response, "对象授权目标与请求不一致。");
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, endpoint,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Put, endpoint,
             allow with { Subjects = [allow.Subjects[0] with
             { Actions = new Dictionary<string, string> { ["read"] = "deny", ["authorize"] = "deny",
                 ["create"] = "allow", ["edit"] = "allow", ["delete"] = "allow" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint + "/eligibility"))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint + "/eligibility"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         await AssertManagementDeniedAsync(ordinary, HttpStatusCode.NotFound);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, allow))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, allow))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Get,
             $"/api/authorization/data-scope/objects/authorization.role/{actor.RoleId}"))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint,
             allow with { Subjects = [allow.Subjects[0] with
             { Actions = new Dictionary<string, string> { ["invented"] = "allow" } }] }))
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -247,14 +247,14 @@ public sealed class DataScopeObjectSqlServerTests
             fixture.Fault.Mode = mode;
             try
             {
-                using var failed = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, deny);
+                using var failed = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, deny);
                 Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
             }
             finally { fixture.Fault.Mode = ""; }
             using var kept = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}");
             Assert.Equal(HttpStatusCode.OK, kept.StatusCode);
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, allow))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, allow))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var audit = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(),
             $"/api/audit/business-changes?TargetId=organization.person%2F{id}&EventType=dataScope.object.changed");
@@ -270,17 +270,17 @@ public sealed class DataScopeObjectSqlServerTests
                     && EF.Property<string>(row, "ObjectId") == id);
             Assert.Equal(2, retained);
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get, endpoint))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Get, endpoint))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
         async Task AssertManagementDeniedAsync(HttpClient client, HttpStatusCode expected)
         {
             foreach (var suffix in new[] { "", "/catalog", "/subjects/user?page=0", "/explanation?accountId=" + new string('a', 129) })
             {
-                using var response = await FeatureHttpTestRequests.SendAsync(client, manage, HttpMethod.Get, endpoint + suffix);
+                using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(client, manage, HttpMethod.Get, endpoint + suffix);
                 Assert.Equal(expected, response.StatusCode);
             }
-            using var save = await FeatureHttpTestRequests.SendAsync(client, manage, HttpMethod.Put, endpoint,
+            using var save = await new FeatureHttpTestRequests(fixture).SendButtonAsync(client, manage, HttpMethod.Put, endpoint,
                 new DataScopeObjectDto("organization.person", "different-target", []));
             Assert.Equal(expected, save.StatusCode);
         }

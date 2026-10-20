@@ -208,7 +208,7 @@ public sealed class DataScopePersonExportSqlServerTests(ITestOutputHelper output
             using var response = await FeatureHttpTestRequests.SendAsync(admin,
                 fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize"), HttpMethod.Put,
                 $"/api/authorization/data-scope/objects/organization.person/{objectId}", grant,
-                http.Declaration("organization.person.authorization.manage",
+                http.Declaration("organization.person.authorize",
                     fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize")));
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         }

@@ -1,5 +1,10 @@
 using ICP.Platform.Modules.Files.Contracts;
 using System.Security.Claims;
+using System.Reflection;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+using ICP.Platform.Modules.Authorization.Controllers;
 using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
@@ -79,19 +84,33 @@ public sealed class DocumentFileExecutionScopeTests
         Assert.Equal(0, reads.Calls);
     }
 
-    [Fact]
-    public async Task GenericProvider_StillRequiresItsOwnEndpointOwnerAndResourceFeature()
+    [Fact, Trait("Category", "ModuleMetadataConsumer")]
+    public async Task GenericManagementButton_StillRequiresItsOwnEndpointOwnerAndResourceFeature()
     {
-        var (access, http, _, plan, _) = Create();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "example.record.authorization.manage");
-        http.HttpContext!.Request.Headers["X-NewP-Data-Declaration"] = declaration.Id;
+        var (_, http, scope, plan, reads) = Create();
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "example.record.authorize");
+        http.HttpContext!.Request.Headers["X-NewP-Button"] = declaration.Id;
         http.HttpContext.Request.Headers["X-NewP-Feature"] = Assert.Single(declaration.FeaturePositions);
-        var binding = new DataExecutionBindingReference(declaration.Execution, declaration.Provider!, "prepare");
-        http.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Authorization"), new ResourceFeatureBindingAttribute("authorize")), "generic"));
-        Assert.Equal(DataExecutionDecision.Allowed, await access.EvaluateObjectAsync(binding, "example.record", "target", "example-one"));
-        Assert.Contains(plan.FeatureCatalog, point => point.ModuleId == "Example" && point.BehaviorKey == "example.record.update");
-        http.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Example"), new RequireFeatureAttribute("example.record.update")), "wrong-owned-endpoint"));
-        await Assert.ThrowsAsync<ActionDataAccessException>(() => access.EvaluateObjectAsync(binding, "example.record", "target", "example-one"));
+        http.HttpContext.Request.RouteValues["resourceKey"] = "example.record";
+        http.HttpContext.Request.RouteValues["objectId"] = "ExampleRecord_generic";
+        var controller = typeof(DataScopeObjectsController);
+        var method = controller.GetMethod(nameof(DataScopeObjectsController.Get))!;
+        http.HttpContext.SetEndpoint(new RouteEndpoint(_ => Task.CompletedTask,
+            RoutePatternFactory.Parse(controller.GetCustomAttribute<RouteAttribute>()!.Template!), 0,
+            new EndpointMetadataCollection(controller.GetCustomAttributes(true).Concat(method.GetCustomAttributes(true))), "actual-generic-controller"));
+        var checks = new ButtonChecks();
+        var access = new ButtonExecutionAccess(plan, http, new ResourceCatalog(false), checks);
+        var target = new ButtonExecutionTarget("example.record", "ExampleRecord", "ExampleRecord_generic",
+            new Dictionary<string, object?> { ["EID"] = "ExampleRecord_generic" });
+        // 文件当前版本读取事实不替代generic实际对象的按钮判权。
+        using var phase = scope.Begin("document-one", DocumentFileReadPhase.Metadata, Identity());
+        var invocation = access.BindHandler(typeof(DataScopeObjectManagement));
+        Assert.True(await access.ExecuteAsync(invocation, target, _ => Task.FromResult(true)));
+        Assert.Equal(new[] { "ExampleRecord:authorize" }, checks.Calls); Assert.Equal(0, reads.Calls);
+        http.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Example"),
+            new RequireFeatureAttribute("example.record.update"), new ButtonBusinessHandlerAttribute(typeof(DataScopeObjectManagement))), "wrong-owned-endpoint"));
+        Assert.Throws<ActionDataAccessException>(() => access.BindHandler(typeof(DataScopeObjectManagement)));
+        Assert.Single(checks.Calls);
     }
 
     [Fact]
@@ -227,6 +246,12 @@ public sealed class DocumentFileExecutionScopeTests
     private sealed class ResourceCatalog(bool wrongOwner) : IDataScopeResourceCatalog
     {
         public IReadOnlyList<DataScopeResource> Resources { get; } = [new("document.document", wrongOwner ? "Workspace" : "Document", "Document", "EID"), new("example.record", "Example", "ExampleRecord", "EID")];
+    }
+    private sealed class ButtonChecks : IObjectActionAccess
+    {
+        internal List<string> Calls { get; } = [];
+        public Task<DataExecutionDecision> CheckAsync(string model, string id, IReadOnlyList<string> actions, CancellationToken token = default)
+        { Calls.Add(model + ":" + string.Join(",", actions)); return Task.FromResult(DataExecutionDecision.Allowed); }
     }
     private sealed class Reads : IDataScopeObjectAccess
     {

@@ -36,7 +36,7 @@ public sealed class EntityOwnershipTransferHistorySqlServerHttpApiTests
                 && point.Key == (model == "WorkspaceFolder" ? "authorizeContent" : "authorize") && point.ActionScope == "list.rowActions");
             var permissions = model == "WorkspaceFolder" ? Source(position, target.LinkId, "permissions")
                 : "/api/" + model.ToLowerInvariant() + "/" + kind + "/" + target.Id + "/permissions";
-            using var configured = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, permissions,
+            using var configured = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, permissions,
                 new DataScopeObjectDto(resource, target.Id, [new("history-all-" + model, "all", null, 0,
                     new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow" })]));
             Assert.True(configured.StatusCode == HttpStatusCode.NoContent, await configured.Content.ReadAsStringAsync());
@@ -76,7 +76,7 @@ public sealed class EntityOwnershipTransferHistorySqlServerHttpApiTests
         var part = targets.Single(target => target.Model == "Part");
         Assert.Equal(part.Name, relation.GetProperty("target").GetProperty("name").GetString());
         var partManage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Part" && point.Key == "authorize" && point.ActionScope == "list.rowActions");
-        using (var deny = await FeatureHttpTestRequests.SendAsync(admin, partManage, HttpMethod.Put, "/api/part/parts/" + part.Id + "/permissions",
+        using (var deny = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, partManage, HttpMethod.Put, "/api/part/parts/" + part.Id + "/permissions",
                    new DataScopeObjectDto("part.part", part.Id, [new("deny-receiver", "user", recipient.AccountId, 0,
                        new Dictionary<string, string> { ["read"] = "deny" })])))
             Assert.True(deny.StatusCode == HttpStatusCode.NoContent, await deny.Content.ReadAsStringAsync());

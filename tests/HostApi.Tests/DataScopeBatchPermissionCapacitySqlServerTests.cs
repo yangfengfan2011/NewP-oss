@@ -77,7 +77,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         }
         var batch = fixture.FeatureCatalog.Single(point => point.Key == "batchAuthorize" && point.ActionScope == "list.pageActions");
         var batchSource = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-            declaration => declaration.Execution == "workspace.content.authorization.batch" && declaration.FeaturePositions.Contains(batch.Position));
+            declaration => declaration.BusinessBinding == "workspace.folder.authorize" && declaration.FeaturePositions.Contains(batch.Position));
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "BatchCapacity297", "批量容量角色", "batchcapacity297", "批量容量主体",
             Point(fixture, "workspace.spaces.access"), batch);
         using var ordinary = actor.Client;

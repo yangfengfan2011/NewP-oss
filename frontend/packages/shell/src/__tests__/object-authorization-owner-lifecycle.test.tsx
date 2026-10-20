@@ -62,6 +62,27 @@ it('keeps an unknown save frozen under its original declaration while a separate
   expect(objectAuthorizationSubmission(instance, target, context.featurePosition, inspect)?.getSnapshot()).toBe(false);
 });
 
+it('aborts a direct inspection with its real action owner and never publishes its late GET result', async () => {
+  const inspect = (compiledRequirements as ActionDataAccessRequirement[]).find(item => item.businessBinding === 'example.record.viewAuthorization')!;
+  const instance = new ActionInstanceScope(); const deactivate = instance.activate();
+  let finish!: (response: Response) => void;
+  const fetcher = vi.fn((_path: RequestInfo | URL, _options?: RequestInit) => new Promise<Response>(resolve => { finish = resolve; }));
+  const registration = createObjectAuthorizationActions('example.record', () => ({ id: 'ExampleRecord_inspect', title: '记录' }), fetcher);
+  const request = registration.actionHandlers.viewAuthorization({ id: 'ExampleRecord_inspect', instance,
+    featurePosition: inspect.featurePositions[0], action: { key: 'viewAuthorization', handlerKey: 'viewAuthorization', labelKey: '查看授权', dataAccess: inspect } });
+  try {
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [path, options] = fetcher.mock.calls[0];
+    expect(path).toBe('/api/authorization/data-scope/objects/example.record/ExampleRecord_inspect/inspection/catalog');
+    expect(new Headers(options?.headers).get('X-NewP-Button')).toBe(inspect.id);
+    expect(new Headers(options?.headers).has('X-NewP-Data-Declaration')).toBe(false);
+    deactivate(); expect(options?.signal?.aborted).toBe(true);
+    const rejected = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+    finish(json({ actions: [], subjectTypes: [] })); await rejected;
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  } finally { deactivate(); }
+});
+
 async function mountEditor(save?: () => Promise<Response>, settings: { readCurrent?: () => Response; denyAfterSave?: boolean; failRefresh?: boolean; subjectTypes?: SubjectType[] } = {}) {
   const instance = new ActionInstanceScope(); disposeInstances.push(instance.activate());
   const requests: Request[] = [];

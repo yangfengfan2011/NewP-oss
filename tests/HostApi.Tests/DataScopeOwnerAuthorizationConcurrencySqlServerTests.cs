@@ -38,7 +38,7 @@ public sealed class DataScopeOwnerAuthorizationConcurrencySqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "OwnerRace297", "Owner race manager", "ownerrace297", "Owner race manager", read, manage);
         using var ordinary = actor.Client;
         var path = generic ? "/api/authorization/data-scope/objects/part.part/" + part.Id : "/api/part/parts/" + part.Id + "/permissions";
-        var source = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part");
+        var source = OwnedResourceReadHttpRequests.Button(fixture, manage, "part.part.authorize");
         DataScopeObjectDto Configuration(string opinion) => new("part.part", part.Id, [new("owner-race-entry", "user", actor.AccountId, 1,
             new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = opinion })]);
         using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, Configuration("allow"), dataAccess: source))

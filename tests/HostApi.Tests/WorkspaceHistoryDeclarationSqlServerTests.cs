@@ -65,7 +65,7 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
             var manage = Point(fixture, "part.part.authorize");
             using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
                 "/api/part/parts/" + part.Id + "/permissions", config,
-                OwnershipDeclaration(fixture, "part.part.authorization.manage", manage));
+                OwnershipDeclaration(fixture, "part.part.authorize", manage));
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         }
     }
@@ -93,7 +93,7 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
                 new Dictionary<string, string> { ["read"] = "allow" })]);
             using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
                 "/api/workspace/content/" + target.LinkId + "/permissions" + query, config,
-                OwnershipDeclaration(fixture, "workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")))) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+                OwnershipDeclaration(fixture, "workspace.folder.authorize", Point(fixture, "workspace.folder.authorize")))) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
             using (var check = await Send("workspace.history.enter", HttpMethod.Get, basePath + "/check/enter" + query)) Assert.Equal(HttpStatusCode.NoContent, check.StatusCode);
             using var listed = await Send("workspace.history.list", HttpMethod.Get, basePath + query);
             var page = await ReadOkAsync(listed);
@@ -200,7 +200,7 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
             "/api/part/parts/" + target.Id + "/permissions", new DataScopeObjectDto("part.part", target.Id,
                 [new("different-buttons301", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" })]),
-            OwnershipDeclaration(fixture, "part.part.authorization.manage", Point(fixture, "part.part.authorize"))))
+            OwnershipDeclaration(fixture, "part.part.authorize", Point(fixture, "part.part.authorize"))))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace" && item.BusinessBinding == "workspace.folder.history" && item.ActionKey == "history").ToArray();

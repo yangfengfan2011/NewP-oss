@@ -188,7 +188,7 @@ public sealed class DocumentHistoryDeclarationSqlServerTests
         var manage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Document" && point.Key == "authorize" && point.ActionScope == "list.rowActions");
         using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/document/documents/" + id + "/permissions",
             new DataScopeObjectDto("document.document", id, [new("document303", "all", null, 1, new Dictionary<string, string> { ["read"] = read })]),
-            OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "document.document.authorization.manage", "authorization.object.manage", "document.document"));
+            OwnedResourceReadHttpRequests.Button(fixture, manage, "document.document.authorize"));
         Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
     }
 

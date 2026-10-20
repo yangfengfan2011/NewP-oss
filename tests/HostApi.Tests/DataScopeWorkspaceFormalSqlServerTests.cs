@@ -29,8 +29,8 @@ public sealed class DataScopeWorkspaceFormalSqlServerTests
         await http.InitializeOrganizationAsync(admin);
         var publicRoot = await PostAsync("workspace.spaces.access", "/api/workspace/spaces/public/initialize");
         var publicPosition = Position(publicRoot);
-        var folder = await PostAsync("workspace.folder.create", "/api/workspace/content/folders",
-            new { position = publicPosition, values = new { ENAME = "权限查询公共目录" } });
+        var folder = await SendAsync(admin, create, HttpMethod.Post, "/api/workspace/content/folders",
+            new { position = publicPosition, values = new { ENAME = "权限查询公共目录" } }, http.Declaration("workspace.folder.create", create));
         var id = folder.GetProperty("id").GetString()!;
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -74,26 +74,27 @@ public sealed class DataScopeWorkspaceFormalSqlServerTests
         var endpoint = $"/api/authorization/data-scope/objects/workspace.folder/{id}";
         using var explained = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get,
             $"/api/workspace/content/{linkId}/permissions/explanation?queryScope="
-            + Uri.EscapeDataString(JsonSerializer.Serialize(publicPosition)) + "&accountId=" + Uri.EscapeDataString(otherAccountId));
+            + Uri.EscapeDataString(JsonSerializer.Serialize(publicPosition)) + "&accountId=" + Uri.EscapeDataString(otherAccountId),
+            dataAccess: http.ReadDeclaration("workspace.content.authorization.view", read));
         Assert.True(explained.StatusCode == HttpStatusCode.OK, await explained.Content.ReadAsStringAsync());
         using var after = await ordinary.GetFromJsonAsync<JsonDocument>("/api/auth/current-user");
         Assert.Equal(actor, after!.RootElement.GetProperty("id").GetString());
-        using var unprivilegedSave = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Put, endpoint,
+        var manage = fixture.Catalog.First(point => point.BehaviorKey == "workspace.folder.authorize");
+        using var unprivilegedSave = await http.SendButtonAsync(ordinary, manage, HttpMethod.Put, endpoint,
             new DataScopeObjectDto("workspace.folder", id, []));
         Assert.Equal(HttpStatusCode.Forbidden, unprivilegedSave.StatusCode);
 
         var personal = await SendAsync(ordinary, entry, HttpMethod.Post, "/api/workspace/spaces/personal/ensure");
         var privateFolder = await SendAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders",
-            new { position = Position(personal), values = new { ENAME = "不能代看的私人目录" } });
+            new { position = Position(personal), values = new { ENAME = "不能代看的私人目录" } }, http.Declaration("workspace.folder.create", create));
         var privateId = privateFolder.GetProperty("id").GetString()!;
-        var manage = fixture.Catalog.First(point => point.BehaviorKey == "workspace.folder.authorize");
         foreach (var suffixPath in new[] { "", "/eligibility", "/catalog", "/subjects/user", "/explanation" })
         {
-            using var denied = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get,
+            using var denied = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Get,
                 $"/api/authorization/data-scope/objects/workspace.folder/{privateId}" + suffixPath);
             Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
         }
-        using var deniedSave = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+        using var deniedSave = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put,
             $"/api/authorization/data-scope/objects/workspace.folder/{privateId}", new DataScopeObjectDto("workspace.folder", privateId, []));
         Assert.Equal(HttpStatusCode.NotFound, deniedSave.StatusCode);
 
@@ -102,14 +103,14 @@ public sealed class DataScopeWorkspaceFormalSqlServerTests
         var configuration = new DataScopeObjectDto("workspace.folder", id,
             [new("Scope295All" + suffix, "all", null, 1,
                 new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow", ["edit"] = "deny" })]);
-        using (var seed = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, configuration))
+        using (var seed = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, endpoint, configuration))
             Assert.Equal(HttpStatusCode.NoContent, seed.StatusCode);
         var selfRevocation = configuration with { Subjects =
             [new("Scope295Self" + suffix, "user", accountId, 2,
                 new Dictionary<string, string> { ["read"] = "deny", ["authorize"] = "deny", ["edit"] = "allow" })] };
-        using (var saved = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, endpoint, selfRevocation))
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Put, endpoint, selfRevocation))
             Assert.True(saved.StatusCode == HttpStatusCode.NoContent, await saved.Content.ReadAsStringAsync());
-        using (var inaccessible = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint))
+        using (var inaccessible = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, endpoint))
             Assert.Equal(HttpStatusCode.NotFound, inaccessible.StatusCode);
 
         Task<JsonElement> PostAsync(string behavior, string route, object? body = null) => SendAsync(admin,
@@ -122,10 +123,10 @@ public sealed class DataScopeWorkspaceFormalSqlServerTests
     }
 
     private static async Task<JsonElement> SendAsync(HttpClient client, ICP.Platform.Kernel.ModulePlanning.FeaturePoint point,
-        HttpMethod method, string path, object? body = null)
+        HttpMethod method, string path, object? body = null, ICP.Platform.Kernel.ModulePlanning.ActionDataAccessRequirement? dataAccess = null)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        using var response = await FeatureHttpTestRequests.SendAsync(client, point, method, path, body);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, point, method, path, body, dataAccess);
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

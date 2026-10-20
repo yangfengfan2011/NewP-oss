@@ -1,4 +1,4 @@
-import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInstance, type ActionDataAccessRequirement } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, standardCrudRequestHeaders, StandardCrudRequestError, type StandardCrudActionInstance, type ActionDataAccessRequirement } from '@icp-platform/sdk';
 
 export interface ObjectAuthorizationAddress { resourceKey: string; id?: string; basePath?: string }
 
@@ -27,10 +27,7 @@ export function objectAuthorizationSubmission(instance: StandardCrudActionInstan
 
 /** 所有对象授权请求携带当前正式绑定，声明仅作引用，业务载荷不包含权限要求。 */
 export function objectAuthorizationHeaders(featurePosition?: string, dataAccess?: ActionDataAccessRequirement): Record<string, string> {
-  return {
-    ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
-    ...(dataAccess?.id ? { 'X-NewP-Data-Declaration': dataAccess.id } : {}),
-  };
+  return standardCrudRequestHeaders({ featurePosition, dataAccess });
 }
 
 export function objectAuthorizationOutcomeUnknown(failure: unknown): boolean {

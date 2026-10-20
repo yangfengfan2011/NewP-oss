@@ -32,7 +32,8 @@ async function mount(inspect: boolean) {
   function Harness() {
     const [value, onChange] = useState<unknown>();
     return <PlatformQueryProvider scopeKey="example-permissions"><ObjectAuthorizationInput row={row}
-      target={{ resourceKey: 'example.record', title: '记录', id: row.id, name: row.ENAME }}
+      target={{ resourceKey: 'example.record', title: '记录', id: row.id, name: row.ENAME,
+        ...(inspect ? { basePath: `/api/authorization/data-scope/objects/example.record/${row.id}/inspection` } : {}) }}
       action={{ key: inspect ? 'viewAuthorization' : 'authorize', labelKey: '授权', inputKey: inspect ? 'objectAuthorizationDetails' : 'objectAuthorization', dataAccess: requirementFor(inspect) }}
       featurePosition="record-authorize" value={value} onChange={onChange} onDraftStateChange={draft} /></PlatformQueryProvider>;
   }
@@ -60,7 +61,7 @@ it('loads saved subjects, keeps tri-state changes in the draft and reports neste
   expect(editor.textContent).not.toContain('保存根规则');
   expect(editor.textContent).toContain('保存后生效');
   expect(fetcher.mock.calls.every(([, options]) => !options.method)).toBe(true);
-  expect(fetcher.mock.calls.every(([, options]) => options.headers['X-NewP-Data-Declaration'] === requirementFor(false).id)).toBe(true);
+  expect(fetcher.mock.calls.every(([, options]) => options.headers['X-NewP-Button'] === requirementFor(false).id)).toBe(true);
 });
 
 it('defaults to the current user, explains rule provenance and allows selecting another user without writes', async () => {
@@ -84,7 +85,7 @@ it('defaults to the current user, explains rule provenance and allows selecting 
   expect(document.querySelector('[role="checkbox"]')).toBeNull();
   expect(draft).toHaveBeenLastCalledWith({ ready: true, dirty: false });
   expect(fetcher.mock.calls.every(([, options]) => !options.method)).toBe(true);
-  expect(fetcher.mock.calls.every(([, options]) => options.headers['X-NewP-Data-Declaration'] === requirementFor(true).id)).toBe(true);
+  expect(fetcher.mock.calls.every(([, options]) => options.headers['X-NewP-Button'] === requirementFor(true).id)).toBe(true);
 });
 
 it('aborts and discards the old input when only its compiled declaration identity changes', async () => {
@@ -116,7 +117,7 @@ it('aborts and discards the old input when only its compiled declaration identit
   await act(async () => finishOld(new Response(JSON.stringify({ resourceKey: 'example.record', objectId: row.id,
     subjects: [{ id: 'old', type: 'all', subjectId: null, priority: 0, actions: { read: 'deny' } }] }))));
   expect(draftValue).toMatchObject({ subjects: [{ id: 'fresh' }] });
-  expect(fetcher.mock.calls.at(-1)![1].headers['X-NewP-Data-Declaration']).toBe(requirementFor(true).id);
+  expect(fetcher.mock.calls.at(-1)![1].headers['X-NewP-Button']).toBe(requirementFor(true).id);
 });
 
 it('shows an analysis failure instead of a permission result', async () => {
@@ -146,7 +147,7 @@ it('resolves nonempty explanation subjects in bounded batches through the object
   expect(reads).toHaveLength(2);
   expect(reads.map(([path]) => new URL(path, 'https://host.test').searchParams.getAll('currentIds')))
     .toEqual([subjects.slice(0, 10).map(subject => subject.subjectId), ['d-10']]);
-  expect(reads.every(([path, options]) => path.startsWith('/api/authorization/data-scope/objects/example.record/Record_1/subjects/')
+  expect(reads.every(([path, options]) => path.startsWith('/api/authorization/data-scope/objects/example.record/Record_1/inspection/subjects/')
     && options.headers['X-NewP-Feature'] === 'record-authorize' && options.signal instanceof AbortSignal)).toBe(true);
   await act(async () => (document.querySelector('.ant-collapse-header') as HTMLElement).click());
   expect(document.body.textContent).toContain('部门 d-0');

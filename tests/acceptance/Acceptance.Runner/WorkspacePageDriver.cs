@@ -77,7 +77,7 @@ internal sealed class WorkspacePageDriver(IPage page)
     }
 
     /// <summary>勾选真实混合资源，经批量输入配置完整主体项并只确认一次；载荷及事务语义由API测试承担。</summary>
-    internal async Task SaveBatchAuthorizationAsync(string partName, string documentName, string presentationPath)
+    internal async Task SaveBatchAuthorizationAsync(string partName, string documentName, string presentationPath, CancellationToken token = default)
     {
         var crud = new StandardCrudPageDriver(page);
         foreach (var name in new[] { partName, documentName })
@@ -99,9 +99,59 @@ internal sealed class WorkspacePageDriver(IPage page)
             await AddReadSubjectAsync(sections.Nth(index));
         }
         await AcceptancePresentation.CaptureAsync(page, presentationPath);
-        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/permissions/batch", 200, "保存批量授权"));
-        await crud.WaitForRowAsync(partName);
-        await crud.WaitForRowAsync(documentName);
+        const string routePattern = "**/api/workspace/content/permissions/batch";
+        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var submissions = 0;
+        Func<IRoute, Task> loseCommittedReply = async route =>
+        {
+            if (route.Request.Method != "POST") { await route.FallbackAsync(); return; }
+            if (Interlocked.Increment(ref submissions) != 1)
+            {
+                finished.TrySetException(new InvalidOperationException("批量授权在结果未知后重放了保存。"));
+                await route.AbortAsync("failed"); return;
+            }
+            try
+            {
+                await DropSuccessfulBatchReplyAsync(async () =>
+                {
+                    // fetch执行真实业务一次；失败响应照原样送回，不伪装成已提交。
+                    var response = await route.FetchAsync(new() { MaxRetries = 0, MaxRedirects = 0 });
+                    if (response.Status == 200) return true;
+                    await route.FulfillAsync(new() { Response = response }); return false;
+                }, () => route.AbortAsync("failed"));
+                finished.TrySetResult();
+            }
+            catch (Exception error) { finished.TrySetException(error); }
+        };
+        await page.RouteAsync(routePattern, loseCommittedReply);
+        try
+        {
+            var save = dialog.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*认$") });
+            // 与Workspace runner原单次响应等待一致：30秒，故意没有浏览器Response时仍不得无限等待。
+            var committedReply = finished.Task.WaitAsync(TimeSpan.FromSeconds(30), token);
+            await save.ClickAsync();
+            await committedReply;
+            var reconcile = dialog.GetByRole(AriaRole.Button, new() { Name = "核对当前整组配置", Exact = true });
+            await Assertions.Expect(reconcile).ToBeEnabledAsync();
+            await Assertions.Expect(save).ToBeDisabledAsync();
+            var currentTask = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+                && new Uri(response.Url).AbsolutePath == "/api/workspace/content/permissions/batch/current");
+            await reconcile.ClickAsync();
+            var current = await currentTask;
+            if (!current.Ok) throw new InvalidOperationException($"批量授权当前配置核对失败：{current.Status} {await current.TextAsync()}");
+            await dialog.GetByRole(AriaRole.Button, new() { Name = "开始新的授权操作", Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+            if (submissions != 1) throw new InvalidOperationException("核对当前配置不能重放批量保存。");
+            await dialog.Locator(".ant-modal-footer").GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^取\s*消$") }).ClickAsync();
+            await dialog.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        }
+        finally { await page.UnrouteAsync(routePattern, loseCommittedReply); }
+    }
+
+    // 故意丢响应仅发生在真实保存已成功之后；端点拒绝或执行故障不能被转换成unknown成功候选。
+    internal static async Task DropSuccessfulBatchReplyAsync(Func<Task<bool>> execute, Func<Task> abort)
+    {
+        if (!await execute()) throw new InvalidOperationException("批量授权真实保存未成功，不能制造响应丢失。");
+        await abort();
     }
 
     /// <summary>沿当前Part行的标准只读导航进入真实页签；保留原地址供后续回到同一来源。</summary>

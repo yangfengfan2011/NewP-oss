@@ -1109,7 +1109,11 @@ test('matches the reviewed current-tree baseline with no effect write commands',
       classification: 'read-query',
     },
     {
-      id: 'packages/ui/src/ObjectAuthorizationInput.tsx::query::usePlatformQuery.load::read>fetchObjectAuthorization',
+      id: 'packages/ui/src/ObjectAuthorizationInput.tsx::query::usePlatformQuery.load::inspectRead>request',
+      classification: 'read-query',
+    },
+    {
+      id: 'packages/ui/src/ObjectAuthorizationInput.tsx::query::usePlatformQuery.load::read>request',
       classification: 'read-query',
     },
   ]);

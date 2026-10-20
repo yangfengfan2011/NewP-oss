@@ -33,7 +33,7 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var view = Assert.Single(plan.ActionDataAccessCatalog, declaration => declaration.Execution == "document.document.authorization.view"
             && declaration.Surface == "read");
-        var manager = Assert.Single(plan.ActionDataAccessCatalog, declaration => declaration.Execution == "document.document.authorization.manage"
+        var manager = Assert.Single(plan.ActionDataAccessCatalog, declaration => declaration.BusinessBinding == "document.document.authorize"
             && declaration.Surface == "rowActions");
         var foreign = Assert.Single(plan.ActionDataAccessCatalog, declaration => declaration.Execution == "part.part.authorization.view"
             && declaration.Surface == "read");
@@ -50,7 +50,7 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         using (var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, root + "/catalog", dataAccess: foreign))
             Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);
-        using (var auxiliary = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, root + "/catalog", dataAccess: manager))
+        using (var auxiliary = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, root + "/catalog", dataAccess: view))
             Assert.Equal(HttpStatusCode.OK, auxiliary.StatusCode);
         using (var forbidden = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, root + "/eligibility", dataAccess: manager))
             Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
@@ -138,10 +138,10 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
         var id = BusinessAuditSqlServerHttpApiTests.Id(await created.Content.ReadFromJsonAsync<JsonElement>());
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var borrowed = Assert.Single(plan.ActionDataAccessCatalog, declaration =>
-            declaration.Execution == "authorization.role.authorization.manage" && declaration.Provider == "authorization.object.manage");
+            declaration.BusinessBinding == "authorization.role.authorize");
         var path = "/api/part/parts/" + id + "/permissions/eligibility";
         var own = Assert.Single(plan.ActionDataAccessCatalog, declaration =>
-            declaration.Execution == "part.part.authorization.manage" && declaration.Surface == "rowActions");
+            declaration.BusinessBinding == "part.part.authorize" && declaration.Surface == "rowActions");
         using (var allowed = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, path, dataAccess: own))
             Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
         using var missing = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, path);
@@ -154,7 +154,7 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
         foreach (var suffix in new[] { "/catalog", "/subjects/user", "/explanation" })
         {
             using var auxiliary = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get,
-                "/api/part/parts/" + id + "/permissions" + suffix, dataAccess: own);
+                "/api/part/parts/" + id + "/permissions" + suffix, dataAccess: Assert.Single(plan.ActionDataAccessCatalog, item => item.ViewKey == "part.part.permissions" && item.Surface == "read"));
             Assert.Equal(HttpStatusCode.OK, auxiliary.StatusCode);
         }
         foreach (var suffix in new[] { "/eligibility", "", "/subjects/role" })

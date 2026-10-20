@@ -58,7 +58,7 @@ public sealed class OrganizationFeatureOnlyExecutionTests
             "/api/authorization/data-scope/objects/organization.person/" + person,
             new DataScopeObjectDto("organization.person", person,
                 [new("Feature310Read", "user", actor.AccountId, 0, new Dictionary<string, string> { ["read"] = "deny" })]),
-            Binding("organization.person.authorization.manage", manage)))
+            Binding("organization.person.authorize", manage)))
             Assert.Equal(HttpStatusCode.NoContent, configured.StatusCode);
         var link = http.Organization("persons", "linkUser", "detail.custom");
         var disable = http.Organization("persons", "disable", "list.rowActions");

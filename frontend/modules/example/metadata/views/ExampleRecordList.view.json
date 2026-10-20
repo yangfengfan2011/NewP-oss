@@ -93,9 +93,10 @@
       {
         "key": "viewAuthorization",
         "labelKey": "Action_ViewAuthorization",
-        "handlerKey": "authorize",
+        "handlerKey": "viewAuthorization",
+        "behaviorKey": "example.record.authorize",
         "inputKey": "objectAuthorizationDetails",
-          "dataAccess": { "execution": "example.record.authorization.inspect", "resources": ["example.record"] },
+          "dataAccess": { "object": "ExampleRecord", "actions": ["read", "authorize"] },
         "confirmLabelKey": "Action_Close"
       },
       {

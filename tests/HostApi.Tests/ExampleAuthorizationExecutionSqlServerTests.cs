@@ -19,7 +19,7 @@ public sealed class ExampleAuthorizationExecutionSqlServerTests
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var catalog = fixture.Services.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeResourceCatalog>();
         Assert.All(new[] { "identity.account", "authorization.role" }, key =>
-            Assert.Contains(plan.ActionDataAccessCatalog, declaration => declaration.Provider == "authorization.object.manage"
+            Assert.Contains(plan.ActionDataAccessCatalog, declaration => declaration.BusinessBinding == key + ".authorize"
                 && declaration.Resources.SequenceEqual([key])));
         using var admin = await fixture.LoginAdministratorAsync(); var http = new FeatureHttpTestRequests(fixture);
         var identity = plan.FeatureCatalog.First(point => point.BehaviorKey == "identity.account.authorize");
@@ -30,7 +30,7 @@ public sealed class ExampleAuthorizationExecutionSqlServerTests
         foreach (var target in new[] { (Key: "identity.account", Id: actor.AccountId, Point: identity), (Key: "authorization.role", Id: actor.RoleId, Point: role) })
         {
             var path = "/api/authorization/data-scope/objects/" + target.Key + "/" + target.Id;
-            var source = OwnedResourceReadHttpRequests.ForExecution(fixture, target.Point, target.Key + ".authorization.manage", "authorization.object.manage", target.Key);
+            var source = OwnedResourceReadHttpRequests.Button(fixture, target.Point, target.Key + ".authorize");
             using var eligible = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point, HttpMethod.Get, path + "/eligibility", dataAccess: source);
             Assert.Equal(HttpStatusCode.OK, eligible.StatusCode);
             using var saved = await FeatureHttpTestRequests.SendAsync(ordinary, target.Point, HttpMethod.Put, path, new DataScopeObjectDto(target.Key, target.Id, []), source);
@@ -63,7 +63,8 @@ public sealed class ExampleAuthorizationExecutionSqlServerTests
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         var binding = plan.ActionDataAccessCatalog.Single(item => item.FeaturePositions.Contains(manage.Position));
         var viewBinding = plan.ActionDataAccessCatalog.Single(item => item.FeaturePositions.Contains(inspect.Position));
-        Assert.Equal("Authorization", binding.ProviderModuleId);
+        Assert.Equal("example.record.authorize", binding.BusinessBinding);
+        Assert.Equal("example.record.viewAuthorization", viewBinding.BusinessBinding);
         foreach (var suffix in new[] { "/eligibility", "/catalog", "", "/subjects/user?page=1", "/explanation" })
         {
             using var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, path + suffix, dataAccess: binding);
@@ -73,7 +74,7 @@ public sealed class ExampleAuthorizationExecutionSqlServerTests
             dataAccess: plan.ActionDataAccessCatalog.Single(item => item.Execution == "example.record.create")))
             Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
         using (var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, path + "/eligibility", dataAccess: viewBinding))
-            Assert.Equal(HttpStatusCode.Forbidden, crossed.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);
         using (var wrongPosition = await FeatureHttpTestRequests.SendAsync(ordinary, http.Example(), HttpMethod.Get, path, dataAccess: binding))
             Assert.Equal(HttpStatusCode.Forbidden, wrongPosition.StatusCode);
         DataScopeObjectDto Config(string read, string authorize) => new("example.record", id,
@@ -85,7 +86,7 @@ public sealed class ExampleAuthorizationExecutionSqlServerTests
             using var save = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path,
                 Config(denied == "read" ? "deny" : "allow", denied == "authorize" ? "deny" : "allow"), binding);
             Assert.Equal(HttpStatusCode.NoContent, save.StatusCode);
-            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, inspect, HttpMethod.Get, path + "/catalog", dataAccess: viewBinding);
+            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, inspect, HttpMethod.Get, path + "/inspection/catalog", dataAccess: viewBinding);
             Assert.Equal(denied == "read" ? HttpStatusCode.NotFound : HttpStatusCode.Forbidden, response.StatusCode);
         }
         using (var restore = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, Config("allow", "allow"), binding))

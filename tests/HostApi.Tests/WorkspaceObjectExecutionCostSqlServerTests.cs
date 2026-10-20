@@ -41,7 +41,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             new("Cost315Actor", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow", ["authorize"] = "deny" }),
             new("Cost315Creator", "creator", null, 5, new Dictionary<string, string> { ["delete"] = "allow" }) ];
         var authorize = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder.authorize" && point.Key == "authorize");
-        using (var configured = await FeatureHttpTestRequests.SendAsync(admin, authorize, HttpMethod.Put,
+        using (var configured = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, authorize, HttpMethod.Put,
             "/api/workspace/content/" + parent.LinkIds[^1] + "/permissions?queryScope="
                 + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = root.SpaceId, rootFolderId = root.RootFolderId, linkIds = root.LinkIds })),
             new DataScopeObjectConfiguration("workspace.folder", parentId, subjects)))

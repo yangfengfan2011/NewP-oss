@@ -186,7 +186,7 @@ public sealed class PartHistoryDeclarationSqlServerTests
         var manage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Part" && point.Key == "authorize" && point.ActionScope == "list.rowActions");
         using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + id + "/permissions",
             new DataScopeObjectDto("part.part", id, [new("part302", "all", null, 1, new Dictionary<string, string> { ["read"] = read })]),
-            OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part"));
+            OwnedResourceReadHttpRequests.Button(fixture, manage, "part.part.authorize"));
         Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
     }
 

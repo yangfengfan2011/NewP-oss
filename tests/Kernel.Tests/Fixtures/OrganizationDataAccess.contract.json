@@ -115,68 +115,18 @@
     "viewKey": "organization.company.list",
     "surface": "rowActions",
     "actionKey": "authorize",
-    "execution": "organization.company.authorization.manage",
+    "execution": "",
     "resources": [
       "organization.company"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.rowActions/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.company"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.company"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.company"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "Company",
+    "businessBinding": "organization.company.authorize"
   },
   {
     "id": "Organization/view:organization.company.list/rowActions/action:delete",
@@ -492,12 +442,11 @@
     "viewKey": "organization.department.list",
     "surface": "rowActions",
     "actionKey": "authorize",
-    "execution": "organization.department.authorization.manage",
+    "execution": "",
     "resources": [
       "organization.department"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
@@ -505,57 +454,8 @@
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:authorize",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.department"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.department"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.department"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "Department",
+    "businessBinding": "organization.department.authorize"
   },
   {
     "id": "Organization/view:organization.department.list/rowActions/action:delete",
@@ -777,69 +677,19 @@
     "viewKey": "organization.person.detail",
     "surface": "pageActions",
     "actionKey": "authorize",
-    "execution": "organization.person.authorization.manage",
+    "execution": "",
     "resources": [
       "organization.person"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:authorize",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "Person",
+    "businessBinding": "organization.person.authorize"
   },
   {
     "id": "Organization/view:organization.person.detail/pageActions/action:disable",
@@ -1357,68 +1207,18 @@
     "viewKey": "organization.position.list",
     "surface": "rowActions",
     "actionKey": "authorize",
-    "execution": "organization.position.authorization.manage",
+    "execution": "",
     "resources": [
       "organization.position"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.position"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.position"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.position"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "Position",
+    "businessBinding": "organization.position.authorize"
   },
   {
     "id": "Organization/view:organization.position.list/rowActions/action:delete",

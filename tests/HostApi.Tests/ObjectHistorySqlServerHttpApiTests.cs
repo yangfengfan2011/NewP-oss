@@ -33,7 +33,7 @@ public sealed class ObjectHistorySqlServerHttpApiTests(ITestOutputHelper output)
             Point(fixture, "workspace.spaces.access"), read, history!);
         using var ordinary = actor.Client;
         var manage = Point(fixture, "part.part.authorize");
-        var management = new FeatureHttpTestRequests(fixture).Declaration("part.part.authorization.manage", manage);
+        var management = new FeatureHttpTestRequests(fixture).Declaration("part.part.authorize", manage);
         var configuration = new DataScopeObjectDto("part.part", part.Id,
             [new("History296All", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,

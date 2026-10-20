@@ -285,6 +285,64 @@ public sealed class ObjectAuthorizationButtonSqlServerTests
             await SnapshotAsync(fixture, part.Id));
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "实际只读按钮绑定独立GET实现，不能借其身份保存且原authorize资格不变")]
+    public async Task ExampleInspection_SeparatesReadBusinessFromSaveAndPreservesItsQualification()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeExample: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        var create = http.Example("create");
+        var created = await http.CreateButtonAsync(admin, create, "/api/example/records",
+            new { ECODE = "AUTH329-INSPECTION", ENAME = "只读授权实现", RecordSource = "Manual" });
+        var id = BusinessAuditSqlServerHttpApiTests.Id(created);
+        var inspect = http.Example("viewAuthorization");
+        var manage = http.Example("authorize");
+        Assert.Equal("example.record.authorize", inspect.BehaviorKey);
+        var source = http.Declaration("example.record.viewAuthorization", inspect);
+        Assert.Equal(new[] { "read", "authorize" }, source.Actions);
+        var manager = http.Declaration("example.record.authorize", manage);
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Auth329InspectRole", "只读授权角色",
+            "auth329.inspect", "只读授权主体", http.Example(), inspect);
+        using var ordinary = actor.Client;
+        var original = "/api/authorization/data-scope/objects/example.record/" + id;
+        var path = original + "/inspection";
+        DataScopeObjectConfiguration Configuration(string read, string authorize) => new("example.record", id,
+            [new("Auth329InspectionSubject", "user", actor.AccountId, 1,
+                new Dictionary<string, string> { ["read"] = read, ["authorize"] = authorize })]);
+        await ConfigureAsync("allow", "allow");
+        var before = await SnapshotAsync(fixture, id, "example.record");
+        foreach (var suffix in new[] { "", "/eligibility", "/catalog", "/explanation", "/subjects/user?page=1" })
+        {
+            using var read = await FeatureHttpTestRequests.SendAsync(ordinary, inspect, HttpMethod.Get, path + suffix, dataAccess: source);
+            Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        }
+        using (var borrowed = await FeatureHttpTestRequests.SendAsync(ordinary, inspect, HttpMethod.Put, original, Configuration("deny", "deny"), source))
+            Assert.Equal(HttpStatusCode.BadRequest, borrowed.StatusCode);
+        using (var borrowedManager = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get, path + "/catalog", dataAccess: manager))
+            Assert.Equal(HttpStatusCode.BadRequest, borrowedManager.StatusCode);
+        using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, inspect, HttpMethod.Get, path + "/catalog"))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Equal(before, await SnapshotAsync(fixture, id, "example.record"));
+        await ConfigureAsync("deny", "allow");
+        using (var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, inspect, HttpMethod.Get, path, dataAccess: source))
+            Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+        await ConfigureAsync("allow", "deny");
+        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, inspect, HttpMethod.Get, path, dataAccess: source))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        await ConfigureAsync("allow", "allow");
+        await http.GrantAsync(admin, actor.RoleId, http.Example());
+        var revokedBefore = await SnapshotAsync(fixture, id, "example.record");
+        using (var revoked = await FeatureHttpTestRequests.SendAsync(ordinary, inspect, HttpMethod.Get, path + "/catalog", dataAccess: source))
+            Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
+        Assert.Equal(revokedBefore, await SnapshotAsync(fixture, id, "example.record"));
+
+        async Task ConfigureAsync(string read, string authorize)
+        {
+            using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, original, Configuration(read, authorize), manager);
+            Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+        }
+    }
+
     private static async Task<string> SnapshotAsync(BusinessAuditHostFixture fixture, string objectId, string resourceKey = "part.part")
     {
         using var scope = fixture.Services.CreateScope();

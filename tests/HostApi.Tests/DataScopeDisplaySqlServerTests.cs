@@ -230,7 +230,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         {
             var grant = new DataScopeObjectDto(resourceKey, id,
                 [new("DisplayAllow237_" + id, "user", actor.AccountId, 0, new Dictionary<string, string> { ["read"] = "allow" })]);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
                 http.Organization(resourceKey == "organization.company" ? "companies" : "departments", "authorize", "list.rowActions"),
                 HttpMethod.Put, $"/api/authorization/data-scope/objects/{resourceKey}/{id}", grant);
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());

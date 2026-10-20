@@ -1,4 +1,4 @@
-export type DataScopeSubjectDirectoryRead = (path: string, signal?: AbortSignal) => Promise<unknown>;
+export type DataScopeSubjectDirectoryRead = (path: string, signal?: AbortSignal, subjectType?: string) => Promise<unknown>;
 
 export interface DataScopeSubjectName {
   id: string;
@@ -25,7 +25,7 @@ const currentValueBatchSize = 10;
 // transport 由管理入口提供；目录不持有资格、跨请求缓存或 UI 状态。
 async function readDirectory(read: DataScopeSubjectDirectoryRead, type: string, parameters: URLSearchParams, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  const result = await read(`/subjects/${encodeURIComponent(type)}?${parameters}`, signal) as DirectoryPage;
+  const result = await read(`/subjects/${encodeURIComponent(type)}?${parameters}`, signal, type) as DirectoryPage;
   signal?.throwIfAborted();
   return result;
 }

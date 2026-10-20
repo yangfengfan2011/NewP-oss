@@ -52,7 +52,8 @@ public sealed class DataScopeBatchCollectionSqlServerTests
                 + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
             using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path,
                 new DataScopeObjectDto(resource, target.Id, [new(target.Id + "-deny", "user", actor.AccountId, 10,
-                    new Dictionary<string, string> { [action] = "deny" })]));
+                    new Dictionary<string, string> { [action] = "deny" })]),
+                OwnedResourceReadHttpRequests.Button(fixture, manage, "workspace.folder.authorize"));
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         }
         // Only this first page is loaded; no descendant page or expanded tree node prepares the batch.
@@ -94,13 +95,13 @@ public sealed class DataScopeBatchCollectionSqlServerTests
         Assert.NotEqual(shared.LinkId, sharedItem.GetProperty("source").GetProperty("linkIds")[0].GetString());
         using var forbidden = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Post,
             "/api/workspace/content/permissions/batch/prepare", new { includeDescendants = true,
-                sources = new[] { new { position = rootPosition, linkIds = new[] { hidden.LinkId } } } });
+                sources = new[] { new { position = rootPosition, linkIds = new[] { hidden.LinkId } } } }, dataAccess: InputRead(fixture, manage));
         Assert.Equal(HttpStatusCode.NotFound, forbidden.StatusCode);
 
         async Task<JsonElement> PrepareAsync(object input)
         {
             using var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Post,
-                "/api/workspace/content/permissions/batch/prepare", input);
+                "/api/workspace/content/permissions/batch/prepare", input, dataAccess: InputRead(fixture, manage));
             return await ReadOkAsync(response);
         }
     }
@@ -123,7 +124,8 @@ public sealed class DataScopeBatchCollectionSqlServerTests
             "/api/workspace/content/" + hidden.LinkId + "/permissions?queryScope="
                 + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web))),
             new DataScopeObjectDto("part.part", hidden.Id, [new("SelectedHidden297Deny", "user", actor.AccountId, 1,
-                new Dictionary<string, string> { ["read"] = "deny" })]))) Assert.Equal(HttpStatusCode.NoContent, denied.StatusCode);
+                new Dictionary<string, string> { ["read"] = "deny" })]),
+            OwnedResourceReadHttpRequests.Button(fixture, manage, "workspace.folder.authorize"))) Assert.Equal(HttpStatusCode.NoContent, denied.StatusCode);
         using var personalResponse = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Post, "/api/workspace/spaces/personal/ensure");
         var personalRoot = await ReadOkAsync(personalResponse);
         var personal = new Position(personalRoot.GetProperty("spaceId").GetString()!, personalRoot.GetProperty("rootFolderId").GetString()!, []);
@@ -169,5 +171,9 @@ public sealed class DataScopeBatchCollectionSqlServerTests
 
     private static Dictionary<string, string?> Scope(Position position) => new() { ["spaceId"] = position.SpaceId,
         ["rootFolderId"] = position.RootFolderId, ["linkIds"] = JsonSerializer.Serialize(position.LinkIds) };
+
+    private static ICP.Platform.Kernel.ModulePlanning.ActionDataAccessRequirement InputRead(BusinessAuditHostFixture fixture, ICP.Platform.Kernel.ModulePlanning.FeaturePoint point) =>
+        OwnedResourceReadHttpRequests.ForExecution(fixture, point, "workspace.content.authorization.view", "authorization.collection.view",
+            "workspace.folder", "part.part", "document.document");
 
 }

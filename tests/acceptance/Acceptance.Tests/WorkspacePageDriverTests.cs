@@ -110,6 +110,26 @@ public sealed class WorkspacePageDriverTests
         Assert.Contains(status.ToString(), exception.Message);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LostBatchReply_ExecutesOnceAndOnlyAbortsAfterSuccessfulCommit(bool succeeded)
+    {
+        var calls = new List<string>();
+        Task<bool> Execute() { calls.Add("execute"); return Task.FromResult(succeeded); }
+        Task Abort() { calls.Add("abort"); return Task.CompletedTask; }
+        if (succeeded)
+        {
+            await WorkspacePageDriver.DropSuccessfulBatchReplyAsync(Execute, Abort);
+            Assert.Equal(new[] { "execute", "abort" }, calls);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => WorkspacePageDriver.DropSuccessfulBatchReplyAsync(Execute, Abort));
+            Assert.Equal(new[] { "execute" }, calls);
+        }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "独立Part片段等正式列表初载后选择真实新建按钮并保存，无服务器或端口")]
     public async Task IndependentPartCreate_WaitsForTheInitialListBeforeChoosingTheCreateEntry()
     {

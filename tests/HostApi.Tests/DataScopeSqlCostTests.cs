@@ -51,7 +51,7 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
                 var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
                 var config = new DataScopeObjectDto("organization.person", objectAllowed!,
                     [new("Scope_Cost_Object", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
-                using var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+                using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put,
                     $"/api/authorization/data-scope/objects/organization.person/{objectAllowed}", config);
                 Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
             }

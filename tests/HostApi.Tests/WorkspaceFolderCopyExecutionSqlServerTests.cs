@@ -36,7 +36,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             "/api/workspace/content/" + target.LinkIds[^1] + "/permissions?queryScope="
                 + Uri.EscapeDataString(JsonSerializer.Serialize(root, new JsonSerializerOptions(JsonSerializerDefaults.Web))),
             new DataScopeObjectConfiguration("workspace.folder", FolderId(target, await Rows(fixture, "WorkspaceFolderContent")), subjects),
-            declarations.Declaration("workspace.content.authorization.manage", authorize)))
+            declarations.Declaration("workspace.folder.authorize", authorize)))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var before = Snapshot(await Rows(fixture, "WorkspaceFolder"));
         var input = new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = target };

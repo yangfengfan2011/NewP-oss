@@ -33,7 +33,7 @@ public sealed class AuthorizationManagementExecutionSqlServerTests
             "/api/authorization/data-scope/objects/authorization.role/" + id,
             new DataScopeObjectDto("authorization.role", id,
                 [new("Role311Denied", "user", actor.AccountId, 0, new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" })]),
-            plan.ActionDataAccessCatalog.Single(item => item.Execution == "authorization.role.authorization.manage")))
+            plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "authorization.role.authorize")))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         using (var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get,
             "/api/authorization/roles/" + id, dataAccess: http.Declaration("authorization.role.read", read)))

@@ -37,7 +37,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var anchor = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "Capacity295Anchor");
         var read = fixture.FeatureCatalog.Single(point => point.ModuleId == "Part" && point.Kind == "navigation" && point.Key == "part.parts");
         var manage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Part" && point.Key == "authorize" && point.ActionScope == "list.rowActions");
-        var manageSource = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part");
+        var manageSource = OwnedResourceReadHttpRequests.Button(fixture, manage, "part.part.authorize");
         var viewSource = Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
             item => item.Execution == "part.part.authorization.view" && item.ViewKey == "part.part.list" && item.ActionKey == "viewAuthorization"
                 && item.FeaturePositions.Contains(read.Position, StringComparer.Ordinal));
@@ -145,14 +145,17 @@ public sealed partial class DataScopePermissionCostSqlServerTests
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "test"))
             };
-            var execution = OwnedResourceReadHttpRequests.BindManagementContext(fixture, accessor.HttpContext, manage, replacement.ResourceKey, replacement.ObjectId);
+            OwnedResourceReadHttpRequests.BindManagementContext(fixture, accessor.HttpContext, manage, replacement.ResourceKey, replacement.ObjectId);
+            var controller = new ICP.Platform.Modules.Authorization.Controllers.DataScopeObjectsController(
+                scope.ServiceProvider.GetRequiredService<DataScopeObjectManagement>(), scope.ServiceProvider.GetRequiredService<IButtonBusinessExecutor>())
+                { ControllerContext = new() { HttpContext = accessor.HttpContext } };
             fixture.Fault.AfterRegister = async (_, token) => { await executor.FlushAsync(token); flushed = true; cancel.Cancel(); token.ThrowIfCancellationRequested(); };
             try
             {
                 await MeasureAsync("flush-then-cancel", async () =>
                 {
-                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scope.ServiceProvider.GetRequiredService<IDataScopeObjectAuthorization>()
-                        .ReplaceAsync(replacement.ResourceKey, replacement.ObjectId, replacement with { Subjects = replacement.Subjects.Select(subject => subject with { Priority = 2 }).ToArray() }, execution, cancel.Token));
+                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => controller.Save(replacement.ResourceKey, replacement.ObjectId,
+                        replacement with { Subjects = replacement.Subjects.Select(subject => subject with { Priority = 2 }).ToArray() }, cancel.Token));
                     return JsonSerializer.SerializeToElement(new { flushed, cancelled = cancel.IsCancellationRequested });
                 });
             }

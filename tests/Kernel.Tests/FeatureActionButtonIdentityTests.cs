@@ -25,23 +25,26 @@ public sealed class FeatureActionButtonIdentityTests
         var view = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == viewKey)["view"]!;
         var action = view["featureActions"]!.AsArray().Single(item => item!["key"]!.GetValue<string>() == "authorize")!;
         var behavior = action["behaviorKey"]!.GetValue<string>();
-        var oldExecution = action["dataAccess"]!["execution"]!.GetValue<string>();
         Assert.Null(action["handlerKey"]);
-        action["dataAccess"] = new JsonObject { ["object"] = model, ["actions"] = new JsonArray("read", "authorize") };
+        var declared = action["dataAccess"] is JsonArray array ? array.Select(item => item!.AsObject()).ToArray() : [action["dataAccess"]!.AsObject()];
         using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "plugin.json")));
         var features = StandardFeatureMetadataCompiler.Read(moduleId, documents.Select(document => JsonSerializer.SerializeToElement(document)),
             FeatureCatalogCompiler.Read(capsule.RootElement, moduleId), includeCustomFeatures: true);
         Assert.Equal(FeatureCatalogCompiler.Compile(candidates.SelectMany(candidate => candidate.Features)).Count,
             FeatureCatalogCompiler.Compile(candidates.Where((_, candidateIndex) => candidateIndex != index).SelectMany(candidate => candidate.Features).Concat(features)).Count);
-        candidates[index] = original with { Features = features, DataExecutions = original.DataExecutions.Where(contract => contract.Key != oldExecution
-            || features.SelectMany(feature => feature.DataAccess).Any(item => item.Execution == contract.Key)).ToArray() };
+        candidates[index] = original with { Features = features };
         var result = ActionDataAccessCompiler.Compile(candidates.SelectMany(candidate => candidate.Features).ToArray(),
             candidates.SelectMany(candidate => candidate.DataActions).ToArray(), candidates.SelectMany(candidate => candidate.DataExecutions).ToArray(),
             candidates.SelectMany(candidate => candidate.DataExecutionProviders).ToArray());
         var button = Assert.Single(result, item => item.ModuleId == moduleId && item.ViewKey == viewKey && item.Surface == "featureActions" && item.ActionKey == "authorize");
         Assert.Equal(behavior, button.BusinessBinding);
-        Assert.Equal(model, button.Object);
-        Assert.Equal(new[] { "read", "authorize" }, button.Actions);
+        Assert.Contains(button.GetObjectRequirements(), requirement => requirement.Object == model);
+        Assert.Equal(declared.Length, button.GetObjectRequirements().Count);
+        foreach (var entry in declared)
+        {
+            var requirement = Assert.Single(button.GetObjectRequirements(), item => item.Object == entry["object"]!.GetValue<string>());
+            Assert.Equal(entry["actions"]!.AsArray().Select(item => item!.GetValue<string>()), requirement.Actions);
+        }
         Assert.Empty(button.Execution);
         Assert.Null(action["handlerKey"]);
         Assert.All(button.FeaturePositions, position => Assert.EndsWith("/surface:" + (viewKey.EndsWith("detail", StringComparison.Ordinal) ? "detail" : "list") + ".custom/action:authorize", position));

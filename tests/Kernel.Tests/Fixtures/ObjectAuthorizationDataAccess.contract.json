@@ -5,68 +5,18 @@
     "viewKey": "document.document.list",
     "surface": "featureActions",
     "actionKey": "authorize",
-    "execution": "document.document.authorization.manage",
+    "execution": "",
     "resources": [
       "document.document"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "Document",
+    "businessBinding": "document.document.authorize"
   },
   {
     "id": "Document/view:document.document.list/rowActions/action:authorize",
@@ -74,68 +24,18 @@
     "viewKey": "document.document.list",
     "surface": "rowActions",
     "actionKey": "authorize",
-    "execution": "document.document.authorization.manage",
+    "execution": "",
     "resources": [
       "document.document"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "Document",
+    "businessBinding": "document.document.authorize"
   },
   {
     "id": "Document/view:document.document.list/rowActions/action:viewAuthorization",
@@ -187,7 +87,8 @@
       "read"
     ],
     "featurePositions": [
-      "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
     ],
     "requirements": [
       {
@@ -215,68 +116,18 @@
     "viewKey": "part.part.list",
     "surface": "featureActions",
     "actionKey": "authorize",
-    "execution": "part.part.authorization.manage",
+    "execution": "",
     "resources": [
       "part.part"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.custom/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "Part",
+    "businessBinding": "part.part.authorize"
   },
   {
     "id": "Part/view:part.part.list/rowActions/action:authorize",
@@ -284,68 +135,18 @@
     "viewKey": "part.part.list",
     "surface": "rowActions",
     "actionKey": "authorize",
-    "execution": "part.part.authorization.manage",
+    "execution": "",
     "resources": [
       "part.part"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "Part",
+    "businessBinding": "part.part.authorize"
   },
   {
     "id": "Part/view:part.part.list/rowActions/action:viewAuthorization",
@@ -397,7 +198,8 @@
       "read"
     ],
     "featurePositions": [
-      "Workspace/navigation:workspace/module:Part/navigation:part.parts"
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts",
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:authorize"
     ],
     "requirements": [
       {
@@ -435,7 +237,9 @@
       "read"
     ],
     "featurePositions": [
-      "Workspace/navigation:workspace"
+      "Workspace/navigation:workspace",
+      "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:batchAuthorize",
+      "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:authorizeContent"
     ],
     "requirements": [
       {
@@ -465,76 +269,40 @@
     "viewKey": "workspace.folder.list",
     "surface": "featureActions",
     "actionKey": "authorize",
-    "execution": "workspace.content.authorization.manage",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read",
-      "authorize"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:authorize"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.authorize",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 0,
-        "maximumCount": null
+        "resourceKey": "workspace.folder"
       },
       {
-        "role": "target",
-        "stage": "submit",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "Part",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
+        "resourceKey": "part.part"
       },
       {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "Document",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "authorization.collection.manage",
-    "providerModuleId": "Authorization"
+    ]
   },
   {
     "id": "Workspace/view:workspace.folder.list/pageActions/action:batchAuthorize",
@@ -542,76 +310,40 @@
     "viewKey": "workspace.folder.list",
     "surface": "pageActions",
     "actionKey": "batchAuthorize",
-    "execution": "workspace.content.authorization.batch",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read",
-      "authorize"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:batchAuthorize"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.authorize",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 0,
-        "maximumCount": null
+        "resourceKey": "workspace.folder"
       },
       {
-        "role": "target",
-        "stage": "submit",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "Part",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
+        "resourceKey": "part.part"
       },
       {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "Document",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "authorization.collection.manage",
-    "providerModuleId": "Authorization"
+    ]
   },
   {
     "id": "Workspace/view:workspace.folder.list/rowActions/action:authorizeContent",
@@ -619,76 +351,40 @@
     "viewKey": "workspace.folder.list",
     "surface": "rowActions",
     "actionKey": "authorizeContent",
-    "execution": "workspace.content.authorization.manage",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read",
-      "authorize"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:authorizeContent"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.authorize",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 0,
-        "maximumCount": null
+        "resourceKey": "workspace.folder"
       },
       {
-        "role": "target",
-        "stage": "submit",
-        "shape": "objects",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "Part",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": null
+        "resourceKey": "part.part"
       },
       {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "Document",
+        "actions": [
+          "authorize"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "authorization.collection.manage",
-    "providerModuleId": "Authorization"
+    ]
   },
   {
     "id": "Workspace/view:workspace.folder.list/rowActions/action:viewAuthorization",

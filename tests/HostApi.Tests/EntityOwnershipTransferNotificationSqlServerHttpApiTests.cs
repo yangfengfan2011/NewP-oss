@@ -43,7 +43,7 @@ public sealed class EntityOwnershipTransferNotificationSqlServerHttpApiTests
         var manage = fixture.FeatureCatalog.Single(point => point.Key == "authorizeContent" && point.ActionScope == "list.rowActions");
         var originalUrl = $"/api/workspace/content/{target.LinkId}/permissions?queryScope="
             + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        using (var denied = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, originalUrl,
+        using (var denied = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, originalUrl,
                    new DataScopeObjectDto("workspace.folder", target.Id, [new("deny-notification-recipient", "user", recipient.AccountId, 0,
                        new Dictionary<string, string> { ["read"] = "deny" })]), OwnershipDeclaration(fixture, "workspace.content.authorization.manage", manage)))
             Assert.True(denied.StatusCode == HttpStatusCode.NoContent, await denied.Content.ReadAsStringAsync());

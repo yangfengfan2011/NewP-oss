@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { Alert, Button, Checkbox, Input, Radio, Space, Spin, Table, Typography } from 'antd';
 import { formatRequestError, platformFetch, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { DataScopeSubjectTable } from '@icp-platform/ui';
-import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, standardCrudInputReadSource, StandardCrudRequestError, type ActionDataAccessRequirement, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
 import { batchInitialSources, batchItemKey, batchSubmission, prepareBatch, readBatchCurrent, batchAuthorizationHeaders,
   type BatchCurrentConfiguration, type BatchCatalog, type BatchDraft, type BatchFilters, type BatchItem, type BatchSource } from './workspaceBatchAuthorization';
 import { workspaceClipboard } from './workspaceClipboard';
@@ -13,6 +13,14 @@ const titleKeys: Record<string, string> = { 'part.part': 'Part.Title', 'document
 
 /** 当前实例拥有完整候选快照；标准Review仍拥有提交、取消、错误和弹层生命周期。 */
 export default function WorkspaceBatchAuthorizationInput(context: StandardCrudActionInputRenderContext) {
+  const dataAccess = context.action.dataAccess ?? context.dataAccess;
+  const inputReadSource = standardCrudInputReadSource(context);
+  return <WorkspaceBatchAuthorizationSession key={JSON.stringify([context.featurePosition, dataAccess?.id, inputReadSource?.id])}
+    {...context} dataAccess={dataAccess} inputReadSource={inputReadSource} />;
+}
+
+function WorkspaceBatchAuthorizationSession(context: StandardCrudActionInputRenderContext & { inputReadSource?: ActionDataAccessRequirement }) {
+  const { inputReadSource } = context;
   const { t } = useLocalization();
   const { onChange, onDraftStateChange } = context;
   const submission = batchSubmission(context.instance);
@@ -42,9 +50,9 @@ export default function WorkspaceBatchAuthorizationInput(context: StandardCrudAc
   const sources = batchInitialSources(context);
   const initialKey = JSON.stringify(sources);
   const denied = context.submissionFailure instanceof StandardCrudRequestError && [401, 403, 404].includes(context.submissionFailure.status);
-  const query = usePlatformQuery({ key: ['workspace-batch-authorization', initialKey, context.featurePosition ?? '', context.dataAccess?.id ?? '', opening.current],
+  const query = usePlatformQuery({ key: ['workspace-batch-authorization', initialKey, context.featurePosition ?? '', context.dataAccess?.id ?? '', inputReadSource?.id ?? '', opening.current],
     enabled: Boolean(context.featurePosition && !frozen && !denied),
-    load: ({ signal }) => prepareBatch(JSON.parse(initialKey), context.featurePosition!, signal, false, undefined, context.dataAccess?.id) });
+    load: ({ signal }) => prepareBatch(JSON.parse(initialKey), context.featurePosition!, signal, false, undefined, inputReadSource ?? context.dataAccess) });
   const draft = (context.value as BatchDraft | undefined) ?? (frozen ? submission?.lastDraft : undefined);
   useEffect(() => {
     if (query.status !== 'success' || !query.data || received.current === query.data || frozen) return;
@@ -63,7 +71,7 @@ export default function WorkspaceBatchAuthorizationInput(context: StandardCrudAc
     const controller = new AbortController(); collectionRequest.current = controller;
     setCollecting(true); setCollectionFailure(undefined);
     try {
-      const result = await prepareBatch(nextSources, context.featurePosition!, controller.signal, descendants, filters, context.dataAccess?.id);
+      const result = await prepareBatch(nextSources, context.featurePosition!, controller.signal, descendants, filters, inputReadSource ?? context.dataAccess);
       if (controller.signal.aborted) return;
       pool.current = nextSources; expanded.current = descendants; appliedFilters.current = filters;
       const items = result.items.filter(item => !removed.current.has(batchItemKey(item)));
@@ -87,7 +95,7 @@ export default function WorkspaceBatchAuthorizationInput(context: StandardCrudAc
   if (!draft) return <Spin />;
   const disabled = Boolean(context.submitting || frozen || editing || collecting);
   return <div style={{ maxHeight: '65vh', overflowY: 'auto' }}><Space direction="vertical" style={{ width: '100%' }}>
-    {frozen && <BatchReconciliation draft={draft} featurePosition={context.featurePosition!} declarationId={context.dataAccess?.id}
+    {frozen && <BatchReconciliation draft={draft} featurePosition={context.featurePosition!} dataAccess={context.dataAccess} inputReadSource={inputReadSource}
       onDenied={setCollectionFailure} onRestart={() => {
         pool.current = draft.items.map(item => item.source); expanded.current = false; appliedFilters.current = undefined;
         removed.current.clear(); setFilterDraft({});
@@ -133,7 +141,7 @@ export default function WorkspaceBatchAuthorizationInput(context: StandardCrudAc
     {draft.mode === 'R' && <Checkbox disabled={disabled} checked={draft.confirmClear}
       onChange={event => onChange({ ...draft, confirmClear: event.target.checked })}>{t('Workspace.BatchClearConfirm')}</Checkbox>}
     {draft.catalogs.filter(catalog => draft.items.some(item => item.resourceKey === catalog.resourceKey)).map(catalog => <ResourceSubjects key={catalog.resourceKey} catalog={catalog}
-      item={draft.items.find(item => item.resourceKey === catalog.resourceKey)!} featurePosition={context.featurePosition!} declarationId={context.dataAccess?.id}
+      item={draft.items.find(item => item.resourceKey === catalog.resourceKey)!} featurePosition={context.featurePosition!} dataAccess={context.dataAccess} inputReadSource={inputReadSource}
       subjects={draft.resources.find(resource => resource.resourceKey === catalog.resourceKey)?.subjects ?? []}
       disabled={Boolean(context.submitting || frozen || collecting || collectionFailure || draft.items.some(item => !item.manageable))} onEditingChange={active => setResourceEditing(catalog.resourceKey, active)}
       onChange={subjects => onChange({ ...draft, resources: draft.resources.map(resource => resource.resourceKey === catalog.resourceKey
@@ -141,21 +149,21 @@ export default function WorkspaceBatchAuthorizationInput(context: StandardCrudAc
   </Space></div>;
 }
 
-function ResourceSubjects({ catalog, item, featurePosition, declarationId, subjects, disabled, onChange, onEditingChange }: {
-  catalog: BatchCatalog; item: BatchItem; featurePosition: string; declarationId?: string; subjects: BatchDraft['resources'][number]['subjects']; disabled: boolean;
+function ResourceSubjects({ catalog, item, featurePosition, dataAccess, inputReadSource, subjects, disabled, onChange, onEditingChange }: {
+  catalog: BatchCatalog; item: BatchItem; featurePosition: string; dataAccess?: ActionDataAccessRequirement; inputReadSource?: ActionDataAccessRequirement; subjects: BatchDraft['resources'][number]['subjects']; disabled: boolean;
   onChange: (subjects: BatchDraft['resources'][number]['subjects']) => void; onEditingChange: (editing: boolean) => void;
 }) {
   const { t } = useLocalization();
   const sourceKey = JSON.stringify(item.source);
-  const read = useCallback(async (suffix: string, signal?: AbortSignal) => {
+  const read = useCallback(async (suffix: string, signal?: AbortSignal, subjectType?: string) => {
     const source = JSON.parse(sourceKey) as BatchItem['source'];
     const child = new URL(suffix, 'http://batch-authorization.local');
     const url = new URL(`/api/workspace/content/${encodeURIComponent(source.linkIds[0])}/permissions${child.pathname}`, 'http://batch-authorization.local');
     url.search = child.search; url.searchParams.set('queryScope', JSON.stringify(source.position));
-    const response = await platformFetch(url.pathname + url.search, { signal, headers: batchAuthorizationHeaders(featurePosition, declarationId) });
+    const response = await platformFetch(url.pathname + url.search, { signal, headers: batchAuthorizationHeaders(featurePosition, subjectType === 'user' ? inputReadSource ?? dataAccess : dataAccess) });
     if (!response.ok) throw await readStandardCrudRequestError(response);
     return response.json() as Promise<unknown>;
-  }, [sourceKey, featurePosition, declarationId]);
+  }, [sourceKey, featurePosition, dataAccess, inputReadSource]);
   return <section aria-label={t(titleKeys[catalog.resourceKey] ?? 'Workspace.Object')}>
     <Typography.Title level={5}>{t(titleKeys[catalog.resourceKey] ?? 'Workspace.Object')}</Typography.Title>
     <DataScopeSubjectTable subjects={subjects} types={catalog.subjectTypes} actions={catalog.actions} read={read}
@@ -164,8 +172,8 @@ function ResourceSubjects({ catalog, item, featurePosition, declarationId, subje
 }
 
 /** 显式读取不会重放旧模板；只有用户另行选择新操作才清空未知草稿并恢复编辑。 */
-function BatchReconciliation({ draft, featurePosition, declarationId, onDenied, onRestart }: {
-  draft: BatchDraft; featurePosition: string; declarationId?: string; onDenied: (failure: unknown) => void; onRestart: () => void;
+function BatchReconciliation({ draft, featurePosition, dataAccess, inputReadSource, onDenied, onRestart }: {
+  draft: BatchDraft; featurePosition: string; dataAccess?: ActionDataAccessRequirement; inputReadSource?: ActionDataAccessRequirement; onDenied: (failure: unknown) => void; onRestart: () => void;
 }) {
   const { t } = useLocalization();
   const [current, setCurrent] = useState<BatchCurrentConfiguration[]>();
@@ -178,7 +186,7 @@ function BatchReconciliation({ draft, featurePosition, declarationId, onDenied, 
     controller.current?.abort(); const request = new AbortController(); controller.current = request;
     setBusy(true); setCurrent(undefined); setFailure(undefined);
     try {
-      const result = await readBatchCurrent(draft, featurePosition, request.signal, declarationId);
+      const result = await readBatchCurrent(draft, featurePosition, request.signal, dataAccess);
       if (!request.signal.aborted) setCurrent(result);
     } catch (error) {
       if (!request.signal.aborted) {
@@ -195,7 +203,7 @@ function BatchReconciliation({ draft, featurePosition, declarationId, onDenied, 
       <Alert type="info" message={t('Workspace.BatchCurrentIsNotReceipt', '当前配置不能证明原请求是否提交')} />
       {current.map(configuration => <ResourceSubjects key={batchItemKey(configuration)}
         catalog={draft.catalogs.find(catalog => catalog.resourceKey === configuration.resourceKey)!}
-        item={draft.items.find(item => batchItemKey(item) === batchItemKey(configuration))!} featurePosition={featurePosition} declarationId={declarationId}
+        item={draft.items.find(item => batchItemKey(item) === batchItemKey(configuration))!} featurePosition={featurePosition} dataAccess={dataAccess} inputReadSource={inputReadSource}
         subjects={configuration.subjects} disabled onChange={() => {}} onEditingChange={() => {}} />)}
       <Button onClick={onRestart}>{t('Workspace.BatchStartNew', '开始新的授权操作')}</Button>
     </>}

@@ -33,9 +33,10 @@ public sealed class IdentityRoleAuthorizationExecutionSqlServerTests
         })
         {
             var path = "/api/authorization/data-scope/objects/" + resource + "/" + id;
-            var binding = plan.ActionDataAccessCatalog.Single(item => item.Execution == resource + ".authorization.manage");
+            var binding = plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == resource + ".authorize" && item.FeaturePositions.Contains(feature.Position));
             Assert.Equal("featureActions", binding.Surface);
-            Assert.Equal("authorization.object.manage", binding.Provider);
+            Assert.Null(binding.Provider);
+            Assert.Equal(new[] { "authorize" }, binding.Actions);
             // 第一次合法操作直接保存；不凭此前点击或eligibility结果放行。
             using (var saved = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Put, path,
                 Configuration("allow", "allow"), binding)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
@@ -44,8 +45,8 @@ public sealed class IdentityRoleAuthorizationExecutionSqlServerTests
                 Assert.Equal(HttpStatusCode.OK, read.StatusCode);
                 Assert.Single((await read.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("subjects").EnumerateArray());
             }
-            var wrongResource = plan.ActionDataAccessCatalog.Single(item => item.Execution ==
-                (resource == "authorization.role" ? "identity.account" : "authorization.role") + ".authorization.manage");
+            var wrongResource = plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding ==
+                (resource == "authorization.role" ? "identity.account" : "authorization.role") + ".authorize");
             using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Get, path, dataAccess: wrongResource))
                 Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
             using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Put, path, Configuration("allow", "allow")))

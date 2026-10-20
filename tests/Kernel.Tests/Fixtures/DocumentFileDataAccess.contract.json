@@ -22,7 +22,7 @@
       "moduleId": "Document",
       "key": "document.documents",
       "kind": "navigation",
-      "title": "\u56FE\u6587\u6863",
+      "title": "图文档",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "document.document.read",
       "entryDependencies": [
@@ -45,7 +45,7 @@
       "moduleId": "Document",
       "key": "document.history",
       "kind": "navigation",
-      "title": "\u5BF9\u8C61\u5C65\u5386",
+      "title": "对象履历",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.history",
       "entryDependencies": [
@@ -69,7 +69,7 @@
       "moduleId": "Document",
       "key": "download",
       "kind": "action",
-      "title": "\u4E0B\u8F7D",
+      "title": "下载",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.download",
       "entryDependencies": [
@@ -91,7 +91,7 @@
       "moduleId": "Document",
       "key": "authorize",
       "kind": "action",
-      "title": "\u5BF9\u8C61\u6388\u6743",
+      "title": "对象授权",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.authorize",
       "entryDependencies": [
@@ -113,7 +113,7 @@
       "moduleId": "Document",
       "key": "initializeOwnership",
       "kind": "action",
-      "title": "\u8865\u9F50\u5F52\u5C5E",
+      "title": "补齐归属",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.initializeOwnership",
       "entryDependencies": [
@@ -135,7 +135,7 @@
       "moduleId": "Document",
       "key": "create",
       "kind": "action",
-      "title": "\u65B0\u5EFA\u56FE\u6587\u6863",
+      "title": "新建图文档",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.create",
       "entryDependencies": [
@@ -159,7 +159,7 @@
       "moduleId": "Document",
       "key": "initializeOwnershipPending",
       "kind": "action",
-      "title": "\u5F85\u8865\u9F50\u5F52\u5C5E",
+      "title": "待补齐归属",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.initializeOwnership",
       "entryDependencies": [
@@ -183,7 +183,7 @@
       "moduleId": "Document",
       "key": "authorize",
       "kind": "action",
-      "title": "\u5BF9\u8C61\u6388\u6743",
+      "title": "对象授权",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.authorize",
       "entryDependencies": [
@@ -207,7 +207,7 @@
       "moduleId": "Document",
       "key": "initializeOwnership",
       "kind": "action",
-      "title": "\u8865\u9F50\u5F52\u5C5E",
+      "title": "补齐归属",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.initializeOwnership",
       "entryDependencies": [
@@ -231,7 +231,7 @@
       "moduleId": "Document",
       "key": "transfer",
       "kind": "action",
-      "title": "\u8F6C\u4EA4",
+      "title": "转交",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.transfer",
       "entryDependencies": [
@@ -369,68 +369,18 @@
       "viewKey": "document.document.list",
       "surface": "featureActions",
       "actionKey": "authorize",
-      "execution": "document.document.authorization.manage",
+      "execution": "",
       "resources": [
         "document.document"
       ],
       "actions": [
-        "read",
         "authorize"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:authorize"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        },
-        {
-          "role": "target",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        },
-        {
-          "role": "view",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "authorization.object.manage",
-      "providerModuleId": "Authorization"
+      "object": "Document",
+      "businessBinding": "document.document.authorize"
     },
     {
       "id": "Document/view:document.document.list/featureActions/action:initializeOwnership",
@@ -546,68 +496,18 @@
       "viewKey": "document.document.list",
       "surface": "rowActions",
       "actionKey": "authorize",
-      "execution": "document.document.authorization.manage",
+      "execution": "",
       "resources": [
         "document.document"
       ],
       "actions": [
-        "read",
         "authorize"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        },
-        {
-          "role": "target",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        },
-        {
-          "role": "view",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "authorization.object.manage",
-      "providerModuleId": "Authorization"
+      "object": "Document",
+      "businessBinding": "document.document.authorize"
     },
     {
       "id": "Document/view:document.document.list/rowActions/action:history",
@@ -716,7 +616,8 @@
         "read"
       ],
       "featurePositions": [
-        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
       ],
       "requirements": [
         {

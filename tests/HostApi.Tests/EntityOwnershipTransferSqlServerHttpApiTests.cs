@@ -45,7 +45,7 @@ public sealed class EntityOwnershipTransferSqlServerHttpApiTests
                 new("transfer-recipient-" + target.Id, "user", recipient.AccountId, 0,
                     new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" })
             ]);
-            using var configured = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+            using var configured = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put,
                 $"/api/part/parts/{target.Id}/permissions", configuration);
             Assert.True(configured.StatusCode == HttpStatusCode.NoContent, await configured.Content.ReadAsStringAsync());
             using var unreadable = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Get,

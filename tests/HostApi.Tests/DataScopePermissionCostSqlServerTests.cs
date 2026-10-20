@@ -43,7 +43,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests(ITestOutputHel
             "permission295-cost", "权限成本账号", read);
         using var ordinary = actor.Client;
         var path = "/api/document/documents/" + document.Id + "/permissions";
-        var managerSource = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "document.document.authorization.manage", "authorization.object.manage", "document.document");
+        var managerSource = OwnedResourceReadHttpRequests.Button(fixture, manage, "document.document.authorize");
         var viewerSource = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
             source => source.Execution == "document.document.authorization.view" && source.Provider == "authorization.object.view"
                 && source.ViewKey == "document.document.permissions" && source.Surface == "read"

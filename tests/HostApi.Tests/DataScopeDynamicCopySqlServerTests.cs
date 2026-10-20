@@ -54,7 +54,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             var input = new DataScopeObjectDto("part.part", id,
                 [new("DynamicCopyAll" + id, "all", null, 0, new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" }),
                  new("DynamicCopyCreator" + id, "creator", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow" })]);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + id + "/permissions", input);
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + id + "/permissions", input);
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         }
         await AssertTargetAsync(creator.AccountId, originalId, true);

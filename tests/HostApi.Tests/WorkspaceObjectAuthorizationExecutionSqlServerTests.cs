@@ -37,8 +37,10 @@ public sealed class WorkspaceObjectAuthorizationExecutionSqlServerTests
             "auth318.mixed.viewer", "工作空间只读权限主体", Point(fixture, "workspace.spaces.access"));
         using var readOnly = viewer.Client;
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var source = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.authorization.batch");
-        var borrowed = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.authorization.manage" && item.Surface == "rowActions");
+        var source = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.authorize" && item.Surface == "pageActions");
+        var borrowed = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.authorize" && item.Surface == "rowActions");
+        var inputRead = Assert.Single(plan.ActionDataAccessCatalog, item => item.ViewKey == "workspace.content.permissions" && item.Surface == "read"
+            && item.FeaturePositions.Contains(batch.Position));
         var sources = new[] { new { position, linkIds = targets.Select(target => target.LinkId).ToArray() } };
         const string prepare = "/api/workspace/content/permissions/batch/prepare";
         var emptyInput = new { sources, filters = new { createdBy = "auth318-no-matching-creator" } };
@@ -46,9 +48,9 @@ public sealed class WorkspaceObjectAuthorizationExecutionSqlServerTests
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         using (var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post, prepare, emptyInput, borrowed))
             Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);
-        using (var noFeature = await FeatureHttpTestRequests.SendAsync(readOnly, batch, HttpMethod.Post, prepare, emptyInput, source))
+        using (var noFeature = await FeatureHttpTestRequests.SendAsync(readOnly, batch, HttpMethod.Post, prepare, emptyInput, inputRead))
             Assert.Equal(HttpStatusCode.Forbidden, noFeature.StatusCode);
-        using (var empty = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post, prepare, emptyInput, source))
+        using (var empty = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post, prepare, emptyInput, inputRead))
         {
             Assert.Equal(HttpStatusCode.OK, empty.StatusCode);
             var body = await empty.Content.ReadFromJsonAsync<JsonElement>();
@@ -66,7 +68,7 @@ public sealed class WorkspaceObjectAuthorizationExecutionSqlServerTests
             var actions = (await viewed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("actions").EnumerateArray();
             Assert.False(Assert.Single(actions, action => action.GetProperty("key").GetString() == "authorize").GetProperty("allowed").GetBoolean());
         }
-        using (var prepared = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post, prepare, new { sources }, source))
+        using (var prepared = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post, prepare, new { sources }, inputRead))
         {
             Assert.Equal(HttpStatusCode.OK, prepared.StatusCode);
             var items = (await prepared.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items").EnumerateArray().ToArray();

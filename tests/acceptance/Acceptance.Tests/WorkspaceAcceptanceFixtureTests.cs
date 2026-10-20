@@ -46,6 +46,43 @@ public sealed class WorkspaceAcceptanceFixtureTests
         Assert.Equal(2, buttons.Count);
     }
 
+    [Fact]
+    [Trait("Category", "ModuleMetadataConsumer")]
+    public async Task AuthorizationPreparation_KeepsInputReadAndActualSaveButtonSeparate()
+    {
+        var compiled = new CanonicalModulePlanCompiler().Compile("authorization-preparation",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
+        var plan = compiled.Plan!;
+        var features = new AcceptanceFeatureCatalog(plan.FeatureCatalog, plan.ActionDataAccessCatalog);
+        var batch = features.Action(features.Behavior("Workspace", "workspace.spaces.access"), "batchAuthorize", "list.pageActions", "folder");
+        var read = features.DeclarationAtView(batch, "workspace.content.permissions", "read", "");
+        var button = features.Button(batch);
+        Assert.NotEqual(button, read);
+        var calls = 0;
+        using var client = new HttpClient(new Handler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/auth/antiforgery-token") return Json(HttpStatusCode.OK, "{\"requestToken\":\"fixture-token\"}");
+            Assert.Equal(batch.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            if (++calls == 1)
+            {
+                Assert.Equal(read, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
+                Assert.False(request.Headers.Contains("X-NewP-Button"));
+            }
+            else
+            {
+                Assert.Equal(button, Assert.Single(request.Headers.GetValues("X-NewP-Button")));
+                Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+            }
+            return Json(HttpStatusCode.OK, "{}");
+        })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
+        await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/permissions/batch/prepare",
+            new { sources = Array.Empty<object>() }, batch.Position, CancellationToken.None, read);
+        await WorkspaceAcceptanceFixture.SendButtonAsync(client, features, batch, HttpMethod.Post,
+            "/api/workspace/content/permissions/batch", new { mode = "U" }, CancellationToken.None);
+        Assert.Equal(2, calls);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

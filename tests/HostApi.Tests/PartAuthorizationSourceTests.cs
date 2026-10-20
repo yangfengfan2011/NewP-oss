@@ -5,6 +5,8 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
@@ -19,36 +21,44 @@ public sealed class PartAuthorizationSourceTests
     [InlineData("wrong-endpoint-owner")]
     [InlineData("wrong-resource-owner")]
     [InlineData("wrong-feature-behavior")]
-    public async Task OwnEndpoint_UsesTheRegisteredProviderWithoutRelaxingActualOwner(string variant)
+    public async Task OwnEndpoint_UsesItsActualButtonWithoutRelaxingRegisteredOwner(string variant)
     {
         var compiled = new CanonicalModulePlanCompiler().Compile("part-authorization-source",
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
         var plan = compiled.Plan!;
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "part.part.authorization.manage"
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "part.part.authorize"
             && item.Surface == "rowActions");
-        var target = Assert.Single(declaration.Requirements!, item => item.Role == "target" && item.Stage == "prepare");
-        Assert.Equal(new[] { "read", "authorize" }, Assert.Single(target.AnyOf));
+        Assert.Equal(new[] { "authorize" }, declaration.Actions);
+        Assert.Null(declaration.Provider); Assert.Null(declaration.Requirements);
         var context = new DefaultHttpContext { User = new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "source-test")], "test")) };
-        context.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(
-            new EndpointModuleAttribute(variant == "wrong-endpoint-owner" ? "Authorization" : "Part"),
-            new RequireFeatureAttribute(variant == "wrong-feature-behavior" ? "part.part.history" : "part.part.authorize")), "actual-owner-endpoint"));
+        context.SetEndpoint(variant == "wrong-resource-owner"
+            ? new RouteEndpoint(_ => Task.CompletedTask, RoutePatternFactory.Parse("api/authorization/data-scope/objects/{resourceKey}/{objectId}"), 0,
+                new EndpointMetadataCollection(new EndpointModuleAttribute("Authorization"), new AuthenticatedOnlyAttribute(),
+                    new ResourceFeatureBindingAttribute("authorize"), new ButtonBusinessHandlerAttribute(typeof(Probe))), "actual-generic-owner-proof")
+            : new Endpoint(null, new EndpointMetadataCollection(
+                new EndpointModuleAttribute(variant == "wrong-endpoint-owner" ? "Authorization" : "Part"),
+                new RequireFeatureAttribute(variant == "wrong-feature-behavior" ? "part.part.history" : "part.part.authorize"),
+                new ButtonBusinessHandlerAttribute(typeof(Probe))), "actual-owner-endpoint"));
+        context.Request.RouteValues["resourceKey"] = "part.part";
+        context.Request.RouteValues["objectId"] = "Part_actual";
         context.Request.Headers["X-NewP-Feature"] = Assert.Single(declaration.FeaturePositions);
-        if (variant != "missing") context.Request.Headers["X-NewP-Data-Declaration"] = variant == "foreign-resource"
-            ? Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "authorization.role.authorization.manage").Id : declaration.Id;
-        var reads = new Reads(); var decisions = new Decisions();
-        var access = new DataExecutionAccess(plan, new HttpContextAccessor { HttpContext = context }, reads, decisions,
-            new ResourceCatalog(variant == "wrong-resource-owner"));
-        var binding = new DataExecutionBindingReference("part.part.authorization.manage", "authorization.object.manage", "prepare");
+        if (variant != "missing") context.Request.Headers["X-NewP-Button"] = variant == "foreign-resource"
+            ? Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "authorization.role.authorize").Id : declaration.Id;
+        var checks = new Checks();
+        var access = new ButtonBusinessExecutor(new ButtonExecutionAccess(plan, new HttpContextAccessor { HttpContext = context },
+            new ResourceCatalog(variant == "wrong-resource-owner"), checks));
+        var handler = new Probe(new ButtonExecutionTarget("part.part", "Part", "Part_actual", new Dictionary<string, object?> { ["EID"] = "Part_actual" }));
         if (variant == "valid")
         {
-            Assert.Equal(DataExecutionDecision.Allowed, await access.EvaluateObjectAsync(binding, "part.part", "target", "actual-part"));
-            Assert.Equal(1, reads.Calls); Assert.Equal(new[] { "authorize" }, decisions.Calls);
+            Assert.Equal(1, await access.ExecuteAsync(handler, 1));
+            Assert.Equal(new[] { "Part:Part_actual:authorize" }, checks.Calls);
+            Assert.True(handler.Executed);
         }
         else
         {
-            await Assert.ThrowsAsync<ActionDataAccessException>(() => access.EvaluateObjectAsync(binding, "part.part", "target", "actual-part"));
-            Assert.Equal(0, reads.Calls); Assert.Empty(decisions.Calls);
+            await Assert.ThrowsAsync<ActionDataAccessException>(() => access.ExecuteAsync(handler, 1));
+            Assert.Empty(checks.Calls); Assert.False(handler.Executed);
         }
     }
 
@@ -57,19 +67,18 @@ public sealed class PartAuthorizationSourceTests
         public IReadOnlyList<DataScopeResource> Resources { get; } = [new("part.part", wrongOwner ? "Document" : "Part", "Part", "EID")];
     }
 
-    private sealed class Reads : IDataScopeObjectAccess
-    {
-        internal int Calls;
-        public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default)
-        { Calls++; return Task.FromResult(true); }
-    }
-
-    private sealed class Decisions : IDataScopeObjectDecisionProvider
+    private sealed class Checks : IObjectActionAccess
     {
         internal List<string> Calls { get; } = [];
-        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken token = default)
-        { Calls.Add(actionKey); return Task.FromResult(true); }
-        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string actionKey,
-            CancellationToken token = default) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> CheckAsync(string model, string id, IReadOnlyList<string> actions, CancellationToken token = default)
+        { Calls.Add(model + ":" + id + ":" + string.Join(",", actions)); return Task.FromResult(DataExecutionDecision.Allowed); }
+    }
+
+    private sealed class Probe(ButtonBusinessTarget target) : IButtonBusinessHandler<int, int, int>
+    {
+        internal bool Executed;
+        public Task<int> WithinBoundaryAsync(int input, string actionKey, Func<int, CancellationToken, Task<int>> execute, CancellationToken token) => execute(input, token);
+        public ButtonBusinessTarget Target(int state) => target;
+        public Task<int> ExecuteAsync(int state, CancellationToken token) { Executed = true; return Task.FromResult(state); }
     }
 }

@@ -118,7 +118,7 @@ public sealed class StandardReadExecutionSqlServerTests
             Assert.Equal(HttpStatusCode.Forbidden, wrongPosition.StatusCode);
         using (var exportAsList = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, "/api/example/records", dataAccess: binding))
             Assert.Equal(HttpStatusCode.BadRequest, exportAsList.StatusCode);
-        var management = plan.ActionDataAccessCatalog.Single(item => item.Provider == "authorization.object.manage" && item.FeaturePositions.Contains(manage.Position));
+        var management = plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "example.record.authorize" && item.FeaturePositions.Contains(manage.Position));
         using (var revoke = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
             "/api/authorization/data-scope/objects/example.record/" + id,
             new DataScopeObjectDto("example.record", id, [new("Query309Deny", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })]), management))

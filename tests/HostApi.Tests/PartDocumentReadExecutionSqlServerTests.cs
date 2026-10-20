@@ -65,7 +65,7 @@ public sealed class PartDocumentReadExecutionSqlServerTests
         var hiddenId = hidden.GetProperty("fields").GetProperty("EID").GetString()!;
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, module + "Reads309", "正式资源读取", module.ToLowerInvariant() + "-reads309", "读取普通主体", entry);
         using var ordinary = actor.Client;
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, route + "/" + hiddenId + "/permissions",
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, route + "/" + hiddenId + "/permissions",
             new DataScopeObjectDto(resource, hiddenId, [new("hidden-read309", "all", null, 1, new Dictionary<string, string> { ["read"] = "deny" })])))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var list = OwnedResourceReadHttpRequests.Declaration(fixture, entry, resource, "list");
@@ -85,7 +85,7 @@ public sealed class PartDocumentReadExecutionSqlServerTests
         Assert.Equal(visibleId, detail.GetProperty("fields").GetProperty("EID").GetString());
         using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, route + "/" + hiddenId, dataAccess: read))
             Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
-        using (var revoked = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, route + "/" + visibleId + "/permissions",
+        using (var revoked = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, route + "/" + visibleId + "/permissions",
             new DataScopeObjectDto(resource, visibleId, [new("visible-read309", "all", null, 1, new Dictionary<string, string> { ["read"] = "deny" })])))
             Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
         using (var stale = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, route + "/" + visibleId, dataAccess: read))

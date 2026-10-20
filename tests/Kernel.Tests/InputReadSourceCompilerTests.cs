@@ -116,7 +116,9 @@ public sealed class InputReadSourceCompilerTests
         var read = Assert.Single(plan, item => item.ViewKey == sourceKey && item.Surface == "read");
         Assert.Equal(new[] { "workspace.folder", "part.part", "document.document" }, read.Resources);
         Assert.Equal(new[] { "read" }, read.Actions);
-        var buttons = plan.Where(item => item.BusinessBinding == behavior).ToArray();
+        var inputIds = candidates[index].Features.SelectMany(feature => feature.DataAccess)
+            .Where(item => item.InputReadSourceKey == sourceKey).Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var buttons = plan.Where(item => item.BusinessBinding == behavior && inputIds.Contains(item.Id)).ToArray();
         Assert.NotEmpty(buttons);
         Assert.All(buttons, button =>
         {

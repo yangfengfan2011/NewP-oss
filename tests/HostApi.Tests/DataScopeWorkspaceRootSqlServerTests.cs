@@ -21,7 +21,7 @@ public sealed class DataScopeWorkspaceRootSqlServerTests(ITestOutputHelper outpu
         var entry = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "workspace.spaces.access");
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "workspace.folder.authorize");
         var source = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-            declaration => declaration.Execution == "workspace.content.authorization.manage" && declaration.FeaturePositions.Contains(manage.Position));
+            declaration => declaration.BusinessBinding == "workspace.folder.authorize" && declaration.FeaturePositions.Contains(manage.Position));
         var results = new Dictionary<string, HttpStatusCode>();
         foreach (var space in new[] { "public/initialize", "personal/ensure" })
         {
@@ -56,9 +56,9 @@ public sealed class DataScopeWorkspaceRootSqlServerTests(ITestOutputHelper outpu
             "auth318.generic.folder", "通用目录授权主体", manage);
         using var ordinary = actor.Client;
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var source = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.authorization.manage"
+        var source = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.authorize"
             && item.FeaturePositions.Contains(manage.Position));
-        var foreign = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "part.part.authorization.manage" && item.Surface == "rowActions");
+        var foreign = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "part.part.authorize" && item.Surface == "rowActions");
         var path = "/api/authorization/data-scope/objects/workspace.folder/" + target.Id;
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, path))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);

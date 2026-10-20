@@ -80,7 +80,8 @@ it.each(['Part', 'WorkspaceFolder', 'Document'] as const)('saves a Workspace %s 
         <CurrentPermissionScope><StandardCrudActions actions={[definition!]} handlers={registration.actionHandlers}
           actionInputs={registration.actionInputRenderers} actionEligibilityResolvers={registration.actionEligibilityResolvers}
           featureResolutionForAction={() => ({ kind: 'allowed', position: positions.managePosition })} refresh={vi.fn()}
-          context={{ id: sourceLinkId, row: { LID: sourceLinkId, ObjectModelKey: modelKey, ObjectId: objectId, Name: `Source ${modelKey}` },
+          context={{ id: sourceLinkId, dataAccessDeclarations: [formalDataAccessFor('workspace.content.permissions', 'read')],
+            row: { LID: sourceLinkId, ObjectModelKey: modelKey, ObjectId: objectId, Name: `Source ${modelKey}` },
             queryScope: { spaceId: position.spaceId, rootFolderId: position.rootFolderId, linkIds: JSON.stringify(position.linkIds) }, instance }} />
         </CurrentPermissionScope>
       </AuthProvider>
@@ -338,6 +339,8 @@ it.each(['part', 'document'] as const)('saves independent %s authorization throu
   const api = owner === 'part' ? '/api/part/parts' : '/api/document/documents';
   const positions = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', `${modelKey}PermissionFeatures.contract.json`), 'utf8')) as { readPosition: string; managePosition: string };
   const definition = (authoring().viewDocuments.find(document => document.view.key === `${resourceKey}.list`)!.view.rowActions as StandardCrudActionDefinition[]).find(action => action.key === 'authorize')!;
+  definition.dataAccess = formalDataAccessFor(`${resourceKey}.list`, 'rowActions', 'authorize');
+  const inputRead = formalDataAccessFor(`${resourceKey}.permissions`, 'read');
   const bindings = owner === 'part' ? partBindings : documentBindings;
   const registration = (await bindings.standardCrudCapabilities!.find(binding => binding.targetKey === `${resourceKey}.list`)!.load()).default;
   const requests: Request[] = [];
@@ -362,7 +365,7 @@ it.each(['part', 'document'] as const)('saves independent %s authorization throu
         <CurrentPermissionScope><StandardCrudActions actions={[definition]} handlers={registration.actionHandlers}
           actionInputs={registration.actionInputRenderers} actionEligibilityResolvers={registration.actionEligibilityResolvers}
           featureResolutionForAction={() => ({ kind: 'allowed', position: positions.managePosition })} refresh={vi.fn()}
-          context={{ id: 'entity', row: { EID: 'entity', ENAME: 'Independent object' }, instance }} />
+          context={{ id: 'entity', row: { EID: 'entity', ENAME: 'Independent object' }, instance, dataAccessDeclarations: [inputRead] }} />
         </CurrentPermissionScope>
       </AuthProvider>
     </LocalizationProvider>,
@@ -381,6 +384,11 @@ it.each(['part', 'document'] as const)('saves independent %s authorization throu
   expect(writes).toHaveLength(1);
   expect(await writes[0].clone().json()).toEqual({ resourceKey, objectId: 'entity', subjects: [] });
   expect(requests.filter(request => new URL(request.url).pathname.includes('/permissions')).every(request => request.headers.get('X-NewP-Feature') === positions.managePosition)).toBe(true);
+  for (const request of requests.filter(request => new URL(request.url).pathname.includes('/permissions'))) {
+    const catalog = new URL(request.url).pathname.endsWith('/catalog');
+    expect(request.headers.get(catalog ? 'X-NewP-Data-Declaration' : 'X-NewP-Button')).toBe(catalog ? inputRead.id : definition.dataAccess!.id);
+    expect(request.headers.has(catalog ? 'X-NewP-Button' : 'X-NewP-Data-Declaration')).toBe(false);
+  }
   expect(requests.some(request => new URL(request.url).searchParams.has('queryScope'))).toBe(false);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });

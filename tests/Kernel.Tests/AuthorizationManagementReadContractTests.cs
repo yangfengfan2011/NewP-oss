@@ -63,7 +63,7 @@ public sealed class AuthorizationManagementReadContractTests
     }
 
     [Fact]
-    public void IdentityAndRoleObjectManagement_UsesExistingNonPresentedSourcesAndOneProviderFloor()
+    public void IdentityAndRoleObjectManagement_UsesExistingNonPresentedButtonsWithoutDuplicateContracts()
     {
         var result = new CanonicalModulePlanCompiler().Compile("platform-object-management",
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
@@ -71,19 +71,14 @@ public sealed class AuthorizationManagementReadContractTests
         foreach (var (resource, owner, view) in new[] { ("authorization.role", "Authorization", "authorization.role.detail"),
             ("identity.account", "Identity", "identity.account.detail") })
         {
-            var source = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Execution == resource + ".authorization.manage");
+            var source = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.BusinessBinding == resource + ".authorize");
             Assert.Equal(owner, source.ModuleId); Assert.Equal(view, source.ViewKey);
             Assert.Equal("featureActions", source.Surface); Assert.Equal("authorize", source.ActionKey);
-            Assert.Equal("authorization.object.manage", source.Provider); Assert.Equal("Authorization", source.ProviderModuleId);
+            Assert.Equal(new[] { "authorize" }, source.Actions); Assert.Null(source.Provider); Assert.Null(source.Requirements);
             var feature = Assert.Single(result.Plan.FeatureCatalog, item => item.ModuleId == owner && item.BehaviorKey == resource + ".authorize");
             Assert.Equal("detail.custom", feature.ActionScope);
             Assert.Equal(feature.Position, Assert.Single(source.FeaturePositions));
-            var targets = source.Requirements!.Where(role => role.Role == "target").ToArray();
-            Assert.Equal(new[] { "prepare", "submit" }, targets.Select(item => item.Stage));
-            Assert.All(targets, role => Assert.Equal(new[] { "read", "authorize" }, Assert.Single(role.AnyOf)));
-            var viewRole = Assert.Single(source.Requirements!, role => role.Role == "view");
-            Assert.Equal(("prepare", "object"), (viewRole.Stage, viewRole.Shape));
-            Assert.Equal(new[] { "read" }, Assert.Single(viewRole.AnyOf));
+            Assert.DoesNotContain(result.Plan.Modules.SelectMany(module => module.DataExecutions), contract => contract.Key == resource + ".authorization.manage");
         }
     }
 }

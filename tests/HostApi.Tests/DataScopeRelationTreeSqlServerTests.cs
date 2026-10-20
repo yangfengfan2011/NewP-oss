@@ -120,7 +120,7 @@ public sealed class DataScopeRelationTreeSqlServerTests(ITestOutputHelper output
             var subjects = opinion is null ? [] : new[]
             { new DataScopeDirectSubjectDto("TreeObject236_" + id, "user", actor.AccountId, 0,
                 new Dictionary<string, string> { ["read"] = opinion }) };
-            using var response = await FeatureHttpTestRequests.SendAsync(admin,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
                 fixture.FeatureCatalog.First(point => point.BehaviorKey == resource + ".authorize"), HttpMethod.Put,
                 $"/api/authorization/data-scope/objects/{resource}/{id}", new DataScopeObjectDto(resource, id, subjects));
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
@@ -178,7 +178,7 @@ public sealed class DataScopeRelationTreeSqlServerTests(ITestOutputHelper output
                 [new("TreeCostCompanySubject236", "all", null, 0,
                     new Dictionary<string, string> { ["read"] = "deny" })], [])))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
             fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.company.authorize"),
             HttpMethod.Put, $"/api/authorization/data-scope/objects/organization.company/{company}",
             new DataScopeObjectDto("organization.company", company,

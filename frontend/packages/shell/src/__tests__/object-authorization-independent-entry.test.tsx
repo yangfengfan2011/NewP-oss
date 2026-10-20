@@ -226,7 +226,10 @@ it('saves owner authorization through the real standalone Part route without an 
       expect(request.headers.get('X-NewP-Feature')).toBe(fixture('PartPermissionFeatures').readPosition);
       continue;
     }
-    expect(request.headers.get('X-NewP-Data-Declaration')).toBe(source.id);
+    const auxiliary = new URL(request.url).pathname.endsWith('/catalog') || new URL(request.url).pathname.includes('/subjects/user');
+    expect(request.headers.get(auxiliary ? 'X-NewP-Data-Declaration' : 'X-NewP-Button'))
+      .toBe(auxiliary ? formalDataAccessFor('part.part.permissions', 'read').id : source.id);
+    expect(request.headers.has(auxiliary ? 'X-NewP-Button' : 'X-NewP-Data-Declaration')).toBe(false);
     expect(request.headers.get('X-NewP-Feature')).toBe(fixture('PartPermissionFeatures').managePosition);
   }
 });

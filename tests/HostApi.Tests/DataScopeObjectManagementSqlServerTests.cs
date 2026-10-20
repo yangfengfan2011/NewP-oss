@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
-using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Testing;
@@ -35,7 +34,7 @@ public sealed class DataScopeObjectManagementSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "WriteEligibility", "授权写入资格", "writeeligibility", "授权写入资格", read, manage);
         using var ordinary = actor.Client;
         var path = "/api/authorization/data-scope/objects/part.part/" + part.Id;
-        var source = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part");
+        var source = OwnedResourceReadHttpRequests.Button(fixture, manage, "part.part.authorize");
         DataScopeObjectDto Configuration(string readOpinion, string authorizeOpinion) => new("part.part", part.Id,
             [new("write-eligibility", "user", actor.AccountId, 1, new Dictionary<string, string>
                 { ["read"] = readOpinion, ["authorize"] = authorizeOpinion })]);
@@ -89,17 +88,16 @@ public sealed class DataScopeObjectManagementSqlServerTests
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "test"))
             };
             // 此低层取消控制保留真实generic端点身份及正式来源；HTTP资格矩阵已由上面的真实请求覆盖。
-            context.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(
-                new EndpointModuleAttribute("Authorization"), new ResourceFeatureBindingAttribute("authorize"),
-                new DataExecutionEndpointAttribute("authorization.object.manage", "submit")), "generic-permission-cancellation"));
-            context.HttpContext.Request.Headers["X-NewP-Data-Declaration"] = source.Id;
-            context.HttpContext.Request.Headers["X-NewP-Feature"] = manage.Position;
+            OwnedResourceReadHttpRequests.BindManagementContext(fixture, context.HttpContext, manage, "part.part", part.Id);
+            var controller = new ICP.Platform.Modules.Authorization.Controllers.DataScopeObjectsController(
+                scope.ServiceProvider.GetRequiredService<DataScopeObjectManagement>(), scope.ServiceProvider.GetRequiredService<IButtonBusinessExecutor>())
+                { ControllerContext = new() { HttpContext = context.HttpContext } };
             var failure = new OperationCanceledException(cancellation.Token);
             faults.Failure = failure;
             try
             {
                 Assert.Same(failure, await Assert.ThrowsAsync<OperationCanceledException>(() =>
-                    scope.ServiceProvider.GetRequiredService<DataScopeObjectManagement>().SaveAsync("part.part", part.Id, allowed, cancellation.Token)));
+                    controller.Save("part.part", part.Id, allowed, cancellation.Token)));
             }
             finally { faults.Failure = null; context.HttpContext = previous; }
         }

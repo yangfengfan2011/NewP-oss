@@ -246,7 +246,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
             await paused.Task.WaitAsync(TimeSpan.FromSeconds(30));
             using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
                 "/api/authorization/data-scope/objects/workspace.folder/" + target.Id, new DataScopeObjectDto("workspace.folder", target.Id,
-                    [new("StructureRollbackParent298", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" })]), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize"))))
+                    [new("StructureRollbackParent298", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" })]), new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.authorize", Point(fixture, "workspace.folder.authorize"))))
                 Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
             var parentEntry = Assert.Single(await RowsAsync(fixture, "DataScopeObjectSubject"), row => Equals(row["ObjectId"], target.Id));
             Assert.Equal("deny", Assert.Single(await RowsAsync(fixture, "DataScopeObjectAction"), row => Equals(row["EntryId"], parentEntry["EID"])
@@ -292,7 +292,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
     {
         using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
             "/api/workspace/content/" + target.LinkId + "/permissions?queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web))),
-            new DataScopeObjectConfiguration("workspace.folder", target.Id, subjects), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")));
+            new DataScopeObjectConfiguration("workspace.folder", target.Id, subjects), new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.authorize", Point(fixture, "workspace.folder.authorize")));
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
     private static async Task<Dictionary<string, object?>[]> RowsAsync(BusinessAuditHostFixture fixture, string model)

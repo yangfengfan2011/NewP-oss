@@ -47,37 +47,37 @@ public sealed class DataScopeWorkspacePartSqlServerTests
         using var ordinary = actor.Client;
         var path = "/api/workspace/content/" + part.LinkId + "/permissions?queryScope="
             + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        using (var generic = await FeatureHttpTestRequests.SendAsync(ordinary, manage!, HttpMethod.Get,
+        using (var generic = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage!, HttpMethod.Get,
             "/api/authorization/data-scope/objects/part.part/" + part.Id))
             Assert.Equal(HttpStatusCode.Forbidden, generic.StatusCode);
-        var empty = await FeatureHttpTestRequests.ReadAsync(ordinary, manage!, path);
+        var empty = await FeatureHttpTestRequests.ReadAsync(ordinary, manage!, path, dataAccess: new FeatureHttpTestRequests(fixture).Declaration(manage!.BehaviorKey, manage!));
         Assert.Empty(empty.GetProperty("subjects").EnumerateArray());
         var config = new DataScopeObjectDto("part.part", part.Id,
             [new("CrossOwner295Subject", "user", actor.AccountId, 1,
                 new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow", ["edit"] = "deny" })]);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(ordinary, manage!, HttpMethod.Put, path, config))
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage!, HttpMethod.Put, path, config))
             Assert.True(saved.StatusCode == HttpStatusCode.NoContent, await saved.Content.ReadAsStringAsync());
-        var current = await FeatureHttpTestRequests.ReadAsync(ordinary, manage!, path);
+        var current = await FeatureHttpTestRequests.ReadAsync(ordinary, manage!, path, dataAccess: new FeatureHttpTestRequests(fixture).Declaration(manage!.BehaviorKey, manage!));
         Assert.Single(current.GetProperty("subjects").EnumerateArray());
-        using (var forgedTarget = await FeatureHttpTestRequests.SendAsync(ordinary, manage!, HttpMethod.Put, path,
+        using (var forgedTarget = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage!, HttpMethod.Put, path,
             config with { ObjectId = "another-object" }))
             Assert.Equal(HttpStatusCode.BadRequest, forgedTarget.StatusCode);
         var wrongSource = "/api/workspace/content/" + part.LinkId + "/permissions?queryScope="
             + Uri.EscapeDataString(JsonSerializer.Serialize(position with { LinkIds = [] }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        using (var invalidPosition = await FeatureHttpTestRequests.SendAsync(ordinary, manage!, HttpMethod.Get, wrongSource))
+        using (var invalidPosition = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage!, HttpMethod.Get, wrongSource))
             Assert.Equal(HttpStatusCode.NotFound, invalidPosition.StatusCode);
-        using (var revoked = await FeatureHttpTestRequests.SendAsync(ordinary, manage!, HttpMethod.Put, path,
+        using (var revoked = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage!, HttpMethod.Put, path,
             config with { Subjects = [config.Subjects[0] with { Actions = new Dictionary<string, string>
                 { ["read"] = "deny", ["authorize"] = "deny", ["edit"] = "allow" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
-        using (var noLongerReadable = await FeatureHttpTestRequests.SendAsync(ordinary, manage!, HttpMethod.Get, path))
+        using (var noLongerReadable = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage!, HttpMethod.Get, path))
             Assert.Equal(HttpStatusCode.NotFound, noLongerReadable.StatusCode);
         using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
             "/api/workspace/content/references/" + part.LinkId, new { position }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.remove"))))
             Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
-        using (var staleRead = await FeatureHttpTestRequests.SendAsync(admin, manage!, HttpMethod.Get, path))
+        using (var staleRead = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage!, HttpMethod.Get, path))
             Assert.Equal(HttpStatusCode.NotFound, staleRead.StatusCode);
-        using (var staleSave = await FeatureHttpTestRequests.SendAsync(admin, manage!, HttpMethod.Put, path, config))
+        using (var staleSave = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage!, HttpMethod.Put, path, config))
             Assert.Equal(HttpStatusCode.NotFound, staleSave.StatusCode);
     }
 
@@ -145,27 +145,27 @@ public sealed class DataScopeWorkspacePartSqlServerTests
         using var ordinary = actor.Client;
         var config = new DataScopeObjectDto("part.part", part.Id,
             [new("SharedAcl295Role", "role", actor.RoleId, 7, new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow", ["edit"] = "deny" })]);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, firstPath, config))
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, firstPath, config))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
-        var secondConfig = await FeatureHttpTestRequests.ReadAsync(admin, manage, secondPath);
+        var secondConfig = await FeatureHttpTestRequests.ReadAsync(admin, manage, secondPath, dataAccess: new FeatureHttpTestRequests(fixture).Declaration(manage.BehaviorKey, manage));
         Assert.Equal(part.Id, secondConfig.GetProperty("objectId").GetString());
         Assert.Equal("SharedAcl295Role", Assert.Single(secondConfig.GetProperty("subjects").EnumerateArray()).GetProperty("id").GetString());
-        var catalog = await FeatureHttpTestRequests.ReadAsync(ordinary, read, Path(secondLid, second, "/catalog"));
+        var catalog = await FeatureHttpTestRequests.ReadAsync(ordinary, read, Path(secondLid, second, "/catalog"), dataAccess: new FeatureHttpTestRequests(fixture).ReadDeclaration("workspace.content.authorization.view", read));
         Assert.Contains(catalog.GetProperty("actions").EnumerateArray(), action => action.GetProperty("key").GetString() == "authorize");
         Assert.False(catalog.TryGetProperty("subjects", out _));
-        var users = await FeatureHttpTestRequests.ReadAsync(ordinary, read, Path(secondLid, second, "/subjects/user") + "&page=1&query=" + Uri.EscapeDataString("浏览账号295"));
+        var users = await FeatureHttpTestRequests.ReadAsync(ordinary, read, Path(secondLid, second, "/subjects/user") + "&page=1&query=" + Uri.EscapeDataString("浏览账号295"), dataAccess: new FeatureHttpTestRequests(fixture).ReadDeclaration("workspace.content.authorization.view", read));
         Assert.Equal(actor.AccountId, Assert.Single(users.GetProperty("items").EnumerateArray()).GetProperty("id").GetString());
-        using (var otherCandidates = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, Path(secondLid, second, "/subjects/role") + "&page=1"))
+        using (var otherCandidates = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, Path(secondLid, second, "/subjects/role") + "&page=1", dataAccess: new FeatureHttpTestRequests(fixture).ReadDeclaration("workspace.content.authorization.view", read)))
             Assert.Equal(HttpStatusCode.Forbidden, otherCandidates.StatusCode);
-        using (var forbiddenConfiguration = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, secondPath))
+        using (var forbiddenConfiguration = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, secondPath))
             Assert.Equal(HttpStatusCode.Forbidden, forbiddenConfiguration.StatusCode);
-        var explanation = await FeatureHttpTestRequests.ReadAsync(ordinary, read, Path(secondLid, second, "/explanation") + "&accountId=" + Uri.EscapeDataString(actor.AccountId));
+        var explanation = await FeatureHttpTestRequests.ReadAsync(ordinary, read, Path(secondLid, second, "/explanation") + "&accountId=" + Uri.EscapeDataString(actor.AccountId), dataAccess: new FeatureHttpTestRequests(fixture).ReadDeclaration("workspace.content.authorization.view", read));
         var name = Assert.Single(explanation.GetProperty("subjectNames").EnumerateArray());
         Assert.Equal("role", name.GetProperty("type").GetString());
         Assert.Equal(actor.RoleId, name.GetProperty("id").GetString());
         Assert.Equal("浏览角色295", name.GetProperty("name").GetString());
         Assert.Equal("resolved", name.GetProperty("status").GetString());
-        var other = await FeatureHttpTestRequests.ReadAsync(ordinary, read, Path(secondLid, second, "/explanation") + "&accountId=" + Uri.EscapeDataString(fixture.ActorId));
+        var other = await FeatureHttpTestRequests.ReadAsync(ordinary, read, Path(secondLid, second, "/explanation") + "&accountId=" + Uri.EscapeDataString(fixture.ActorId), dataAccess: new FeatureHttpTestRequests(fixture).ReadDeclaration("workspace.content.authorization.view", read));
         Assert.Equal(fixture.ActorId, other.GetProperty("accountId").GetString());
         var currentUser = await ordinary.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         Assert.Equal(actor.AccountId, currentUser.GetProperty("id").GetString());
@@ -177,20 +177,22 @@ public sealed class DataScopeWorkspacePartSqlServerTests
         foreach (var suffix in new[] { "", "/eligibility", "/catalog", "/subjects/user", "/explanation" })
         {
             using var deniedPrivate = await FeatureHttpTestRequests.SendAsync(admin, suffix is "" or "/eligibility" ? manage : read,
-                HttpMethod.Get, Path(privateFolder.LinkId, privatePosition, suffix));
+                HttpMethod.Get, Path(privateFolder.LinkId, privatePosition, suffix), dataAccess: suffix is "" or "/eligibility"
+                    ? new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.authorize", manage)
+                    : new FeatureHttpTestRequests(fixture).ReadDeclaration("workspace.content.authorization.view", read));
             Assert.Equal(HttpStatusCode.NotFound, deniedPrivate.StatusCode);
         }
-        using (var privateWrite = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, Path(privateFolder.LinkId, privatePosition), config))
+        using (var privateWrite = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, Path(privateFolder.LinkId, privatePosition), config))
             Assert.Equal(HttpStatusCode.NotFound, privateWrite.StatusCode);
-        using (var generic = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get, "/api/authorization/data-scope/objects/part.part/" + part.Id))
+        using (var generic = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Get, "/api/authorization/data-scope/objects/part.part/" + part.Id))
             Assert.Equal(HttpStatusCode.Forbidden, generic.StatusCode);
         await new FeatureHttpTestRequests(fixture).GrantAsync(admin, actor.RoleId, entry, read, manage);
-        using (var eligibility = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, Path(secondLid, second, "/eligibility")))
+        using (var eligibility = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Get, Path(secondLid, second, "/eligibility")))
             Assert.Equal(HttpStatusCode.OK, eligibility.StatusCode);
-        using (var revoked = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, secondPath,
+        using (var revoked = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, manage, HttpMethod.Put, secondPath,
             config with { Subjects = [config.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny", ["authorize"] = "deny" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
-        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, Path(part.LinkId, first, "/catalog")))
+        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, Path(part.LinkId, first, "/catalog"), dataAccess: new FeatureHttpTestRequests(fixture).ReadDeclaration("workspace.content.authorization.view", read)))
             Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
         using var auditScope = fixture.Services.CreateScope();
         var db = auditScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();

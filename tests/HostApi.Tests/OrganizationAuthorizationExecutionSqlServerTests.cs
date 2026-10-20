@@ -78,7 +78,7 @@ public sealed class OrganizationAuthorizationExecutionSqlServerTests
 
         FeaturePoint Manage(string tab) => http.Organization(tab, "authorize", tab == "persons" ? "detail.pageActions" : "list.rowActions");
         ActionDataAccessRequirement? Binding(string resource, FeaturePoint feature) => plan.ActionDataAccessCatalog.SingleOrDefault(item =>
-            item.Execution == resource + ".authorization.manage" && item.FeaturePositions.Contains(feature.Position));
+            item.BusinessBinding == resource + ".authorize" && item.FeaturePositions.Contains(feature.Position));
         async Task<string> CreateAsync(string tab, string resource, object body)
         {
             var feature = http.Organization(tab, "create", "list.pageActions");

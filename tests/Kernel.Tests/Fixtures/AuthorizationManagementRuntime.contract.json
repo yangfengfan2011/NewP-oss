@@ -248,68 +248,18 @@
       "viewKey": "authorization.role.detail",
       "surface": "featureActions",
       "actionKey": "authorize",
-      "execution": "authorization.role.authorization.manage",
+      "execution": "",
       "resources": [
         "authorization.role"
       ],
       "actions": [
-        "read",
         "authorize"
       ],
       "featurePositions": [
         "Authorization/navigation:authorization.roles/surface:detail.custom/action:authorize"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "authorization.role"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        },
-        {
-          "role": "target",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "authorization.role"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        },
-        {
-          "role": "view",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "authorization.role"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "authorization.object.manage",
-      "providerModuleId": "Authorization"
+      "object": "Role",
+      "businessBinding": "authorization.role.authorize"
     },
     {
       "id": "Authorization/view:authorization.role.detail/pageActions/action:edit",
@@ -915,68 +865,18 @@
       "viewKey": "identity.account.detail",
       "surface": "featureActions",
       "actionKey": "authorize",
-      "execution": "identity.account.authorization.manage",
+      "execution": "",
       "resources": [
         "identity.account"
       ],
       "actions": [
-        "read",
         "authorize"
       ],
       "featurePositions": [
         "Identity/navigation:identity/navigation:identity.accounts/surface:detail.custom/action:authorize"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "identity.account"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        },
-        {
-          "role": "target",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "identity.account"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        },
-        {
-          "role": "view",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "identity.account"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "authorization.object.manage",
-      "providerModuleId": "Authorization"
+      "object": "IdentityAccount",
+      "businessBinding": "identity.account.authorize"
     },
     {
       "id": "Identity/view:identity.account.detail/pageActions/action:credentialReset",

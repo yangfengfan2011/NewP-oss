@@ -39,7 +39,7 @@ public sealed class DataScopeLookupSqlServerTests
         await SaveRuleAsync("DepartmentLookup235", "organization.department", "EID", hiddenDepartment);
         await SaveRuleAsync("PositionLookup235", "organization.position", "EID", hiddenPosition);
         var companyManage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.company.authorize");
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, companyManage, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, companyManage, HttpMethod.Put,
             $"/api/authorization/data-scope/objects/organization.company/{visibleCompany}",
             new DataScopeObjectDto("organization.company", visibleCompany,
                 [new("VisibleCompany235", "all", null, 0, new Dictionary<string, string> { ["read"] = "allow" })])))

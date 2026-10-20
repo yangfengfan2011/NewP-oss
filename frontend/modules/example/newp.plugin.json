@@ -18,7 +18,6 @@
   },
   "dataExecutions": [
     {"key":"example.record.export","moduleId":"Example","provider":"standardCrud.export","boundary":"entry","featureBehaviors":["example.record.export"],"resourceKey":"example.record"},
-    { "key": "example.record.authorization.inspect", "moduleId": "Example", "provider": "authorization.object.inspect", "boundary": "entry", "featureBehaviors": ["example.record.authorize"], "resourceKey": "example.record" },
     { "key": "example.record.list", "moduleId": "Example", "provider": "standardCrud.list", "boundary": "entry", "featureBehaviors": ["example.record.read"], "resourceKey": "example.record" },
     {
       "key": "example.record.read",

@@ -1,10 +1,15 @@
 using System.Security.Claims;
+using System.Reflection;
 using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+using ICP.Platform.Modules.Authorization.Controllers;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
@@ -45,13 +50,10 @@ public sealed class InputReadSourceEndpointTests
         var index = Array.FindIndex(candidates, item => item.ModuleId == "Workspace");
         candidates[index] = candidates[index] with
         {
-            DataExecutions = candidates[index].DataExecutions.Where(contract => contract.Key != "workspace.content.authorization.batch").ToArray(),
-            Features = candidates[index].Features.Select(feature => feature with { DataAccess = feature.DataAccess.Select(item => item.Execution == "workspace.content.authorization.batch"
-                ? item with { Execution = "", BusinessBinding = feature.BehaviorKey, ObjectRequirements = [
-                    new("WorkspaceFolder", ["read", "authorize"], "workspace.folder"), new("Part", ["read", "authorize"], "part.part"),
-                    new("Document", ["read", "authorize"], "document.document")],
-                    InputReadSourceKey = problem == "missing-reference" ? null : "workspace.content.permissions" }
-                : item).ToArray() }).ToArray()
+            Features = candidates[index].Features.Select(feature => feature with { DataAccess = feature.DataAccess.Select(item =>
+                item.BusinessBinding == "workspace.folder.authorize" && item.Surface == "pageActions" && item.ActionKey == "batchAuthorize"
+                    ? item with { InputReadSourceKey = problem == "missing-reference" ? null : "workspace.content.permissions" }
+                    : item).ToArray() }).ToArray()
         };
         var result = new CanonicalModulePlanCompiler().Compile("input-read-endpoint", candidates);
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
@@ -64,12 +66,21 @@ public sealed class InputReadSourceEndpointTests
         var metadata = new List<object> { new EndpointModuleAttribute(problem == "wrong-owner" ? "Part" : problem == "generic" ? "Authorization" : "Workspace") };
         if (problem == "generic")
         {
-            metadata.Add(new ResourceFeatureBindingAttribute("authorize"));
-            metadata.Add(new DataExecutionEndpointAttribute("authorization.collection.manage", "prepare"));
+            // 直接消费当前generic控制器元数据，不给它补造旧读取provider或混合协议。
+            var controller = typeof(DataScopeObjectsController);
+            var method = controller.GetMethod(nameof(DataScopeObjectsController.Get))!;
+            http.SetEndpoint(new RouteEndpoint(_ => Task.CompletedTask,
+                RoutePatternFactory.Parse(controller.GetCustomAttribute<RouteAttribute>()!.Template!), 0,
+                new EndpointMetadataCollection(controller.GetCustomAttributes(true).Concat(method.GetCustomAttributes(true))), "actual-generic-controller"));
+            http.Request.RouteValues["resourceKey"] = "workspace.folder";
+            http.Request.RouteValues["objectId"] = "WorkspaceFolder_one";
         }
-        else metadata.Add(new RequireFeatureAttribute(problem == "wrong-endpoint" ? "workspace.folder.transfer" : "workspace.folder.authorize"));
-        if (problem == "duplicate-feature") metadata.Add(new RequireFeatureAttribute("workspace.folder.read"));
-        http.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(metadata), "input-read-owner"));
+        else
+        {
+            metadata.Add(new RequireFeatureAttribute(problem == "wrong-endpoint" ? "workspace.folder.transfer" : "workspace.folder.authorize"));
+            if (problem == "duplicate-feature") metadata.Add(new RequireFeatureAttribute("workspace.folder.read"));
+            http.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(metadata), "input-read-owner"));
+        }
         http.Request.Headers["X-NewP-Data-Declaration"] = source.Id;
         http.Request.Headers["X-NewP-Feature"] = position;
         if (problem == "mixed-header") http.Request.Headers["X-NewP-Button"] = button.Id;

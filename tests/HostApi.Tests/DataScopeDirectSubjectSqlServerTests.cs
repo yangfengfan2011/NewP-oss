@@ -29,7 +29,7 @@ public sealed class DataScopeDirectSubjectSqlServerTests
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
         var path = "/api/authorization/data-scope/objects/organization.person/" + id;
-        var source = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "organization.person.authorization.manage", "authorization.object.manage", "organization.person");
+        var source = OwnedResourceReadHttpRequests.Button(fixture, manage, "organization.person.authorize");
         var selector = new DataScopeDirectSubjectDto("Selector295Direct", "department", department, 1,
             new Dictionary<string, string> { ["read"] = "allow" });
         using (var duplicate = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path,
@@ -65,7 +65,7 @@ public sealed class DataScopeDirectSubjectSqlServerTests
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
         var path = "/api/authorization/data-scope/objects/organization.person/" + id;
-        var source = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "organization.person.authorization.manage", "authorization.object.manage", "organization.person");
+        var source = OwnedResourceReadHttpRequests.Button(fixture, manage, "organization.person.authorize");
         var baseline = new DataScopeObjectDto("organization.person", id,
             [new("Direct295All", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
         await SaveAsync(baseline, HttpStatusCode.NoContent);
@@ -99,7 +99,6 @@ public sealed class DataScopeDirectSubjectSqlServerTests
         {
             using var activity = new Activity("data-scope-direct-cancellation").Start();
             var flushed = false;
-            var authorization = scope.ServiceProvider.GetRequiredService<IDataScopeObjectAuthorization>();
             var context = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
             var previousContext = context.HttpContext;
             context.HttpContext = new DefaultHttpContext
@@ -107,7 +106,7 @@ public sealed class DataScopeDirectSubjectSqlServerTests
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier,
                     administrator.GetProperty("id").GetString()!)], "test"))
             };
-            var execution = OwnedResourceReadHttpRequests.BindManagementContext(fixture, context.HttpContext, manage, changed.ResourceKey, changed.ObjectId);
+            OwnedResourceReadHttpRequests.BindManagementContext(fixture, context.HttpContext, manage, changed.ResourceKey, changed.ObjectId);
             var transactions = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
             fixture.Fault.AfterRegister = async (_, token) =>
             {
@@ -116,7 +115,11 @@ public sealed class DataScopeDirectSubjectSqlServerTests
                 cancellation.Cancel();
                 token.ThrowIfCancellationRequested();
             };
-            try { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => authorization.ReplaceAsync(changed.ResourceKey, changed.ObjectId, changed, execution, cancellation.Token)); }
+            var controller = new ICP.Platform.Modules.Authorization.Controllers.DataScopeObjectsController(
+                scope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Authorization.Services.DataScopeObjectManagement>(),
+                scope.ServiceProvider.GetRequiredService<IButtonBusinessExecutor>())
+                { ControllerContext = new() { HttpContext = context.HttpContext } };
+            try { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => controller.Save(changed.ResourceKey, changed.ObjectId, changed, cancellation.Token)); }
             finally { fixture.Fault.AfterRegister = null; context.HttpContext = previousContext; }
             Assert.True(flushed);
         }

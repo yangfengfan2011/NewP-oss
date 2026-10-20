@@ -9,25 +9,25 @@ public sealed class ExampleAuthorizationExecutionContractTests
 {
     // 正式编译产物同时供API与PageEntry消费；显式导出只写临时目录，普通测试不写authoring。
     [Fact]
-    public void FormalExampleAuthorization_UsesCapabilityOwnerFloorAndSharedProjection()
+    public void FormalExampleAuthorization_KeepsQualificationAndSeparatesReadAndSaveBindings()
     {
         var result = new CanonicalModulePlanCompiler().Compile("example-authorization", Candidates());
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
         var requirements = result.Plan!.ActionDataAccessCatalog.Where(item => item.ModuleId == "Example").ToArray();
-        var management = requirements.Where(item => item.Provider?.StartsWith("authorization.object.", StringComparison.Ordinal) == true).ToArray();
-        Assert.NotEmpty(management);
-        Assert.All(management, requirement =>
+        var management = Assert.Single(requirements, item => item.ActionKey == "authorize" && item.Surface == "rowActions");
+        var inspection = Assert.Single(requirements, item => item.ActionKey == "viewAuthorization" && item.Surface == "rowActions");
+        Assert.Equal("example.record.authorize", management.BusinessBinding);
+        Assert.Equal("example.record.viewAuthorization", inspection.BusinessBinding);
+        Assert.Equal(new[] { "authorize" }, management.Actions);
+        Assert.Equal(new[] { "read", "authorize" }, inspection.Actions);
+        Assert.All(new[] { management, inspection }, source =>
         {
-            Assert.Equal("Authorization", requirement.ProviderModuleId);
-            Assert.All(requirement.Requirements!.Where(role => role.Role == "target"),
-                role => Assert.Equal(new[] { "read", "authorize" }, Assert.Single(role.AnyOf)));
-            if (requirement.Provider == "authorization.object.manage")
-            {
-                var view = Assert.Single(requirement.Requirements!, role => role.Role == "view");
-                Assert.Equal(("prepare", "object"), (view.Stage, view.Shape));
-                Assert.Equal(new[] { "read" }, Assert.Single(view.AnyOf));
-            }
+            Assert.Equal("ExampleRecord", source.Object); Assert.Null(source.Provider); Assert.Null(source.Requirements);
+            Assert.All(source.FeaturePositions, position => Assert.Equal("example.record.authorize",
+                Assert.Single(result.Plan.FeatureCatalog, point => point.Position == position).BehaviorKey));
         });
+        Assert.DoesNotContain(result.Plan.Modules.SelectMany(module => module.DataExecutions), contract =>
+            contract.Key is "example.record.authorization.manage" or "example.record.authorization.inspect");
         var root = Root();
         var json = JsonSerializer.Serialize(requirements, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
         if (Environment.GetEnvironmentVariable("NEWP_DATA_EXECUTION_FIXTURE_EXPORT_PATH") is { Length: > 0 } exportPath)
@@ -50,24 +50,25 @@ public sealed class ExampleAuthorizationExecutionContractTests
     {
         var candidates = Candidates();
         var owner = Array.FindIndex(candidates, item => item.ModuleId == "Authorization");
-        var consumer = Array.FindIndex(candidates, item => item.ModuleId == "Example");
+        var consumer = Array.FindIndex(candidates, item => item.ModuleId == "Part");
         var providers = candidates[owner].DataExecutionProviders.ToArray();
-        providers[0] = problem switch { "provider-owner" => providers[0] with { ModuleId = "Example" },
-            "backend" => providers[0] with { BackendBehaviorKey = "unregistered.backend" }, _ => providers[0] };
+        var providerIndex = Array.FindIndex(providers, item => item.Key == "authorization.object.view");
+        providers[providerIndex] = problem switch { "provider-owner" => providers[providerIndex] with { ModuleId = "Part" },
+            "backend" => providers[providerIndex] with { BackendBehaviorKey = "unregistered.backend" }, _ => providers[providerIndex] };
         candidates[owner] = candidates[owner] with { DataExecutionProviders = problem == "unknown-provider" ? [] : providers };
-        var contracts = candidates[consumer].DataExecutions.Select(contract => contract.Key != "example.record.authorization.manage" ? contract : problem switch
+        var contracts = candidates[consumer].DataExecutions.Select(contract => contract.Key != "part.part.authorization.view" ? contract : problem switch
         {
-            "lower-floor" => contract with { Requirements = [new("target", "prepare", "object", ["example.record"], [["read"]])] },
+            "lower-floor" => contract with { Requirements = [new("view", "prepare", "object", ["part.part"], [[]])] },
             "resource" => contract with { TargetResource = "organization.person" },
             _ => contract
         }).ToArray();
         var features = candidates[consumer].Features.Select(feature => feature with
-        { DataAccess = feature.DataAccess.Where(binding => problem != "unbound" || binding.Execution != "example.record.authorization.manage").ToArray() }).ToArray();
+        { DataAccess = feature.DataAccess.Where(binding => problem != "unbound" || binding.Execution != "part.part.authorization.view").ToArray() }).ToArray();
         candidates[consumer] = candidates[consumer] with { DataExecutions = contracts, Features = features };
         Assert.False(new CanonicalModulePlanCompiler().Compile(problem, candidates).IsSuccess);
     }
 
-    // 当前没有正式纯API采用者；合成合同只锁定分类，不能把界面请求缺声明变成固定API回退。
+    // 合成固定API合同只锁定分类，不能把界面请求缺声明变成固定API回退。
     [Theory]
     [InlineData("api-missing")]
     [InlineData("api-ui")]

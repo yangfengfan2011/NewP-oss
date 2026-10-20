@@ -148,7 +148,7 @@ it('keeps one compiled authorization binding through the real PageEntry eligibil
     if (path.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (path.endsWith('current-user')) return json(user);
     const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
-    const declaration = headers.get('X-NewP-Data-Declaration');
+    const declaration = headers.get('X-NewP-Button') ?? headers.get('X-NewP-Data-Declaration');
     const body = method === 'PUT' ? input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)) : undefined;
     requests.push({ path, method, declaration, body });
     if (path.startsWith('/api/example/records?')) {
@@ -158,6 +158,7 @@ it('keeps one compiled authorization binding through the real PageEntry eligibil
     const requirement = declarations.find(item => item.id === declaration);
     if (!path.startsWith(base) || !requirement || ![manage.id, inspect.id].includes(requirement.id)
       || !requirement.featurePositions.includes(headers.get('X-NewP-Feature') ?? '')) return json({ code: 'DECLARATION_MISMATCH' }, 400);
+    if ((declaration === inspect.id) !== path.startsWith(base + '/inspection')) return json({ code: 'IMPLEMENTATION_MISMATCH' }, 400);
     if (path.endsWith('/eligibility')) return json({});
     if (path.endsWith('/catalog')) return json({ actions: [{ key: 'read', title: '读取', enabled: true }],
       subjectTypes: [{ key: 'user', title: '用户', requiresId: true }] });
@@ -218,7 +219,7 @@ it('keeps one compiled authorization binding through the real PageEntry eligibil
   const authorized = requests.filter(request => request.path.startsWith(base));
   expect(authorized.some(request => request.path.endsWith('/eligibility') && request.declaration === manage.id)).toBe(true);
   expect(authorized.some(request => request.path.includes('/subjects/user') && request.declaration === manage.id)).toBe(true);
-  expect(authorized.some(request => request.path.endsWith('/explanation') && request.declaration === inspect.id)).toBe(true);
+  expect(authorized.some(request => request.path === base + '/inspection/explanation' && request.declaration === inspect.id)).toBe(true);
   expect(authorized.filter(request => request.method === 'PUT').every(request => request.declaration === manage.id)).toBe(true);
   expect(authorized.every(request => request.declaration === manage.id || request.declaration === inspect.id)).toBe(true);
 });

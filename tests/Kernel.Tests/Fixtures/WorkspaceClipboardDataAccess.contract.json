@@ -16,7 +16,9 @@
         "read"
       ],
       "featurePositions": [
-        "Workspace/navigation:workspace"
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:batchAuthorize",
+        "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:authorizeContent"
       ],
       "requirements": [
         {
@@ -206,76 +208,40 @@
       "viewKey": "workspace.folder.list",
       "surface": "featureActions",
       "actionKey": "authorize",
-      "execution": "workspace.content.authorization.manage",
+      "execution": "",
       "resources": [
         "workspace.folder",
         "part.part",
         "document.document"
       ],
-      "actions": [
-        "read",
-        "authorize"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:authorize"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.authorize",
+      "objectRequirements": [
         {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "WorkspaceFolder",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 0,
-          "maximumCount": null
+          "resourceKey": "workspace.folder"
         },
         {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "Part",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
+          "resourceKey": "part.part"
         },
         {
-          "role": "view",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "Document",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "authorization.collection.manage",
-      "providerModuleId": "Authorization"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/featureActions/action:initializeOwnership",
@@ -364,76 +330,40 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "batchAuthorize",
-      "execution": "workspace.content.authorization.batch",
+      "execution": "",
       "resources": [
         "workspace.folder",
         "part.part",
         "document.document"
       ],
-      "actions": [
-        "read",
-        "authorize"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:batchAuthorize"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.authorize",
+      "objectRequirements": [
         {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "WorkspaceFolder",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 0,
-          "maximumCount": null
+          "resourceKey": "workspace.folder"
         },
         {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "Part",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
+          "resourceKey": "part.part"
         },
         {
-          "role": "view",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "Document",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "authorization.collection.manage",
-      "providerModuleId": "Authorization"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:clearClipboard",
@@ -1694,76 +1624,40 @@
       "viewKey": "workspace.folder.list",
       "surface": "rowActions",
       "actionKey": "authorizeContent",
-      "execution": "workspace.content.authorization.manage",
+      "execution": "",
       "resources": [
         "workspace.folder",
         "part.part",
         "document.document"
       ],
-      "actions": [
-        "read",
-        "authorize"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:authorizeContent"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.authorize",
+      "objectRequirements": [
         {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "WorkspaceFolder",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 0,
-          "maximumCount": null
+          "resourceKey": "workspace.folder"
         },
         {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "Part",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read",
-              "authorize"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
+          "resourceKey": "part.part"
         },
         {
-          "role": "view",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
+          "object": "Document",
+          "actions": [
+            "authorize"
           ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "authorization.collection.manage",
-      "providerModuleId": "Authorization"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/rowActions/action:copy",
@@ -2581,7 +2475,7 @@
       "moduleId": "Workspace",
       "key": "workspace",
       "kind": "navigation",
-      "title": "\u5DE5\u4F5C\u7A7A\u95F4",
+      "title": "工作空间",
       "parentPosition": null,
       "behaviorKey": "workspace.spaces.access",
       "entryDependencies": [],
@@ -2603,7 +2497,7 @@
       "moduleId": "Workspace",
       "key": "clearClipboard",
       "kind": "action",
-      "title": "\u6E05\u7A7A\u526A\u8D34\u677F",
+      "title": "清空剪贴板",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.copy",
       "entryDependencies": [
@@ -2612,7 +2506,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:clearClipboard",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.ClearClipboard",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2626,7 +2520,7 @@
       "moduleId": "Workspace",
       "key": "copy",
       "kind": "action",
-      "title": "\u590D\u5236",
+      "title": "复制",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.copy",
       "entryDependencies": [
@@ -2635,7 +2529,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:copy",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Copy",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2649,7 +2543,7 @@
       "moduleId": "Workspace",
       "key": "cut",
       "kind": "action",
-      "title": "\u526A\u5207",
+      "title": "剪切",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.cut",
       "entryDependencies": [
@@ -2658,7 +2552,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:cut",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Cut",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2672,7 +2566,7 @@
       "moduleId": "Workspace",
       "key": "edit",
       "kind": "action",
-      "title": "\u7F16\u8F91",
+      "title": "编辑",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.editObject",
       "entryDependencies": [
@@ -2681,7 +2575,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:edit",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Edit",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2695,7 +2589,7 @@
       "moduleId": "Workspace",
       "key": "moveDown",
       "kind": "action",
-      "title": "\u4E0B\u79FB",
+      "title": "下移",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.reorder",
       "entryDependencies": [
@@ -2704,7 +2598,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:moveDown",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.MoveDown",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2718,7 +2612,7 @@
       "moduleId": "Workspace",
       "key": "moveUp",
       "kind": "action",
-      "title": "\u4E0A\u79FB",
+      "title": "上移",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.reorder",
       "entryDependencies": [
@@ -2727,7 +2621,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:moveUp",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.MoveUp",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2741,7 +2635,7 @@
       "moduleId": "Workspace",
       "key": "paste",
       "kind": "action",
-      "title": "\u7C98\u8D34\u5F15\u7528",
+      "title": "粘贴引用",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.paste",
       "entryDependencies": [
@@ -2750,7 +2644,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:paste",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.PasteReferences",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2764,7 +2658,7 @@
       "moduleId": "Workspace",
       "key": "pasteFolderCopy",
       "kind": "action",
-      "title": "\u7C98\u8D34\u6587\u4EF6\u5939\u526F\u672C",
+      "title": "粘贴文件夹副本",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.pasteFolderCopy",
       "entryDependencies": [
@@ -2773,7 +2667,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:pasteFolderCopy",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.PasteFolderCopy",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2787,7 +2681,7 @@
       "moduleId": "Workspace",
       "key": "pasteFolderStructure",
       "kind": "action",
-      "title": "\u7C98\u8D34\u6587\u4EF6\u5939\u7ED3\u6784",
+      "title": "粘贴文件夹结构",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.pasteFolderStructure",
       "entryDependencies": [
@@ -2796,7 +2690,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:pasteFolderStructure",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.PasteFolderStructure",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2810,7 +2704,7 @@
       "moduleId": "Workspace",
       "key": "pasteObjectCopy",
       "kind": "action",
-      "title": "\u7C98\u8D34\u5BF9\u8C61\u526F\u672C",
+      "title": "粘贴对象副本",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.pasteObjectCopy",
       "entryDependencies": [
@@ -2819,7 +2713,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:pasteObjectCopy",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.PasteObjectCopy",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2833,7 +2727,7 @@
       "moduleId": "Workspace",
       "key": "remove",
       "kind": "action",
-      "title": "\u79FB\u9664\u5F15\u7528",
+      "title": "移除引用",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.remove",
       "entryDependencies": [
@@ -2842,7 +2736,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:remove",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.RemoveReference",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
@@ -2856,7 +2750,7 @@
       "moduleId": "Workspace",
       "key": "moveDown",
       "kind": "action",
-      "title": "\u4E0B\u79FB",
+      "title": "下移",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.reorder",
       "entryDependencies": [
@@ -2865,7 +2759,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.custom/action:moveDown",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.MoveDown",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.custom",
@@ -2879,7 +2773,7 @@
       "moduleId": "Workspace",
       "key": "moveUp",
       "kind": "action",
-      "title": "\u4E0A\u79FB",
+      "title": "上移",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.reorder",
       "entryDependencies": [
@@ -2888,7 +2782,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.custom/action:moveUp",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.MoveUp",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.custom",
@@ -2902,7 +2796,7 @@
       "moduleId": "Workspace",
       "key": "clearClipboard",
       "kind": "action",
-      "title": "\u6E05\u7A7A\u526A\u8D34\u677F",
+      "title": "清空剪贴板",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.copy",
       "entryDependencies": [
@@ -2911,7 +2805,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:clearClipboard",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.ClearClipboard",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -2925,7 +2819,7 @@
       "moduleId": "Workspace",
       "key": "copySelected",
       "kind": "action",
-      "title": "\u590D\u5236",
+      "title": "复制",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.copy",
       "entryDependencies": [
@@ -2934,7 +2828,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:copySelected",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Copy",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -2948,7 +2842,7 @@
       "moduleId": "Workspace",
       "key": "create",
       "kind": "action",
-      "title": "\u65B0\u5EFA\u6587\u4EF6\u5939",
+      "title": "新建文件夹",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.create",
       "entryDependencies": [
@@ -2957,7 +2851,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:create",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.CreateFolder",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -2971,7 +2865,7 @@
       "moduleId": "Workspace",
       "key": "createDocument",
       "kind": "action",
-      "title": "\u65B0\u5EFA\u56FE\u6587\u6863",
+      "title": "新建图文档",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.createDocument",
       "entryDependencies": [
@@ -2980,7 +2874,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:createDocument",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.CreateDocument",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -2994,7 +2888,7 @@
       "moduleId": "Workspace",
       "key": "createPart",
       "kind": "action",
-      "title": "\u65B0\u5EFA\u96F6\u7EC4\u4EF6",
+      "title": "新建零组件",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.createPart",
       "entryDependencies": [
@@ -3003,7 +2897,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:createPart",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.CreatePart",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3017,7 +2911,7 @@
       "moduleId": "Workspace",
       "key": "cutSelected",
       "kind": "action",
-      "title": "\u526A\u5207",
+      "title": "剪切",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.cut",
       "entryDependencies": [
@@ -3026,7 +2920,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:cutSelected",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Cut",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3040,7 +2934,7 @@
       "moduleId": "Workspace",
       "key": "deleteObjects",
       "kind": "action",
-      "title": "\u5220\u9664",
+      "title": "删除",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.deleteObjects",
       "entryDependencies": [
@@ -3049,7 +2943,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:deleteObjects",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.BatchDelete",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3063,7 +2957,7 @@
       "moduleId": "Workspace",
       "key": "paste",
       "kind": "action",
-      "title": "\u7C98\u8D34\u5F15\u7528",
+      "title": "粘贴引用",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.paste",
       "entryDependencies": [
@@ -3072,7 +2966,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:paste",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.PasteReferences",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3086,7 +2980,7 @@
       "moduleId": "Workspace",
       "key": "pasteFolderCopy",
       "kind": "action",
-      "title": "\u7C98\u8D34\u6587\u4EF6\u5939\u526F\u672C",
+      "title": "粘贴文件夹副本",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.pasteFolderCopy",
       "entryDependencies": [
@@ -3095,7 +2989,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:pasteFolderCopy",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.PasteFolderCopy",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3109,7 +3003,7 @@
       "moduleId": "Workspace",
       "key": "pasteFolderStructure",
       "kind": "action",
-      "title": "\u7C98\u8D34\u6587\u4EF6\u5939\u7ED3\u6784",
+      "title": "粘贴文件夹结构",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.pasteFolderStructure",
       "entryDependencies": [
@@ -3118,7 +3012,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:pasteFolderStructure",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.PasteFolderStructure",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3132,7 +3026,7 @@
       "moduleId": "Workspace",
       "key": "pasteObjectCopy",
       "kind": "action",
-      "title": "\u7C98\u8D34\u5BF9\u8C61\u526F\u672C",
+      "title": "粘贴对象副本",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.pasteObjectCopy",
       "entryDependencies": [
@@ -3141,7 +3035,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:pasteObjectCopy",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.PasteObjectCopy",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3155,7 +3049,7 @@
       "moduleId": "Workspace",
       "key": "removeSelected",
       "kind": "action",
-      "title": "\u79FB\u9664",
+      "title": "移除",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.removeSelected",
       "entryDependencies": [
@@ -3164,7 +3058,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:removeSelected",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.RemoveSelected",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3178,7 +3072,7 @@
       "moduleId": "Workspace",
       "key": "resolveObjectCopy",
       "kind": "action",
-      "title": "\u6838\u5BF9\u526F\u672C\u7ED3\u679C",
+      "title": "核对副本结果",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.resolveObjectCopy",
       "entryDependencies": [
@@ -3187,7 +3081,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:resolveObjectCopy",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.CopyResolve",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
@@ -3201,7 +3095,7 @@
       "moduleId": "Workspace",
       "key": "copy",
       "kind": "action",
-      "title": "\u590D\u5236",
+      "title": "复制",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.copy",
       "entryDependencies": [
@@ -3210,7 +3104,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:copy",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Copy",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.rowActions",
@@ -3224,7 +3118,7 @@
       "moduleId": "Workspace",
       "key": "cut",
       "kind": "action",
-      "title": "\u526A\u5207",
+      "title": "剪切",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.cut",
       "entryDependencies": [
@@ -3233,7 +3127,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:cut",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Cut",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.rowActions",
@@ -3247,7 +3141,7 @@
       "moduleId": "Workspace",
       "key": "delete",
       "kind": "action",
-      "title": "\u5220\u9664",
+      "title": "删除",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.deleteObject",
       "entryDependencies": [
@@ -3256,7 +3150,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:delete",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Delete",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.rowActions",
@@ -3270,7 +3164,7 @@
       "moduleId": "Workspace",
       "key": "edit",
       "kind": "action",
-      "title": "\u7F16\u8F91",
+      "title": "编辑",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.editObject",
       "entryDependencies": [
@@ -3279,7 +3173,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:edit",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.Edit",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.rowActions",
@@ -3293,7 +3187,7 @@
       "moduleId": "Workspace",
       "key": "remove",
       "kind": "action",
-      "title": "\u79FB\u9664\u5F15\u7528",
+      "title": "移除引用",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "workspace.folder.remove",
       "entryDependencies": [
@@ -3302,7 +3196,7 @@
       "order": 0,
       "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:remove",
       "staticScope": "folder",
-      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "staticScopeTitle": "文件夹",
       "titleKey": "Workspace.RemoveReference",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.rowActions",

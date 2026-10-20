@@ -105,7 +105,7 @@ public sealed class AcceptanceGateTests
                 var driver = new WorkspacePageDriver(page);
                 await driver.OpenAsync();
                 await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
-                await driver.SaveBatchAuthorizationAsync(fixture.ExistingName, fixture.ExistingDocumentName, Path.Combine(root, "batch-authorization-input.png"));
+                await driver.SaveBatchAuthorizationAsync(fixture.ExistingName, fixture.ExistingDocumentName, Path.Combine(root, "batch-authorization-input.png"), token);
                 token.ThrowIfCancellationRequested();
             }).RunAsync(CancellationToken.None);
     }

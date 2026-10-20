@@ -178,7 +178,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             parentId = (string)(await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>()
                 .Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking()
                 .SingleAsync(row => EF.Property<string>(row, "LID") == parentLinkId))["CEID"]!;
-        var authorization = new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize"));
+        var authorization = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.authorize", Point(fixture, "workspace.folder.authorize"));
         foreach (var unreadable in new[] { false, true })
         {
             var subjects = new[] { new DataScopeDirectSubjectDto("EditOrderSubject314", "user", actor.AccountId, 1,
@@ -413,7 +413,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
                 "/api/workspace/content/" + parentLink + "/permissions?queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(parentScope)),
                 new DataScopeObjectConfiguration("workspace.folder", parentId, subjects),
-                new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize"))))
+                new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.authorize", Point(fixture, "workspace.folder.authorize"))))
                 Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
             probe.TargetCommands = 0; probe.Capturing = true;
             try

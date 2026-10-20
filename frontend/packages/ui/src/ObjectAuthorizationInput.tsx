@@ -4,7 +4,7 @@ import { Alert, Button, Spin, Typography } from 'antd';
 import { formatRequestError, platformFetch, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import DataScopeSubjectTable from './DataScopeSubjectTable';
 import type { DataScopeSubject, SubjectType } from './DataScopeSubjectEditor';
-import { StandardCrudRequestError, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
+import { standardCrudInputReadSource, StandardCrudRequestError, type ActionDataAccessRequirement, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
 import ObjectAuthorizationDetails from './ObjectAuthorizationDetails';
 
 export interface ObjectAuthorizationTarget extends ObjectAuthorizationAddress { title: string; titleKey?: string; name?: string }
@@ -17,12 +17,13 @@ const noUnknownOutcome = () => false;
 export default function ObjectAuthorizationInput(context: StandardCrudActionInputRenderContext & { target: ObjectAuthorizationTarget }) {
   const { target, featurePosition, action } = context;
   const dataAccess = action.dataAccess ?? context.dataAccess;
+  const inputReadSource = standardCrudInputReadSource(context);
   // 宿主在主体或权限边界变化时卸载整个输入；目标和模式变化在此终止本地交互。
-  return <ObjectAuthorizationSession key={JSON.stringify([target.resourceKey, target.id, target.basePath, featurePosition, action.inputKey, dataAccess?.id])} {...context} dataAccess={dataAccess} />;
+  return <ObjectAuthorizationSession key={JSON.stringify([target.resourceKey, target.id, target.basePath, featurePosition, action.inputKey, dataAccess?.id, inputReadSource?.id])} {...context} dataAccess={dataAccess} inputReadSource={inputReadSource} />;
 }
 
-function ObjectAuthorizationSession(context: StandardCrudActionInputRenderContext & { target: ObjectAuthorizationTarget }) {
-  const { action, value, onChange, onDraftStateChange, featurePosition, dataAccess, submitting = false } = context;
+function ObjectAuthorizationSession(context: StandardCrudActionInputRenderContext & { target: ObjectAuthorizationTarget; inputReadSource?: ActionDataAccessRequirement }) {
+  const { action, value, onChange, onDraftStateChange, featurePosition, dataAccess, inputReadSource, submitting = false } = context;
   const { t } = useLocalization();
   const { target } = context;
   const { resourceKey, id, basePath } = target;
@@ -38,16 +39,21 @@ function ObjectAuthorizationSession(context: StandardCrudActionInputRenderContex
   const checkController = useRef<AbortController>();
   useEffect(() => () => checkController.current?.abort(), []);
   const config = value as Configuration | undefined;
-  const read = useCallback(async (path: string, signal?: AbortSignal) => {
+  const request = useCallback(async (path: string, signal?: AbortSignal, source = dataAccess) => {
     const response = await fetchObjectAuthorization(platformFetch as typeof fetch, objectAuthorizationPath({ resourceKey, id, basePath }, path),
-      { signal, headers: objectAuthorizationHeaders(featurePosition, dataAccess) });
+      { signal, headers: objectAuthorizationHeaders(featurePosition, source) });
     if (!response.ok) throw await objectAuthorizationError(response);
     return response.json() as Promise<unknown>;
   }, [resourceKey, id, basePath, featurePosition, dataAccess]);
-  const query = usePlatformQuery({ key: ['object-authorization', target.resourceKey, target.id ?? '', target.basePath ?? '', featurePosition ?? '', dataAccess?.id ?? '', inspect, instance.current],
+  // 目录按真实主体类型选择原只读来源；完整配置与非用户候选仍使用管理按钮。
+  const read = useCallback((path: string, signal?: AbortSignal, subjectType?: string) =>
+    request(path, signal, subjectType === 'user' ? inputReadSource ?? dataAccess : dataAccess), [request, inputReadSource, dataAccess]);
+  const inspectRead = useCallback((path: string, signal?: AbortSignal) =>
+    request(path, signal, inputReadSource ?? dataAccess), [request, inputReadSource, dataAccess]);
+  const query = usePlatformQuery({ key: ['object-authorization', target.resourceKey, target.id ?? '', target.basePath ?? '', featurePosition ?? '', dataAccess?.id ?? '', inputReadSource?.id ?? '', inspect, instance.current],
     enabled: Boolean(target.id && featurePosition),
     load: async ({ signal }) => {
-      const catalog = await read('/catalog', signal) as ObjectCatalog;
+      const catalog = await inspectRead('/catalog', signal) as ObjectCatalog;
       const saved = inspect || frozen ? undefined : await read('', signal) as Configuration;
       return { catalog, saved };
     },
@@ -107,7 +113,7 @@ function ObjectAuthorizationSession(context: StandardCrudActionInputRenderContex
     {query.status === 'error' && <Alert type="error" showIcon message={formatRequestError(query.error, t)}
       action={!accessInvalidated && <Button onClick={query.retry}>{t('Platform.Retry', '重试')}</Button>} />}
     <Spin spinning={query.isFetching}>
-      {presented && (inspect ? <ObjectAuthorizationDetails read={read} catalog={presented.catalog}
+      {presented && (inspect ? <ObjectAuthorizationDetails read={inspectRead} catalog={presented.catalog}
         unavailable={query.status === 'error' || revalidationFailed} />
         : snapshot && displayConfig?.subjects && <>
           <DataScopeSubjectTable subjects={displayConfig.subjects} types={presented.catalog.subjectTypes} objectMode

@@ -67,7 +67,7 @@ public sealed class ObjectHistoryOutputSqlServerTests
         {
             using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
                 "/api/part/parts/" + part.Id + "/permissions", configuration with { Subjects = [configuration.Subjects[0] with { Priority = priority }] },
-                OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part"));
+                OwnedResourceReadHttpRequests.Button(fixture, manage, "part.part.authorize"));
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         }
         var scopeJson = Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
@@ -137,7 +137,7 @@ public sealed class ObjectHistoryOutputSqlServerTests
         }
         using (var denied = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + part.Id + "/permissions",
             configuration with { Subjects = [configuration.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny" } }] },
-            OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part")))
+            OwnedResourceReadHttpRequests.Button(fixture, manage, "part.part.authorize")))
             Assert.Equal(HttpStatusCode.NoContent, denied.StatusCode);
         foreach (var output in new[] { "export", "print" })
         {

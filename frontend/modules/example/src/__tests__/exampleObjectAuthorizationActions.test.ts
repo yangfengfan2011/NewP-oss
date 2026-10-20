@@ -17,8 +17,8 @@ it('binds both buttons, preserves feature identity, saves a fixed target and nev
     expect(await resource.actionEligibilityResolvers?.[key]?.({ id: 'record/1', featurePosition: key,
       row: { id: 'record/1', ENAME: '记录' },
       signal, dataAccess, action: { key, labelKey: key, dataAccess } })).toEqual({ visible: true, available: true });
-    expect(fetcher).toHaveBeenLastCalledWith('/api/authorization/data-scope/objects/example.record/record%2F1/eligibility',
-      { headers: { 'X-NewP-Feature': key, 'X-NewP-Data-Declaration': dataAccess.id }, signal });
+    expect(fetcher).toHaveBeenLastCalledWith(`/api/authorization/data-scope/objects/example.record/record%2F1/${key === 'viewAuthorization' ? 'inspection/catalog' : 'eligibility'}`,
+      { headers: { 'X-NewP-Feature': key, 'X-NewP-Button': dataAccess.id }, signal });
   }
   fetcher.mockClear();
   expect(resource.actionInputRenderers?.objectAuthorizationDetails.readOnly).toBe(true);
@@ -28,7 +28,7 @@ it('binds both buttons, preserves feature identity, saves a fixed target and nev
     row: { id: 'record/1', ENAME: '记录' },
     action: { key: 'authorize', labelKey: '授权', dataAccess: requirementFor('authorize') } });
   expect(fetcher).toHaveBeenLastCalledWith('/api/authorization/data-scope/objects/example.record/record%2F1',
-    { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': 'manage', 'X-NewP-Data-Declaration': requirementFor('authorize').id }, body: JSON.stringify(input) });
+    { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': 'manage', 'X-NewP-Button': requirementFor('authorize').id }, body: JSON.stringify(input) });
   await expect(resource.actionHandlers?.authorize({ id: 'wrong', row: { id: 'wrong', ENAME: '另一记录' }, featurePosition: 'manage', input })).rejects.toThrow('目标已变化');
 });
 

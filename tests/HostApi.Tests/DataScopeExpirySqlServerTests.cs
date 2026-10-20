@@ -50,7 +50,7 @@ public sealed class DataScopeExpirySqlServerTests
         var input = new DataScopeObjectDto("workspace.folder", id,
             [new("Expiry295Allow", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow" }, ExpiresAt: "2026-10-17T12:00:00Z"),
              new("Expiry295ExpiredDeny", "user", actor.AccountId, 10, new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" }, ExpiresAt: "2026-10-17T11:59:59Z")]);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put,
             "/api/authorization/data-scope/objects/workspace.folder/" + id, input))
             Assert.True(saved.StatusCode == HttpStatusCode.NoContent, await saved.Content.ReadAsStringAsync());
         using (var atEquality = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, "/api/workspace/folders/" + id))
@@ -116,7 +116,7 @@ public sealed class DataScopeExpirySqlServerTests
             fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/ExpiryWriteRule295", rule))
             Assert.Equal(HttpStatusCode.NoContent, savedRule.StatusCode);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin,
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
             fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize"), HttpMethod.Put,
             "/api/authorization/data-scope/objects/organization.person/" + id,
             new DataScopeObjectDto("organization.person", id,

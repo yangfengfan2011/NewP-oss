@@ -201,68 +201,18 @@
     "viewKey": "example.record.list",
     "surface": "rowActions",
     "actionKey": "authorize",
-    "execution": "example.record.authorization.manage",
+    "execution": "",
     "resources": [
       "example.record"
     ],
     "actions": [
-      "read",
       "authorize"
     ],
     "featurePositions": [
       "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:authorize"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.manage",
-    "providerModuleId": "Authorization"
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.authorize"
   },
   {
     "id": "Example/view:example.record.list/rowActions/action:delete",
@@ -359,7 +309,7 @@
     "viewKey": "example.record.list",
     "surface": "rowActions",
     "actionKey": "viewAuthorization",
-    "execution": "example.record.authorization.inspect",
+    "execution": "",
     "resources": [
       "example.record"
     ],
@@ -370,25 +320,7 @@
     "featurePositions": [
       "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:viewAuthorization"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "authorize"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.inspect",
-    "providerModuleId": "Authorization"
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.viewAuthorization"
   }
 ]

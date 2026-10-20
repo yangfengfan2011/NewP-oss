@@ -15,7 +15,11 @@ internal static class OwnedResourceReadHttpRequests
             item.Execution == resource + "." + operation && item.Provider == "standardCrud." + operation
             && item.Resources.SequenceEqual([resource]) && item.FeaturePositions.Contains(point.Position, StringComparer.Ordinal));
 
-    // 专属消费者显式给出完整执行身份及资源集；辅助读取与写入可复用同一真实声明。
+    // 调用者明确指定实际功能点与实现绑定；不从URL、资源名称或缺失header猜选按钮。
+    internal static ActionDataAccessRequirement Button(BusinessAuditHostFixture fixture, FeaturePoint point, string businessBinding) =>
+        new FeatureHttpTestRequests(fixture).Declaration(businessBinding, point);
+
+    // 专属消费者显式给出原执行身份及资源集；不推测或提升合同所声明的操作。
     internal static ActionDataAccessRequirement ForExecution(BusinessAuditHostFixture fixture, FeaturePoint point,
         string execution, string provider, params string[] resources) =>
         Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog, item =>
@@ -37,10 +41,10 @@ internal static class OwnedResourceReadHttpRequests
     }
 
     // 取消/故障注入直接调用服务时仍绑定正式HTTP端点metadata与当前计划；不再使用无来源ABI。
-    internal static ICP.Platform.Authorization.Contracts.DataExecutionBindingReference BindManagementContext(
+    internal static void BindManagementContext(
         BusinessAuditHostFixture fixture, Microsoft.AspNetCore.Http.HttpContext context, FeaturePoint point, string resource, string id)
     {
-        var source = ForExecution(fixture, point, resource + ".authorization.manage", "authorization.object.manage", resource);
+        var source = Button(fixture, point, resource + ".authorize");
         var endpoint = Assert.Single(fixture.Services.GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>().Endpoints
             .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>(), endpoint =>
                 endpoint.RoutePattern.RawText?.TrimStart('/') == "api/authorization/data-scope/objects/{resourceKey}/{objectId}"
@@ -50,8 +54,7 @@ internal static class OwnedResourceReadHttpRequests
         context.Request.RouteValues["resourceKey"] = resource;
         context.Request.RouteValues["objectId"] = id;
         context.Request.Headers["X-NewP-Feature"] = point.Position;
-        context.Request.Headers["X-NewP-Data-Declaration"] = source.Id;
-        return new(source.Execution, source.Provider!, "submit");
+        context.Request.Headers["X-NewP-Button"] = source.Id;
     }
     internal static async Task<JsonElement> ReadAsync(BusinessAuditHostFixture fixture, HttpClient client, FeaturePoint point,
         string resource, string operation, string path)

@@ -76,15 +76,12 @@ public sealed class ExampleExecutionEndpointCoverageTests
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSingleton(compiled.Plan!);
         builder.Services.AddStandardCrudKernel();
+        new ICP.Platform.Modules.Organization.OrganizationModule().ConfigureServices(builder.Services);
+        new ICP.Platform.Modules.Identity.IdentityModule().ConfigureServices(builder.Services);
+        new ICP.Platform.Modules.Authorization.AuthorizationModule().ConfigureServices(builder.Services);
         builder.Services.AddStandardCrudResource(descriptor);
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Organization.Crud.PersonCrudDescriptorFactory.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Organization.Crud.CompanyCrudDescriptorFactory.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Organization.Crud.DepartmentCrudDescriptorFactory.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Organization.Crud.PositionCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Part.PartCrudDescriptor.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Identity.Application.IdentityAccountCrudResource.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Authorization.Services.RoleReadResource.Create());
         // 完整活动计划含已迁移排序按钮，端点合同fixture也登记其真实处理器；不执行该业务。
         builder.Services.AddScoped<ICP.Platform.Modules.Workspace.WorkspaceReorderHandler>();
         builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Identity.Controllers.IdentityAccountsController).Assembly)

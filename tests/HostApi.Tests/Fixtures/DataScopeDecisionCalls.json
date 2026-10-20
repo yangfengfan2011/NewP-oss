@@ -1,9 +1,9 @@
 {
-  "ICP.Platform.Crud.Runtime.StandardCrudService.BuildMutationDetailAsync[0] -> IsAllowedAsync": "写后独立读取观察；只决定详情或成功回执，不重复写前授权。",
-  "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateCandidateRequirementAsync[0] -> IsCandidateAllowedAsync": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
-  "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateObjectRequirementAsync[0] -> IsAllowedAsync": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
-  "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateResolvedObjectsAsync.lambda[0] -> IsAllowedAsync": "公共角色执行器仅消费正式装配的当前阶段common/按资源AnyOf要求；真身份来自当前owner解析器，业务调用者不传动作或允许结果。",
-  "ICP.Platform.Modules.Authorization.Services.DataScopeObjectAccess.IsReadableAsync[0] -> IsAllowedAsync": "底层完整对象读取裁决；保留read和资源owner读取约束。",
-  "ICP.Platform.Modules.Document.DocumentFiles.RequireReadAsync[0] -> IsAllowedAsync": "Document owner原full-read与存在核验；read/download由实际入口先核正式绑定，复制原读取点已采用固定内部合同。同阶段事实供受控resolver消费，不加SQL或改原时点。",
-  "ICP.Platform.Modules.Workspace.WorkspacePermissionTargetReadResolver.ResolveAsync[0] -> IsAllowedAsync": "实际登记的完整read解析器；合同固定workspace.permission.targets.read及Key、caller，原Link端点read404后独立read403，同位SQL与根约束不变；动作固定read。"
+  "ICP.Platform.Crud.Runtime.StandardCrudService.BuildMutationDetailAsync[0] -> IsAllowedAsync action=constant:read": "写后独立读取观察；只决定详情或成功回执，不重复写前授权。",
+  "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateCandidateRequirementAsync[0] -> IsCandidateAllowedAsync action=variable": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
+  "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateObjectRequirementAsync[0] -> IsAllowedAsync action=variable": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
+  "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateResolvedObjectsAsync.lambda[0] -> IsAllowedAsync action=variable": "公共角色执行器仅消费正式装配的当前阶段common/按资源AnyOf要求；真身份来自当前owner解析器，业务调用者不传动作或允许结果。",
+  "ICP.Platform.Modules.Authorization.Services.DataScopeObjectAccess.IsReadableAsync[0] -> IsAllowedAsync action=constant:read": "底层完整对象读取裁决；保留read和资源owner读取约束。",
+  "ICP.Platform.Modules.Document.DocumentFiles.RequireReadAsync[0] -> IsAllowedAsync action=constant:read": "Document owner原full-read与存在核验；read/download由实际入口先核正式绑定，复制原读取点已采用固定内部合同。同阶段事实供受控resolver消费，不加SQL或改原时点。",
+  "ICP.Platform.Modules.Workspace.WorkspacePermissionTargetReadResolver.ResolveAsync[0] -> IsAllowedAsync action=constant:read": "实际登记的完整read解析器；合同固定workspace.permission.targets.read及Key、caller，原Link端点read404后独立read403，同位SQL与根约束不变；动作固定read。"
 }

@@ -26,6 +26,8 @@ public sealed class DataScopeDecisionBoundaryTests
             .Append(typeof(StandardCrudDefaultWriter).Assembly).Distinct().ToArray();
         var calls = FindCalls(assemblies).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         Assert.NotEmpty(calls);
+        Assert.All(calls.Where(call => !call.Contains(".DataExecutionAccess.", StringComparison.Ordinal)),
+            call => Assert.True(IsReadBoundaryOrigin(call), call));
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
         var json = JsonSerializer.Serialize(calls, new JsonSerializerOptions { WriteIndented = true });
@@ -58,7 +60,7 @@ public sealed class DataScopeDecisionBoundaryTests
         Assert.Equal("workspace.permission.target.fullRead", role.ReadResolverKey);
         Assert.Equal("read", Assert.Single(Assert.Single(role.AnyOf)));
         Assert.Contains(FindCalls([typeof(WorkspaceModule).Assembly]), call =>
-            call == typeof(WorkspacePermissionTargetReadResolver).FullName + ".ResolveAsync[0] -> IsAllowedAsync");
+            call == typeof(WorkspacePermissionTargetReadResolver).FullName + ".ResolveAsync[0] -> IsAllowedAsync action=constant:read");
     }
 
     [Fact]
@@ -68,11 +70,27 @@ public sealed class DataScopeDecisionBoundaryTests
         Assert.Contains(calls, call => call.Contains(nameof(VariableAction), StringComparison.Ordinal));
         Assert.Contains(calls, call => call.Contains(nameof(ConstantAction), StringComparison.Ordinal));
         Assert.Contains(calls, call => call.Contains(nameof(ConcreteAction), StringComparison.Ordinal));
+        Assert.EndsWith("action=constant:edit", Assert.Single(calls, call => call.Contains(nameof(ConstantAction), StringComparison.Ordinal)));
+        Assert.EndsWith("action=variable", Assert.Single(calls, call => call.Contains(nameof(VariableAction), StringComparison.Ordinal)));
+        Assert.EndsWith("action=variable", Assert.Single(calls, call => call.Contains(nameof(ConcreteAction), StringComparison.Ordinal)));
+        Assert.True(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(".ReadAction[", StringComparison.Ordinal))));
+        Assert.False(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(nameof(ConstantAction), StringComparison.Ordinal))));
+        Assert.False(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(nameof(VariableAction), StringComparison.Ordinal))));
     }
 
-    private static Task<bool> VariableAction(IDataScopeObjectDecisionProvider decisions, string action) => decisions.IsAllowedAsync("test.resource", "id", action);
-    private static Task<bool> ConstantAction(IDataScopeObjectDecisionProvider decisions) => decisions.IsAllowedAsync("test.resource", "id", "edit");
+    private static Task<bool> VariableAction(IDataScopeObjectDecisionProvider decisions, string action)
+    {
+        GC.KeepAlive("read");
+        return decisions.IsAllowedAsync("test.resource", "id", action);
+    }
+    private static Task<bool> ConstantAction(IDataScopeObjectDecisionProvider decisions)
+    {
+        GC.KeepAlive("read");
+        return decisions.IsAllowedAsync("test.resource", "id", "edit");
+    }
+    private static Task<bool> ReadAction(IDataScopeObjectDecisionProvider decisions) => decisions.IsAllowedAsync("test.resource", "id", "read");
     private static Task<bool> ConcreteAction(ConcreteDecisions decisions, string action) => decisions.IsAllowedAsync("test.resource", "id", action);
+    private static bool IsReadBoundaryOrigin(string call) => call.EndsWith(" action=constant:read", StringComparison.Ordinal);
 
     private sealed class ConcreteDecisions : IDataScopeObjectDecisionProvider
     {
@@ -86,6 +104,7 @@ public sealed class DataScopeDecisionBoundaryTests
             foreach (var type in assembly.GetTypes())
                 foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
                 {
+                    var stack = new List<string>();
                     var il = method.GetMethodBody()?.GetILAsByteArray();
                     if (il is null) continue;
                     var offset = 0;
@@ -102,7 +121,24 @@ public sealed class DataScopeDecisionBoundaryTests
                                 method.IsGenericMethod ? method.GetGenericArguments() : null);
                             if (target?.DeclaringType is { } targetType && typeof(IDataScopeObjectDecisionProvider).IsAssignableFrom(targetType)
                                 && typeof(IDataScopeObjectDecisionProvider).GetMethods().Any(contract => contract.Name == target.Name))
-                                yield return Owner(method) + "[" + callIndex++ + "] -> " + target.Name;
+                            {
+                                // 两个底层方法的末参数均为token，倒数第二个栈值才是动作；不靠附近出现过read字面量猜测。
+                                var action = stack.Count >= 2 ? stack[^2] : "unknown";
+                                yield return Owner(method) + "[" + callIndex++ + "] -> " + target.Name + " action=" + action;
+                            }
+                            var pop = (target?.GetParameters().Length ?? 0) + (target is { IsStatic: false } && code != OpCodes.Newobj ? 1 : 0);
+                            Pop(stack, pop);
+                            if (code == OpCodes.Newobj || target is MethodInfo { ReturnType: var result } && result != typeof(void)) stack.Add("variable");
+                        }
+                        else
+                        {
+                            var pop = code.StackBehaviourPop == StackBehaviour.Varpop ? stack.Count
+                                : code.StackBehaviourPop == StackBehaviour.Pop0 ? 0 : code.StackBehaviourPop.ToString().Split('_').Length;
+                            Pop(stack, pop);
+                            var push = code.StackBehaviourPush == StackBehaviour.Push0 ? 0
+                                : code.StackBehaviourPush == StackBehaviour.Push1_push1 ? 2 : 1;
+                            var origin = code == OpCodes.Ldstr ? "constant:" + method.Module.ResolveString(BitConverter.ToInt32(il, offset)) : "variable";
+                            for (var index = 0; index < push; index++) stack.Add(origin);
                         }
                         offset += code.OperandType switch
                         {
@@ -115,6 +151,13 @@ public sealed class DataScopeDecisionBoundaryTests
                         };
                     }
                 }
+    }
+
+    // 只记录当前调用求值栈的动作来源，不执行IL，也不把其他路径的字面量当作本次参数。
+    private static void Pop(List<string> stack, int count)
+    {
+        if (count >= stack.Count) stack.Clear();
+        else stack.RemoveRange(stack.Count - count, count);
     }
 
     private static string Owner(MethodInfo method)

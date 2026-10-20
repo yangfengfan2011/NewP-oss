@@ -35,7 +35,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var point = Point(fixture, "workspace.folder.pasteObjectCopy");
         var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy", point);
         var body = new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target };
-        var wrong = new FeatureHttpTestRequests(fixture).Declaration("workspace.clipboard.copy", Point(fixture, "workspace.folder.copy"));
+        var wrong = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.copy", Point(fixture, "workspace.folder.copy"));
         using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, point, HttpMethod.Post,
             "/api/workspace/content/objects/copy/prepare", body, wrong))
             await Problem(swapped, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");

@@ -341,8 +341,11 @@ public sealed class WorkspaceAcceptanceFixtureTests
         var remove = new FeaturePoint("remove", "Workspace", "remove", "action", "remove", "entry", "workspace.folder.remove", [], 0)
             { ActionScope = "list.rowActions", StaticScope = "folder" };
         var catalog = new AcceptanceFeatureCatalog([entry, create, remove],
-            [new("remove-declaration", "Workspace", "workspace.folder.list", "rowActions", "remove", "workspace.clipboard.remove",
-                ["workspace.folder", "part.part", "document.document"], ["read", "edit"], [remove.Position])]);
+            [new("create-button", "Workspace", "workspace.folder.list", "pageActions", "create", "", ["workspace.folder"], ["create"], [create.Position])
+                { BusinessBinding = create.BehaviorKey, Object = "WorkspaceFolder" },
+             new("read-source", "Workspace", "workspace.folder.list", "read", "", "workspace.content.read", ["workspace.folder", "part.part", "document.document"], ["read"], [entry.Position]),
+             new("remove-button", "Workspace", "workspace.folder.list", "rowActions", "remove", "", ["workspace.folder"], ["edit"], [remove.Position])
+                { BusinessBinding = remove.BehaviorKey, Object = "WorkspaceFolder" }]);
         var deleted = false;
         using var client = new HttpClient(new AsyncHandler(async (request, token) =>
         {
@@ -364,17 +367,21 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 Assert.Single(body.RootElement.GetProperty("values").EnumerateObject());
                 Assert.Equal("source-folder", body.RootElement.GetProperty("values").GetProperty("ENAME").GetString());
                 Assert.Equal("create", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+                Assert.Equal("create-button", Assert.Single(request.Headers.GetValues("X-NewP-Button")));
+                Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
                 return Json(HttpStatusCode.OK, "{\"id\":\"object-EID\",\"fields\":{}}");
             }
             if (path == "/api/links/workspace.content")
             {
                 Assert.Contains("anchorId=personal-root", request.RequestUri.Query);
+                Assert.Equal("read-source", Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
                 return Json(HttpStatusCode.OK, "{\"items\":[{\"linkId\":\"other-LID\",\"associatedObject\":{\"id\":\"other-EID\"}},{\"linkId\":\"relation-LID\",\"associatedObject\":{\"id\":\"object-EID\"}}]}");
             }
             Assert.Equal(HttpMethod.Delete, request.Method);
             Assert.Equal("/api/workspace/content/references/relation-LID", path);
             Assert.Equal("remove", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
-            Assert.Equal("remove-declaration", Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
+            Assert.Equal("remove-button", Assert.Single(request.Headers.GetValues("X-NewP-Button")));
+            Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
             using var removal = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             Assert.Equal("personal-space", removal.RootElement.GetProperty("position").GetProperty("spaceId").GetString());
             deleted = true;

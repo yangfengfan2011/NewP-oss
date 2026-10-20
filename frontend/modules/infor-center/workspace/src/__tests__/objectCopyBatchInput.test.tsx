@@ -22,7 +22,7 @@ it('confirms every Document row, preserves row values and locates a later-row co
   const entries = new Map<symbol, unknown>(); const instance: StandardCrudActionInstance = { active: true, changed: vi.fn(), getOrCreate: (key, create) => { if (!entries.has(key)) entries.set(key, create()); return entries.get(key) as ReturnType<typeof create>; } };
   const session = workspaceClipboard(instance);
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: ['a', 'b'].map(linkId => ({ linkId, modelKey: 'Document' })) })));
-  await session.copy(source, ['a', 'b'], 'copy');
+  await session.copy(source, ['a', 'b'], 'copy', 'copy-button');
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'batch', modelKey: 'Document', values, items, sourcePath: ['公共空间'], targetPath: ['公共空间', '目标'], fileCount: 4, totalBytes: 16 })));
   const draftState = vi.fn(); let draft: { draft: ObjectCopyDraft; values: Record<string, unknown> }; let pending: Promise<unknown> | undefined;
   function Harness({ currentInstance = instance }: { currentInstance?: StandardCrudActionInstance }) {
@@ -55,7 +55,7 @@ it('confirms every Document row, preserves row values and locates a later-row co
     const oldDraft = draft!; const otherEntries = new Map<symbol, unknown>();
     const otherInstance: StandardCrudActionInstance = { active: true, changed: vi.fn(), getOrCreate: (key, create) => { if (!otherEntries.has(key)) otherEntries.set(key, create()); return otherEntries.get(key) as ReturnType<typeof create>; } };
     vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: ['a', 'b'].map(linkId => ({ linkId, modelKey: 'Document' })) })));
-    await workspaceClipboard(otherInstance).copy(source, ['a', 'b'], 'copy');
+    await workspaceClipboard(otherInstance).copy(source, ['a', 'b'], 'copy', 'copy-button');
     vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'another-actor', modelKey: 'Document', values, items, sourcePath: ['公共空间'], targetPath: ['公共空间', '目标'] })));
     await act(async () => root.render(<Harness currentInstance={otherInstance} />));
     expect(inputs()[0].value).toBe(''); expect(inputs()[2].value).toBe(''); expect(inputs()[3].value).toBe('来源 b');

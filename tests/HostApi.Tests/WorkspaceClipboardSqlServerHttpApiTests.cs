@@ -274,7 +274,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/paste") { Content = JsonContent.Create(body) };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.paste").Position);
-        request.Headers.Add("X-NewP-Data-Declaration", ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.paste"))!.Id);
+        request.Headers.Add("X-NewP-Button", ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.paste"))!.Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try
         {

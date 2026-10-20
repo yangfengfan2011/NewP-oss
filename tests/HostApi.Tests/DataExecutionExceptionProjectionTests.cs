@@ -89,7 +89,7 @@ public sealed class DataExecutionExceptionProjectionTests
         if (caller is "workspace" or "global")
         {
             var failure = new ExceptionContext(context, filters) { Exception = error! };
-            if (caller == "workspace") await new WorkspaceClipboardExecutionAttribute(WorkspaceClipboardExecutions.Copy, "prepare").OnExceptionAsync(failure);
+            if (caller == "workspace") await new WorkspaceClipboardExecutionAttribute(WorkspaceObjectCopyExecutions.Copy, "prepare").OnExceptionAsync(failure);
             else new DataExecutionExceptionFilter().OnException(failure);
             Assert.Same(error, failure.Exception);
             return (failure.Result, failure.ExceptionHandled);

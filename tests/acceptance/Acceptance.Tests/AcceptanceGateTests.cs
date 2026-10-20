@@ -1105,9 +1105,10 @@ public sealed class AcceptanceGateTests
                 {
                     var path = new Uri(request.Url).AbsolutePath;
                     if (request.Method is not ("POST" or "DELETE") || !path.StartsWith("/api/workspace/content/", StringComparison.Ordinal)) return;
+                    request.Headers.TryGetValue("x-newp-button", out var button);
                     request.Headers.TryGetValue("x-newp-data-declaration", out var declaration);
                     request.Headers.TryGetValue("x-newp-feature", out var feature);
-                    requests.Enqueue(new { request.Method, path, declaration, feature });
+                    requests.Enqueue(new { request.Method, path, button, declaration, feature });
                 };
                 var driver = new WorkspacePageDriver(page);
                 var source = "声明来源 " + runId[..8];

@@ -33,7 +33,8 @@ internal sealed class ObjectHistoryHttpTestRequests(IReadOnlyList<ActionDataAcce
         var segments = url.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length <= 4 || segments[0] != "api" || segments[4] != "history")
             return await FeatureHttpTestRequests.SendAsync(client, point, method, path, body,
-                declarations.SingleOrDefault(item => item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal)
+                declarations.SingleOrDefault(item => (item.BusinessBinding == point.BehaviorKey && item.Surface is "pageActions" or "rowActions"
+                        || item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal))
                     && item.FeaturePositions.Contains(point.Position)));
         var moduleId = declarations.Select(item => item.ModuleId).Distinct(StringComparer.Ordinal)
             .Single(owner => owner.Equals(segments[1], StringComparison.OrdinalIgnoreCase));

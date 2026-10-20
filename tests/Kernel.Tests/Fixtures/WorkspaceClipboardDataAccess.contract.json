@@ -388,83 +388,18 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "copySelected",
-      "execution": "workspace.clipboard.copy",
+      "execution": "",
       "resources": [
-        "workspace.folder",
-        "part.part",
-        "document.document"
+        "workspace.folder"
       ],
       "actions": [
-        "read",
-        "workspaceCopy",
-        "partCopy",
-        "partObjectCopy",
-        "documentCopy",
-        "documentObjectCopy"
+        "read"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:copySelected"
       ],
-      "requirements": [
-        {
-          "role": "sourceParent",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "sourceTargets",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 100,
-          "readResolverKey": "workspace.clipboard.endpoint",
-          "resourceAnyOf": {
-            "workspace.folder": [
-              [
-                "workspaceCopy"
-              ]
-            ],
-            "part.part": [
-              [
-                "partCopy"
-              ],
-              [
-                "partObjectCopy"
-              ]
-            ],
-            "document.document": [
-              [
-                "documentCopy"
-              ],
-              [
-                "documentObjectCopy"
-              ]
-            ]
-          }
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.copy"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:create",
@@ -565,58 +500,18 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "cutSelected",
-      "execution": "workspace.clipboard.cut",
+      "execution": "",
       "resources": [
-        "workspace.folder",
-        "part.part",
-        "document.document"
+        "workspace.folder"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:cutSelected"
       ],
-      "requirements": [
-        {
-          "role": "sourceParent",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "sourceTargets",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 100,
-          "readResolverKey": "workspace.clipboard.endpoint"
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.cut"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:deleteObjects",
@@ -706,134 +601,19 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "paste",
-      "execution": "workspace.clipboard.paste",
+      "execution": "",
       "resources": [
-        "workspace.folder",
-        "part.part",
-        "document.document"
+        "workspace.folder"
       ],
       "actions": [
-        "read",
-        "workspaceCopy",
-        "partCopy",
-        "documentCopy",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:paste",
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:paste"
       ],
-      "requirements": [
-        {
-          "role": "sourceParent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "copy",
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "sourceTargets",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 100,
-          "branch": "copy",
-          "readResolverKey": "workspace.clipboard.endpoint",
-          "resourceAnyOf": {
-            "workspace.folder": [
-              [
-                "workspaceCopy"
-              ]
-            ],
-            "part.part": [
-              [
-                "partCopy"
-              ]
-            ],
-            "document.document": [
-              [
-                "documentCopy"
-              ]
-            ]
-          }
-        },
-        {
-          "role": "sourceParent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "cut",
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "sourceTargets",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 100,
-          "branch": "cut",
-          "readResolverKey": "workspace.clipboard.endpoint"
-        },
-        {
-          "role": "targetParent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.paste"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:pasteFolderCopy",
@@ -1470,57 +1250,18 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "removeSelected",
-      "execution": "workspace.clipboard.remove",
+      "execution": "",
       "resources": [
-        "workspace.folder",
-        "part.part",
-        "document.document"
+        "workspace.folder"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:removeSelected"
       ],
-      "requirements": [
-        {
-          "role": "sourceParent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "sourceTargets",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 100,
-          "readResolverKey": "workspace.clipboard.endpoint"
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.removeSelected"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:resolveObjectCopy",
@@ -1665,84 +1406,19 @@
       "viewKey": "workspace.folder.list",
       "surface": "rowActions",
       "actionKey": "copy",
-      "execution": "workspace.clipboard.copy",
+      "execution": "",
       "resources": [
-        "workspace.folder",
-        "part.part",
-        "document.document"
+        "workspace.folder"
       ],
       "actions": [
-        "read",
-        "workspaceCopy",
-        "partCopy",
-        "partObjectCopy",
-        "documentCopy",
-        "documentObjectCopy"
+        "read"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:copy",
         "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:copy"
       ],
-      "requirements": [
-        {
-          "role": "sourceParent",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "sourceTargets",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 100,
-          "readResolverKey": "workspace.clipboard.endpoint",
-          "resourceAnyOf": {
-            "workspace.folder": [
-              [
-                "workspaceCopy"
-              ]
-            ],
-            "part.part": [
-              [
-                "partCopy"
-              ],
-              [
-                "partObjectCopy"
-              ]
-            ],
-            "document.document": [
-              [
-                "documentCopy"
-              ],
-              [
-                "documentObjectCopy"
-              ]
-            ]
-          }
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.copy"
     },
     {
       "id": "Workspace/view:workspace.folder.list/rowActions/action:cut",
@@ -1750,59 +1426,19 @@
       "viewKey": "workspace.folder.list",
       "surface": "rowActions",
       "actionKey": "cut",
-      "execution": "workspace.clipboard.cut",
+      "execution": "",
       "resources": [
-        "workspace.folder",
-        "part.part",
-        "document.document"
+        "workspace.folder"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:cut",
         "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:cut"
       ],
-      "requirements": [
-        {
-          "role": "sourceParent",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "sourceTargets",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 100,
-          "readResolverKey": "workspace.clipboard.endpoint"
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.cut"
     },
     {
       "id": "Workspace/view:workspace.folder.list/rowActions/action:delete",
@@ -1975,58 +1611,19 @@
       "viewKey": "workspace.folder.list",
       "surface": "rowActions",
       "actionKey": "remove",
-      "execution": "workspace.clipboard.remove",
+      "execution": "",
       "resources": [
-        "workspace.folder",
-        "part.part",
-        "document.document"
+        "workspace.folder"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:remove",
         "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:remove"
       ],
-      "requirements": [
-        {
-          "role": "sourceParent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "sourceTargets",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 100,
-          "readResolverKey": "workspace.clipboard.endpoint"
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.remove"
     },
     {
       "id": "Workspace/view:workspace.folder.list/rowActions/action:transfer",

@@ -5,16 +5,12 @@ using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace ICP.Platform.Modules.Workspace;
 
-/// <summary>剪贴板执行端的固定身份；分支来自已校验的正式 mode，不从声明缺失推断旧路径。</summary>
+/// <summary>未迁移真实副本复用的阶段来源适配，不持有复制选择或引用粘贴的按钮合同。</summary>
 public static class WorkspaceClipboardExecutions
 {
-    public const string Copy = "workspace.clipboard.copy";
-    public const string Cut = "workspace.clipboard.cut";
-    public const string Paste = "workspace.clipboard.paste";
-    public const string Remove = "workspace.clipboard.remove";
     public const string Provider = "workspace.backend";
 
-    /// <summary>服务端固定执行与阶段，粘贴分支只接受业务已核证的 copy/cut。</summary>
+    /// <summary>服务端按实际副本来源固定执行、阶段和分支，不从请求缺失推断来源。</summary>
     public static DataExecutionBindingReference Binding(string execution, string stage, string? branch = null) =>
         new(execution, Provider, stage) { Branch = branch };
 }

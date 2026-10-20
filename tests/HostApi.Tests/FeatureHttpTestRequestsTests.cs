@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using Xunit;
 
@@ -6,6 +7,32 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class FeatureHttpTestRequestsTests
 {
+    [Theory]
+    [Trait("Category", "ModuleMetadataConsumer")]
+    [InlineData("copySelected", "list.pageActions")]
+    [InlineData("removeSelected", "list.pageActions")]
+    [InlineData("remove", "list.rowActions")]
+    public async Task WorkspaceSharedCallers_SelectTheirActualButtonAfterTheLegacyEntryRetires(string key, string surface)
+    {
+        var result = new CanonicalModulePlanCompiler().Compile("workspace-callers", new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
+        var plan = result.Plan!;
+        var point = Assert.Single(plan.FeatureCatalog, item => item.ModuleId == "Workspace" && item.Key == key
+            && item.ActionScope == surface && item.StaticScope == "folder");
+        var declaration = new FeatureHttpTestRequests(plan.FeatureCatalog, plan.ActionDataAccessCatalog).Declaration(point.BehaviorKey, point);
+        Assert.Empty(declaration.Execution);
+        Assert.Equal("WorkspaceFolder", declaration.Object);
+        Assert.Equal(point.BehaviorKey, declaration.BusinessBinding);
+        var recorder = new Requests();
+        using var client = new HttpClient(recorder) { BaseAddress = new Uri("http://test.local") };
+        using var response = key == "remove"
+            ? await new ObjectHistoryHttpTestRequests(plan.ActionDataAccessCatalog).SendAsync(client, point, HttpMethod.Delete,
+                "/api/workspace/content/references/current-link", new { position = new { } })
+            : await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, "/explicit-command", new { }, declaration);
+        Assert.Equal(declaration.Id, Assert.Single(recorder.Buttons));
+        Assert.Null(Assert.Single(recorder.LegacyDeclarations));
+    }
+
     [Fact]
     public async Task PositiveCreateUsesTheExactCachedFeatureWhileRawMissingIdentityStaysMissing()
     {
@@ -49,9 +76,11 @@ public sealed class FeatureHttpTestRequestsTests
     private sealed class Requests : HttpMessageHandler
     {
         internal List<string?> Buttons { get; } = [];
+        internal List<string?> LegacyDeclarations { get; } = [];
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Buttons.Add(request.Headers.TryGetValues("X-NewP-Button", out var values) ? values.Single() : null);
+            LegacyDeclarations.Add(request.Headers.TryGetValues("X-NewP-Data-Declaration", out var legacy) ? legacy.Single() : null);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created) { Content = new StringContent("{}") });
         }
     }

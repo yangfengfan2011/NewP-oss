@@ -31,7 +31,7 @@ async function mount(preparation?: Promise<Response>, modelKey = 'Part') {
   } };
   const session = workspaceClipboard(instance);
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'part', modelKey }] })));
-  await session.copy(source, ['part'], 'copy');
+  await session.copy(source, ['part'], 'copy', 'copy-button');
   vi.mocked(platformFetch).mockImplementation(async () => preparation ?? new Response(JSON.stringify({ operationId: 'first', values: { ECODE: '', ENAME: '原名称', Description: '原说明' }, sourcePath: ['公共空间', '源'], targetPath: ['公共空间', '目标'] })));
   let draft: { draft: ObjectCopyDraft; values: Record<string, unknown> } | undefined;
   let submission: Promise<unknown> | undefined;

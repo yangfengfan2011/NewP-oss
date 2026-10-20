@@ -495,7 +495,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
                     "target" => created with { Target = created.Target with { ObjectId = "different-target" } },
                     "values" => created with { Target = created.Target with { Values = new Dictionary<string, object?> { ["LID"] = target } } },
                     "caller" => created with { Caller = caller },
-                    "binding" => new DataScopeObjectInitializationSource.Declared(caller, new(WorkspaceClipboardExecutions.Copy, "workspace.backend", "submit"), created.ParentObjectIds, created.Target),
+                    "binding" => new DataScopeObjectInitializationSource.Declared(caller, new("workspace.clipboard.copy", "workspace.backend", "submit"), created.ParentObjectIds, created.Target),
                     "unregistered-shape" => new UnregisteredInitializationSource(caller, created.ParentObjectIds, created.Target),
                     "partial" => created with { Target = created.Target with { Values = created.Target.Values.Where(value => value.Key != "Description").ToDictionary() } },
                     "changed" => created with { Target = created.Target with { Values = new Dictionary<string, object?>(created.Target.Values) { ["ENAME"] = "forged" } } },

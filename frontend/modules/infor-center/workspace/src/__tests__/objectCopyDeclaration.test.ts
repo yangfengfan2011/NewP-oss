@@ -36,7 +36,7 @@ it.each(['Part', 'Document'] as const)('sends the bound source only for actual %
 it.each(['Part', 'Document'])('requires an actual %s binding and rejects a draft submitted under another binding before HTTP', async model => {
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(response({ items: [{ linkId: 'source-link', modelKey: model }] }));
-  await session.copy(source, ['source-link'], 'select-copy');
+  await session.copy(source, ['source-link'], 'select-copy', 'copy-button');
   expect(() => session.prepareObjectCopy(target, 'object-copy')).toThrow();
   const draft = session.prepareObjectCopy(target, 'object-copy', 'original');
   vi.mocked(platformFetch).mockResolvedValueOnce(response({ operationId: 'op', values: { ECODE: '', ENAME: 'Source' }, sourcePath: ['Source'], targetPath: ['Target'] }));

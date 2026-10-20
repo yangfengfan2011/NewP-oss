@@ -22,7 +22,7 @@ it.each([false, true])('recovers without replay and never lets a stale read over
   const source = { spaceId: 'public', rootFolderId: 'root', linkIds: ['source'] };
   const target = { ...source, linkIds: ['target'] };
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'document', modelKey: 'Document' }] })));
-  await session.copy(source, ['document'], 'select-feature');
+  await session.copy(source, ['document'], 'select-feature', 'copy-button');
   const draft = session.prepareObjectCopy(target, 'paste-feature', declaration.id);
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'durable-operation', values: { ECODE: '', ENAME: '源' }, sourcePath: ['源'], targetPath: ['目标'] })));
   await session.readObjectCopyInput(draft, new AbortController().signal);

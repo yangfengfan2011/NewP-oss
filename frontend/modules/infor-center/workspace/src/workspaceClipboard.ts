@@ -1,5 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
-import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInstance } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, standardCrudRequestHeaders, StandardCrudRequestError, type StandardCrudActionInstance } from '@icp-platform/sdk';
 
 export interface ClipboardPosition { spaceId: string; rootFolderId: string; linkIds: readonly string[] }
 export interface WorkspaceClipboard { readonly mode: 'copy' | 'cut'; readonly sourcePosition: ClipboardPosition; readonly linkIds: readonly string[] }
@@ -19,10 +19,10 @@ export function workspaceClipboard(instance: StandardCrudActionInstance | undefi
   return instance.getOrCreate(clipboardOwner, () => new WorkspaceClipboardSession(() => instance.changed()), session => session.close());
 }
 
-async function command(path: string, body: unknown, featurePosition: string | undefined, signal?: AbortSignal, declarationId?: string): Promise<unknown> {
+async function command(path: string, body: unknown, featurePosition: string | undefined, signal?: AbortSignal, declarationId?: string, buttonId?: string): Promise<unknown> {
   const response = await platformFetch(`/api/workspace/content/${path}`, { method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
-      ...(declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) }, body: JSON.stringify(body) });
+      ...(buttonId ? standardCrudRequestHeaders({ featurePosition, buttonId }) : declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   return await response.json() as unknown;
 }
@@ -44,14 +44,15 @@ export class WorkspaceClipboardSession {
   readonly getSnapshot = (): ClipboardState => this.state;
   readonly subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
 
-  copy(sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, declarationId?: string): Promise<boolean> {
-    return this.select('copy', sourcePosition, linkIds, featurePosition, declarationId);
+  copy(sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, buttonId?: string): Promise<boolean> {
+    return this.select('copy', sourcePosition, linkIds, featurePosition, buttonId);
   }
-  cut(sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, declarationId?: string): Promise<boolean> {
-    return this.select('cut', sourcePosition, linkIds, featurePosition, declarationId);
+  cut(sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, buttonId?: string): Promise<boolean> {
+    return this.select('cut', sourcePosition, linkIds, featurePosition, buttonId);
   }
-  private async select(mode: 'copy' | 'cut', sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, declarationId?: string): Promise<boolean> {
+  private async select(mode: 'copy' | 'cut', sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, buttonId?: string): Promise<boolean> {
     if (this.closed || this.state.phase === 'pasting') throw this.failure('Workspace.ClipboardBusy');
+    if (!buttonId) throw new StandardCrudRequestError('缺少当前剪贴板按钮身份。', 400);
     if (linkIds.length < 1 || linkIds.length > 100 || linkIds.some(id => !id) || new Set(linkIds.map(id => id.toLowerCase())).size !== linkIds.length)
       throw this.failure('Workspace.InvalidSelection');
     const clipboard: WorkspaceClipboard = { mode, sourcePosition: { ...sourcePosition, linkIds: [...sourcePosition.linkIds] }, linkIds: [...linkIds] };
@@ -61,7 +62,7 @@ export class WorkspaceClipboardSession {
     this.validation?.abort(); const validation = new AbortController(); this.validation = validation;
     this.publish({ ...this.state, phase: 'validating' });
     try {
-      const receipt = await command(mode === 'cut' ? 'clipboard/cut/validate' : 'clipboard/validate', clipboard, featurePosition, validation.signal, declarationId) as { items?: Array<{ linkId: string; modelKey?: string }> };
+      const receipt = await command(mode === 'cut' ? 'clipboard/cut/validate' : 'clipboard/validate', clipboard, featurePosition, validation.signal, undefined, buttonId) as { items?: Array<{ linkId: string; modelKey?: string }> };
       if (this.closed || generation !== this.generation) return false;
       if (!Array.isArray(receipt.items) || receipt.items.length !== linkIds.length || receipt.items.some((item, index) => item.linkId !== linkIds[index]))
         throw this.failure('Workspace.InvalidClipboardInput');
@@ -183,18 +184,19 @@ export class WorkspaceClipboardSession {
       ...(copyParentAuthorization !== undefined ? { copyParentAuthorization } : {}) }, featurePosition, declarationId);
   }
 
-  async paste(targetPosition: ClipboardPosition, featurePosition?: string, declarationId?: string): Promise<ClipboardPasteReceipt> {
+  async paste(targetPosition: ClipboardPosition, featurePosition?: string, buttonId?: string): Promise<ClipboardPasteReceipt> {
     if (this.closed || this.state.phase !== 'idle' || !this.state.clipboard)
       throw this.failure(this.state.phase === 'unknown' ? 'Workspace.ClipboardOutcomeUnknown' : 'Workspace.ClipboardUnavailable');
+    if (!buttonId) throw new StandardCrudRequestError('缺少当前剪贴板按钮身份。', 400);
     const clipboard = this.state.clipboard;
-    return this.write('paste', { ...clipboard, targetPosition: { ...targetPosition, linkIds: [...targetPosition.linkIds] } }, featurePosition, declarationId);
+    return this.write('paste', { ...clipboard, targetPosition: { ...targetPosition, linkIds: [...targetPosition.linkIds] } }, featurePosition, undefined, buttonId);
   }
 
-  private async write(path: string, body: unknown, featurePosition?: string, declarationId?: string): Promise<ClipboardPasteReceipt> {
+  private async write(path: string, body: unknown, featurePosition?: string, declarationId?: string, buttonId?: string): Promise<ClipboardPasteReceipt> {
     const clipboard = this.state.clipboard!;
     this.publish({ phase: 'pasting', clipboard });
     try {
-      const receipt = await command(path, body, featurePosition, undefined, declarationId);
+      const receipt = await command(path, body, featurePosition, undefined, declarationId, buttonId);
       if (typeof receipt !== 'object' || receipt === null || !('succeeded' in receipt) || receipt.succeeded !== true
         || 'noChange' in receipt && typeof receipt.noChange !== 'boolean')
         throw this.failure('Workspace.ClipboardOutcomeUnknown');

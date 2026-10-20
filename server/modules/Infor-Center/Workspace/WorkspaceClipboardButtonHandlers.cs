@@ -3,10 +3,14 @@ using ICP.Platform.Crud.LinkQueries;
 
 namespace ICP.Platform.Modules.Workspace;
 
+/// <summary>正式选择只携带来源位置与有序关系，不能由客户端指定真实对象身份。</summary>
 public sealed record WorkspaceClipboardSelectionInput(string ActorId, string Mode, WorkspacePosition SourcePosition, string[] LinkIds);
+/// <summary>本次来源父及只读输入快照，选择结果不保存后续粘贴允许结果。</summary>
 public sealed record WorkspaceClipboardSelectionState(string Mode, WorkspacePosition SourcePosition, string ParentId,
     IReadOnlyDictionary<string, object?> Before, IReadOnlyList<string> LinkIds);
+/// <summary>粘贴使用完整来源和目标位置，copy/cut仍属于原业务语义。</summary>
 public sealed record WorkspacePasteReferencesInput(string ActorId, string Mode, WorkspacePosition SourcePosition, string[] LinkIds, WorkspacePosition TargetPosition);
+/// <summary>同一图事务内解析的父路径与真实端点供平台检查和引用变更共同消费。</summary>
 public sealed record WorkspacePasteReferencesState(string Mode, WorkspacePosition SourcePosition, WorkspacePositionPath Source,
     WorkspacePosition TargetPosition, WorkspacePositionPath Target, IReadOnlyDictionary<string, object?> Before,
     IReadOnlyList<string> LinkIds, IReadOnlyList<LinkObjectReference> Targets);

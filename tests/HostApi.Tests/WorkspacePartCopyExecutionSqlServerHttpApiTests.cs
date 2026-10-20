@@ -46,7 +46,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             Assert.Equal("", prepared.GetProperty("values").GetProperty("ECODE").GetString());
             Assert.Equal("真实Part来源", prepared.GetProperty("values").GetProperty("ENAME").GetString());
         }
-        var alternate = new FeatureHttpTestRequests(fixture).Declaration("workspace.clipboard.copy", Point(fixture, "workspace.folder.copy"));
+        var alternate = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.copy", Point(fixture, "workspace.folder.copy"));
         using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, copy, HttpMethod.Post,
             "/api/workspace/content/objects/copy/prepare", input, alternate))
             await Problem(swapped, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
@@ -85,7 +85,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var point = Point(fixture, "workspace.folder.pasteObjectCopy");
         using (var missing = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/content/objects/copy", submit))
             await Problem(missing, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
-        var wrong = new FeatureHttpTestRequests(fixture).Declaration("workspace.clipboard.copy", Point(fixture, "workspace.folder.copy"));
+        var wrong = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.copy", Point(fixture, "workspace.folder.copy"));
         using (var swapped = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/content/objects/copy", submit, wrong))
             await Problem(swapped, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
         var recovered = await Command(fixture, admin, "workspace.folder.resolveObjectCopy", "/api/workspace/content/objects/copy/result", new { submit.operationId });

@@ -8,28 +8,31 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class WorkspaceClipboardDataExecutionContractTests
 {
     [Fact]
-    public void ActualWorkspaceClipboard_CompilesOneFloorForEveryListAndTreeOccurrence()
+    public void ActualWorkspaceClipboard_BindsTheFormalParentForEveryListAndTreeOccurrence()
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
         var compiled = new CanonicalModulePlanCompiler().Compile("workspace-clipboard-contract", candidates);
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
         var owner = candidates.Single(candidate => candidate.ModuleId == "Workspace");
         var contracts = owner.DataExecutions.Where(contract => contract.Key.StartsWith("workspace.clipboard.", StringComparison.Ordinal)).ToArray();
-        Assert.NotEmpty(contracts);
-        var declarations = compiled.Plan!.ActionDataAccessCatalog.Where(item => item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal)).ToArray();
-        Assert.All(contracts, contract => Assert.Contains(declarations, declaration => declaration.Execution == contract.Key));
-        Assert.All(owner.Features.SelectMany(feature => feature.DataAccess).Where(item => item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal)),
-            declaration => Assert.Empty(declaration.Actions));
-        Assert.DoesNotContain(declarations, declaration => declaration.ActionKey == "clearClipboard");
+        Assert.Empty(contracts);
+        Assert.DoesNotContain(owner.Features.SelectMany(feature => feature.DataAccess), declaration => declaration.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal));
+        string[] bindings = ["workspace.folder.copy", "workspace.folder.cut", "workspace.folder.paste", "workspace.folder.remove", "workspace.folder.removeSelected"];
+        var declarations = compiled.Plan!.ActionDataAccessCatalog.Where(item => bindings.Contains(item.BusinessBinding)
+            && item.GetObjectRequirements().Count > 0).ToArray();
+        Assert.Equal(7, declarations.Length);
         foreach (var declaration in declarations)
         {
             Assert.Equal("Workspace", declaration.ModuleId);
-            Assert.Equal("workspace.backend", declaration.Provider);
-            Assert.NotNull(declaration.Requirements);
-            Assert.Contains("workspace.folder", declaration.Resources);
-            Assert.Contains("part.part", declaration.Resources);
-            Assert.Contains("document.document", declaration.Resources);
+            Assert.Empty(declaration.Execution);
+            Assert.Null(declaration.Provider);
+            Assert.Null(declaration.Requirements);
+            Assert.Equal("WorkspaceFolder", declaration.Object);
+            Assert.Equal(["workspace.folder"], declaration.Resources);
+            Assert.Equal([declaration.BusinessBinding == "workspace.folder.copy" ? "read" : "edit"], declaration.Actions);
         }
+        var clear = Assert.Single(compiled.Plan.ActionDataAccessCatalog, declaration => declaration.ModuleId == "Workspace" && declaration.ActionKey == "clearClipboard");
+        Assert.Empty(clear.GetObjectRequirements());
         foreach (var key in new[] { "copy", "cut", "remove" })
             Assert.Contains(Assert.Single(declarations, declaration => declaration.Surface == "rowActions" && declaration.ActionKey == key).FeaturePositions,
                 position => compiled.Plan.FeatureCatalog.Any(point => point.Position == position && point.ActionScope == "contextMenu"));

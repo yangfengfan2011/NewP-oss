@@ -270,7 +270,7 @@ it('routes every Document batch row through the actual PageEntry Provider and th
   }
 });
 
-it.each(['copy', 'cut'] as const)('uses the compiled %s declaration through the actual tree Provider and current paste occurrence', async mode => {
+it.each(['copy', 'cut'] as const)('uses the compiled %s button through the actual tree Provider and current paste occurrence', async mode => {
   const page = await mount({ formalDeclarations: true });
   const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden):not(.np-crud-header-menu) [role=menuitem]')]
     .find(item => !item.closest('.np-crud-header-menu') && item.textContent === label)!;
@@ -289,7 +289,8 @@ it.each(['copy', 'cut'] as const)('uses the compiled %s declaration through the 
     const call = page.request.mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).endsWith(path))!;
     const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
     const declaration = clipboardContract.declarations.find(item => item.surface === surface && item.actionKey === key)!;
-    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(headers.get('X-NewP-Button')).toBe(declaration.id);
+    expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
     expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
     expect(headers.get('X-NewP-Feature')).toContain('/surface:contextMenu/');
   }
@@ -301,7 +302,7 @@ it.each(['copy', 'cut'] as const)('uses the compiled %s declaration through the 
   }
 });
 
-it('uses compiled batch declarations through selection and the real removal review Provider', async () => {
+it('uses compiled batch buttons through selection and the real removal review Provider', async () => {
   const page = await mount({ formalDeclarations: true });
   await page.copyRows(['Document', 'Part']);
   await page.waitFor(() => expect(page.writes).toHaveLength(1));
@@ -314,7 +315,8 @@ it('uses compiled batch declarations through selection and the real removal revi
     const call = page.request.mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).endsWith(path))!;
     const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
     const declaration = clipboardContract.declarations.find(item => item.surface === 'pageActions' && item.actionKey === key)!;
-    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(headers.get('X-NewP-Button')).toBe(declaration.id);
+    expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
     expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
   }
 });

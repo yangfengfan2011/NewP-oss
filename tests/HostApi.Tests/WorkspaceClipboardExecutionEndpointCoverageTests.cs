@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Workspace;
 using Microsoft.AspNetCore.Builder;
@@ -12,7 +13,7 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class WorkspaceClipboardExecutionEndpointCoverageTests
 {
     [Fact]
-    public void ActualWorkspaceClipboardEndpoints_BindEveryMigratedExecutionAndStage()
+    public void ActualWorkspaceClipboardEndpoints_BindButtonsAndRetainTheSeparateObjectCopyStages()
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));
         var compiled = new CanonicalModulePlanCompiler().Compile("workspace-clipboard-coverage", candidates);
@@ -21,8 +22,16 @@ public sealed class WorkspaceClipboardExecutionEndpointCoverageTests
         builder.Services.AddControllers().AddApplicationPart(typeof(WorkspaceContentsController).Assembly);
         using var app = builder.Build();
         app.MapControllers();
-        var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
-            .Select(endpoint => endpoint.Metadata.GetMetadata<WorkspaceClipboardExecutionAttribute>()).Where(binding => binding is not null).ToArray();
+        var allEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).ToArray();
+        Type[] handlers = [typeof(WorkspaceClipboardSelectionHandler), typeof(WorkspacePasteReferencesHandler), typeof(WorkspaceRemoveReferencesHandler)];
+        var buttonEndpoints = allEndpoints.Where(endpoint => handlers.Contains(endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.HandlerType)).ToArray();
+        var buttons = compiled.Plan!.ActionDataAccessCatalog.Where(button => button.ModuleId == "Workspace"
+            && button.ViewKey == "workspace.folder.list" && button.GetObjectRequirements().Count > 0
+            && button.ActionKey is "copy" or "copySelected" or "cut" or "cutSelected" or "paste" or "remove" or "removeSelected").ToArray();
+        Assert.NotEmpty(buttons);
+        Assert.All(buttons, button => Assert.Contains(buttonEndpoints, endpoint => ButtonBusinessEndpointBindings.Matches(endpoint, button.ModuleId, button.BusinessBinding!)));
+        Assert.All(buttonEndpoints, endpoint => Assert.Contains(buttons, button => ButtonBusinessEndpointBindings.Matches(endpoint, button.ModuleId, button.BusinessBinding!)));
+        var endpoints = allEndpoints.Select(endpoint => endpoint.Metadata.GetMetadata<WorkspaceClipboardExecutionAttribute>()).Where(binding => binding is not null).ToArray();
         Assert.NotEmpty(endpoints);
         var contracts = compiled.Plan!.Modules.SelectMany(module => module.DataExecutions)
             .Where(contract => contract.Key.StartsWith("workspace.clipboard.", StringComparison.Ordinal)

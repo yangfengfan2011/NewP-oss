@@ -159,21 +159,10 @@ internal static class WorkspaceAcceptanceFixture
         var spaceId = personal.GetProperty("spaceId").GetString()!;
         var rootFolderId = personal.GetProperty("rootFolderId").GetString()!;
         var position = new { spaceId, rootFolderId, linkIds = Array.Empty<string>() };
-        var created = await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/folders",
-            new { position, values = new { ENAME = name } },
-            features.Action(entry, "create", "list.pageActions", "folder").Position, token);
-        var folderId = created.GetProperty("id").GetString()!;
-        var scope = JsonSerializer.Serialize(new { spaceId, rootFolderId, linkIds = "[]" });
-        var links = await SendAsync(ordinary, HttpMethod.Get,
-            $"/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId={Uri.EscapeDataString(rootFolderId)}&queryScope={Uri.EscapeDataString(scope)}",
-            null, entry.Position, token);
-        var link = links.GetProperty("items").EnumerateArray().Single(item =>
-            item.GetProperty("associatedObject").GetProperty("id").GetString() == folderId);
-        var linkId = link.GetProperty("linkId").GetString()!;
-        await SendAsync(ordinary, HttpMethod.Delete, $"/api/workspace/content/references/{Uri.EscapeDataString(linkId)}",
-            new { position }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token,
-            features.Declaration(features.Action(entry, "remove", "list.rowActions", "folder")));
-        return folderId;
+        var created = await CreateFolderAtPositionAsync(ordinary, features, new(spaceId, rootFolderId, rootFolderId, []), name, token);
+        await SendButtonAsync(ordinary, features, features.Action(entry, "remove", "list.rowActions", "folder"),
+            HttpMethod.Delete, $"/api/workspace/content/references/{Uri.EscapeDataString(created.LinkIds[^1])}", new { position }, token);
+        return created.FolderId;
     }
 
     // 多父恢复样本全部走当前普通主体正式命令；仅记录关系链，不在测试侧编码 Provider nodeKey。
@@ -222,9 +211,8 @@ internal static class WorkspaceAcceptanceFixture
         WorkspaceOccurrenceFixture fixture, CancellationToken token)
     {
         var entry = features.Behavior("Workspace", "workspace.spaces.access");
-        return SendAsync(ordinary, HttpMethod.Delete, $"/api/workspace/content/references/{Uri.EscapeDataString(fixture.ALinkId)}",
-            new { position = fixture.PublicRoot.CommandPosition }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token,
-            features.Declaration(features.Action(entry, "remove", "list.rowActions", "folder")));
+        return SendButtonAsync(ordinary, features, features.Action(entry, "remove", "list.rowActions", "folder"), HttpMethod.Delete,
+            $"/api/workspace/content/references/{Uri.EscapeDataString(fixture.ALinkId)}", new { position = fixture.PublicRoot.CommandPosition }, token);
     }
 
     internal static Task<JsonElement> ReadDirectReferencesAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,

@@ -186,7 +186,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.ActionKey == delete.Key && item.Surface == "pageActions"
             && item.FeaturePositions.Contains(delete.Position));
-        var remove = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.clipboard.remove" && item.ActionKey == "removeSelected");
+        var remove = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.removeSelected" && item.ActionKey == "removeSelected");
         var body = new { position, linkIds = new[] { part.LinkId, document.LinkId } };
         var before = await ObjectSnapshot(fixture);
         foreach (var source in new[] { (ActionDataAccessRequirement?)null, remove })

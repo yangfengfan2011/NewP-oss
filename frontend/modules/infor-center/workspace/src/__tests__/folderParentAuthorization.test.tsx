@@ -111,7 +111,7 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('uses the existing
     if (!entries.has(key)) entries.set(key, create()); return entries.get(key) as ReturnType<typeof create>;
   } };
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response('{"items":[{"linkId":"source","modelKey":"WorkspaceFolder"}]}'));
-  await workspaceClipboard(instance).copy({ spaceId: 'public', rootFolderId: 'root', linkIds: [] }, ['source'], 'copy');
+  await workspaceClipboard(instance).copy({ spaceId: 'public', rootFolderId: 'root', linkIds: [] }, ['source'], 'copy', 'copy-button');
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response('{"sourceName":"来源","sourcePath":["公共空间","来源"],"targetPath":["公共空间","目标"]}'));
   let input: unknown;
   function Harness() {
@@ -165,7 +165,7 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('cancels the actua
     if (!entries.has(key)) entries.set(key, create()); return entries.get(key) as ReturnType<typeof create>;
   } };
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response('{"items":[{"linkId":"source","modelKey":"WorkspaceFolder"}]}'));
-  await workspaceClipboard(instance).copy({ spaceId: 'public', rootFolderId: 'root', linkIds: [] }, ['source'], 'copy');
+  await workspaceClipboard(instance).copy({ spaceId: 'public', rootFolderId: 'root', linkIds: [] }, ['source'], 'copy', 'copy-button');
   const declaration = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === actionKey)!;
   let finish!: (response: Response) => void;
   let signal: AbortSignal | undefined;

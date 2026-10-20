@@ -33,6 +33,15 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         using (var wrongExecution = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post,
             "/api/workspace/content/clipboard/validate", body, borrowed))
             await Problem(wrongExecution, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
+        using (var mixedRequest = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/clipboard/validate")
+            { Content = System.Net.Http.Json.JsonContent.Create(body) })
+        {
+            mixedRequest.Headers.Add("X-NewP-Feature", feature.Position);
+            mixedRequest.Headers.Add("X-NewP-Button", ClipboardDeclaration(fixture, feature)!.Id);
+            mixedRequest.Headers.Add("X-NewP-Data-Declaration", ClipboardDeclaration(fixture, feature)!.Id);
+            using var mixed = await admin.SendAsync(mixedRequest);
+            await Problem(mixed, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
+        }
         await Command(fixture, admin, "workspace.folder.copy", "/api/workspace/content/clipboard/validate", body);
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
         Assert.Equal(auditBefore, Snapshot(await Rows(fixture, "BusinessChange")));

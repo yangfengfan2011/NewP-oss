@@ -23,6 +23,8 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
         _declarations = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog;
     }
 
+    internal FeatureHttpTestRequests(FeatureCatalogHostFixture fixture) : this(fixture.Catalog, fixture.DataAccessCatalog) { }
+
     internal static async Task<FeatureHttpTestRequests> LoadAsync(HttpClient client)
     {
         using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json")
@@ -91,6 +93,19 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
     internal Task<JsonElement> CreateButtonAsync(HttpClient client, FeaturePoint point, string path, object body,
         ActionDataAccessRequirement? dataAccess = null) =>
         CreateAsync(client, point, path, body, dataAccess ?? Declaration(point.BehaviorKey, point));
+
+    // 仅显式正向或业务反例准备采用按钮；遗漏/借用身份反例仍直接调用原始SendAsync。
+    internal Task<HttpResponseMessage> SendButtonAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path,
+        object? body = null) => SendAsync(client, point, method, path, body, _declarations.Single(button =>
+            button.BusinessBinding == point.BehaviorKey && button.FeaturePositions.Contains(point.Position)));
+
+    internal async Task<JsonElement> InitializeOrganizationAsync(HttpClient client)
+    {
+        var point = Organization("companies", "initialize", "list.pageActions");
+        using var response = await SendButtonAsync(client, point, HttpMethod.Post, "/api/organization/initialization");
+        Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
 
     internal static async Task<JsonElement> CreateAsync(HttpClient client, FeaturePoint point, string path, object body, ActionDataAccessRequirement? dataAccess = null)
     {

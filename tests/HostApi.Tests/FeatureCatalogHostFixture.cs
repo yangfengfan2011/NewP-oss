@@ -51,6 +51,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
     internal string AdministratorPassword { get; } = "Feature-205-" + Guid.NewGuid().ToString("N") + "!";
     internal HttpClient Administrator { get; private set; } = null!;
     internal IReadOnlyList<FeaturePoint> Catalog { get; private set; } = [];
+    internal IReadOnlyList<ActionDataAccessRequirement> DataAccessCatalog { get; private set; } = [];
     internal string CapsulePath => Path.Combine(Path.Combine(HostRoot, "modules", "Example"), "plugin.json");
     internal string LastError { get; private set; } = "";
     internal bool ExternalPluginsEnabled { get; set; }
@@ -160,6 +161,11 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
                     Assert.False(expectFailure, "Invalid candidate opened HTTP requests.");
                     using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json");
                     Catalog = RuntimeFeatureCatalogTestSupport.Parse(manifest!.RootElement);
+                    // 同一启动manifest同时保存按钮和读取目录；当前准备不重复I/O，历史缺声明也不伪造身份。
+                    DataAccessCatalog = manifest.RootElement.GetProperty("modules").EnumerateArray()
+                        .Where(module => module.TryGetProperty("dataAccess", out _))
+                        .SelectMany(module => module.GetProperty("dataAccess").EnumerateArray())
+                        .Select(item => item.Deserialize<ActionDataAccessRequirement>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!).ToArray();
                     return;
                 }
             }

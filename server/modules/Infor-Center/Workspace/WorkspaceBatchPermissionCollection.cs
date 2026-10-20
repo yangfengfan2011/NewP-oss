@@ -51,7 +51,7 @@ public sealed partial class WorkspaceContents
                 var path = await positions.ResolveAsync(actor, source.Position, cancellation);
                 var selected = source.LinkIds.Distinct(StringComparer.Ordinal).ToArray();
                 foreach (var segment in selected.Chunk(100))
-                    await ResolveTargetsAsync(path.FolderId, segment, "read", cancellation);
+                    await ResolveTargetsAsync(path.FolderId, segment, cancellation);
                 await AddMatchingAsync(path.FolderId, source.Position, selected);
                 if (includeDescendants)
                     await DiscoverAsync(path.FolderId, source.Position, selected);

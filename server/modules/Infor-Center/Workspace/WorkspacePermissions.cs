@@ -47,7 +47,7 @@ public sealed partial class WorkspaceContents
     {
         ValidateSelection([linkId]);
         var path = await positions.ResolveAsync(actor, position, token);
-        var target = (await ResolveTargetsAsync(path.FolderId, [linkId], "read", token)).Single();
+        var target = (await ResolveTargetsAsync(path.FolderId, [linkId], token)).Single();
         return (Resource(target.ModelKey), target.Id);
     }
 }

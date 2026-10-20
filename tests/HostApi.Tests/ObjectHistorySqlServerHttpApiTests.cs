@@ -33,10 +33,11 @@ public sealed class ObjectHistorySqlServerHttpApiTests(ITestOutputHelper output)
             Point(fixture, "workspace.spaces.access"), read, history!);
         using var ordinary = actor.Client;
         var manage = Point(fixture, "part.part.authorize");
+        var management = new FeatureHttpTestRequests(fixture).Declaration("part.part.authorization.manage", manage);
         var configuration = new DataScopeObjectDto("part.part", part.Id,
             [new("History296All", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
-        using (var saved = await historyRequests.SendAsync(admin, manage, HttpMethod.Put,
-            "/api/part/parts/" + part.Id + "/permissions", configuration))
+        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+            "/api/part/parts/" + part.Id + "/permissions", configuration, management))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var scope = Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         var path = "/api/workspace/content/" + part.LinkId + "/history?queryScope=" + scope;
@@ -87,15 +88,15 @@ public sealed class ObjectHistorySqlServerHttpApiTests(ITestOutputHelper output)
         using (var bareObject = await historyRequests.SendAsync(ordinary, history!, HttpMethod.Get,
             "/api/workspace/content/" + part.Id + "/history?queryScope=" + scope))
             Assert.Equal(HttpStatusCode.NotFound, bareObject.StatusCode);
-        using (var denied = await historyRequests.SendAsync(admin, manage, HttpMethod.Put,
+        using (var denied = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
             "/api/part/parts/" + part.Id + "/permissions", configuration with { Subjects = [configuration.Subjects[0] with {
-                Actions = new Dictionary<string, string> { ["read"] = "allow" } }] }))
+                Actions = new Dictionary<string, string> { ["read"] = "allow" } }] }, management))
             Assert.Equal(HttpStatusCode.NoContent, denied.StatusCode);
         using (var missingHistory = await historyRequests.SendAsync(ordinary, history!, HttpMethod.Get, path))
             Assert.Equal(HttpStatusCode.OK, missingHistory.StatusCode);
-        using (var deniedRead = await historyRequests.SendAsync(admin, manage, HttpMethod.Put,
+        using (var deniedRead = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
             "/api/part/parts/" + part.Id + "/permissions", configuration with { Subjects = [configuration.Subjects[0] with {
-                Actions = new Dictionary<string, string> { ["read"] = "deny" } }] }))
+                Actions = new Dictionary<string, string> { ["read"] = "deny" } }] }, management))
             Assert.Equal(HttpStatusCode.NoContent, deniedRead.StatusCode);
         using (var missingRead = await historyRequests.SendAsync(ordinary, history!, HttpMethod.Get, path))
             Assert.Equal(HttpStatusCode.NotFound, missingRead.StatusCode);

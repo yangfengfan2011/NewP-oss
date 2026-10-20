@@ -16,7 +16,7 @@ namespace ICP.Platform.Modules.Workspace;
 
 /// <summary>集中编排 Workspace 完整图命令、位置校验和引用规则；所属对象规则仍通过正式行为执行。</summary>
 public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
-    IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
+    IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
     WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources,
     IDocumentFiles documentFiles, IDocumentCopies documentCopies, WorkspaceTreeOrder treeOrder, WorkspaceReferenceAudit referenceAudit,
     Microsoft.Extensions.Logging.ILogger<WorkspaceContents> logger,
@@ -315,15 +315,19 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     private DbSet<Dictionary<string, object?>> Links => db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
     private DbSet<Dictionary<string, object?>> Folders => db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel);
 
-    // 用本次已验证的父身份批量匹配 LID，再对最多一页对象重验端点和动作；不重新解析位置或接受客户端类型/EID。
-    private async Task<LinkObjectReference[]> ResolveTargetsAsync(string parentId, string[] linkIds, string action, CancellationToken token)
+    // 用本次已验证的父身份批量匹配LID；正式内部完整读取保留原端点read、独立data-read和根约束顺序。
+    private async Task<LinkObjectReference[]> ResolveTargetsAsync(string parentId, string[] linkIds, CancellationToken token)
     {
         var targets = await ReadMutationTargetsAsync(parentId, linkIds, token);
         foreach (var target in targets)
         {
             var resource = Resource(target.ModelKey);
-            if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            if (!await decisions.IsAllowedAsync(resource, target.Id, action, token)) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
+            var result = await executionAccess.EvaluateInternalObjectAsync(new(WorkspacePermissionTargetReadResolver.Execution,
+                "workspace.backend", typeof(WorkspaceContents), nameof(ResolveTargetsAsync)), "target", new(resource, target.Id, target), token);
+            if (result.Decision == DataExecutionDecision.NotFound) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+            if (result.Decision == DataExecutionDecision.Denied) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
+            if (result.Target?.ResourceKey != resource || result.Target.ObjectId != target.Id)
+                throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
             await RequireNonRootMutationTargetAsync(target, token);
         }
         return targets;

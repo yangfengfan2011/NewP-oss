@@ -45,7 +45,7 @@ public sealed partial class WorkspaceContents
             var path = await positions.ResolveAsync(actor, source.Position, cancellation);
             // 分段读取是SQL工作单元，不是最终集合上限；全部来源都必须成立，不能略过失效LID。
             foreach (var segment in source.LinkIds.Distinct(StringComparer.Ordinal).Chunk(100))
-                foreach (var target in await ResolveTargetsAsync(path.FolderId, segment, "read", cancellation))
+                foreach (var target in await ResolveTargetsAsync(path.FolderId, segment, cancellation))
                     targets.Add(new(Resource(target.ModelKey), target.Id));
         }
         return targets.ToArray();

@@ -6,6 +6,10 @@ public interface IObjectActionAccess
     /// <summary>对真实对象逐个检查全部动作，保留不可读与动作拒绝的区别；依赖故障原样传播。</summary>
     Task<DataExecutionDecision> CheckAsync(string objectName, string objectId, IReadOnlyList<string> actions,
         CancellationToken cancellationToken = default);
+    /// <summary>按完整服务端新建候选检查声明动作；create不要求对象已存在或创建后可读，依赖故障原样传播。</summary>
+    Task<DataExecutionDecision> CheckCandidateAsync(string objectName, IReadOnlyDictionary<string, object?> candidate,
+        IReadOnlyList<string> actions, CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException("DATA_SCOPE_CANDIDATE_CHECK_UNSUPPORTED");
     /// <summary>以正式业务读取上下文重新核验完整访问约束，其余规则与无上下文检查相同。</summary>
     Task<DataExecutionDecision> CheckAsync(string objectName, string objectId, IReadOnlyList<string> actions,
         object readContext, CancellationToken cancellationToken = default) =>
@@ -14,11 +18,21 @@ public interface IObjectActionAccess
 
 /// <summary>服务端固定的本次按钮调用来源，目标来自正式业务输入。</summary>
 public sealed record ButtonExecutionContext(string ButtonId, string FeaturePosition, string BusinessBinding,
-    string ResourceKey, string ObjectName, string ObjectId);
+    string ResourceKey, string ObjectName, string? ObjectId);
+
+/// <summary>业务正式输入规范化后的目标种类；已有对象与待创建候选互不伪装。</summary>
+public abstract record ButtonBusinessTarget;
+
+/// <summary>一项正式对象目标的共同寻址；集合容器不冒充任何对象。</summary>
+public abstract record ButtonObjectTarget(string ResourceKey, string ObjectName) : ButtonBusinessTarget;
+
+/// <summary>完整服务端新建候选；只有业务字段、默认值、可信审计及正式身份，不包含允许凭证。</summary>
+public sealed record ButtonCreationTarget(string ResourceKey, string ObjectName,
+    IReadOnlyDictionary<string, object?> Values) : ButtonObjectTarget(ResourceKey, ObjectName);
 
 /// <summary>原保护时点取得的规范对象，不接受独立权限专用目标。</summary>
 public sealed record ButtonExecutionTarget(string ResourceKey, string ObjectName, string ObjectId,
-    IReadOnlyDictionary<string, object?> Before)
+    IReadOnlyDictionary<string, object?> Before) : ButtonObjectTarget(ResourceKey, ObjectName)
 {
     /// <summary>来自同一正式输入的读取上下文；资源约束必须重新验证，不包含允许结果。</summary>
     public object? ReadContext { get; init; }
@@ -38,7 +52,7 @@ public interface IButtonBusinessHandler<TInput, TState, TResult>
     Task<TResult> WithinBoundaryAsync(TInput input, string actionKey,
         Func<TState, CancellationToken, Task<TResult>> execute, CancellationToken cancellationToken);
     /// <summary>从已规范化状态取得实际目标；只有没有对象要求的按钮才允许返回空。</summary>
-    ButtonExecutionTarget? Target(TState state);
+    ButtonBusinessTarget? Target(TState state);
     /// <summary>平台完成当前按钮要求后执行业务，关联对象检查仍由业务选择。</summary>
     Task<TResult> ExecuteAsync(TState state, CancellationToken cancellationToken);
 }
@@ -55,13 +69,13 @@ public interface IButtonBusinessExecutor
 public interface IButtonExecutionAccess
 {
     /// <summary>从实际 HTTP 入口和生效按钮绑定本次正式目标；缺失、串用或混写身份均拒绝。</summary>
-    ButtonExecutionContext Bind(string resourceKey, string objectName, string operation, string objectId);
+    ButtonExecutionContext Bind(string resourceKey, string objectName, string operation, string? objectId);
     /// <summary>从真实端点处理器绑定按钮身份；缺身份不能进入业务准备范围。</summary>
     ButtonBusinessInvocation BindHandler(Type handlerType);
     /// <summary>在处理器交出的原保护范围核对规范目标及按钮要求；没有要求不添加动作下限。</summary>
-    Task<TResult> ExecuteAsync<TResult>(ButtonBusinessInvocation invocation, ButtonExecutionTarget? target,
+    Task<TResult> ExecuteAsync<TResult>(ButtonBusinessInvocation invocation, ButtonBusinessTarget? target,
         Func<CancellationToken, Task<TResult>> execute, CancellationToken cancellationToken = default);
-    /// <summary>在真实对象已受保护后重新核身份与全部动作，全部允许才调用业务；异常不执行业务。</summary>
-    Task<TResult> ExecuteAsync<TResult>(ButtonExecutionContext context, ButtonExecutionTarget target,
+    /// <summary>在已有对象受保护或完整候选补齐后重新核身份与全部动作，允许才调用实际业务；异常不执行业务。</summary>
+    Task<TResult> ExecuteAsync<TResult>(ButtonExecutionContext context, ButtonBusinessTarget target,
         Func<CancellationToken, Task<TResult>> execute, CancellationToken cancellationToken = default);
 }

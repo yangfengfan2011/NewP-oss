@@ -15,6 +15,23 @@ public sealed class ObjectActionAccess(IDataScopeResourceCatalog resources, Cano
     public Task<DataExecutionDecision> CheckAsync(string objectName, string objectId, IReadOnlyList<string> actions,
         object readContext, CancellationToken cancellationToken = default) => CheckAsyncCore(objectName, objectId, actions, readContext, cancellationToken);
 
+    /// <inheritdoc/>
+    public async Task<DataExecutionDecision> CheckCandidateAsync(string objectName, IReadOnlyDictionary<string, object?> candidate,
+        IReadOnlyList<string> actions, CancellationToken cancellationToken = default)
+    {
+        var resource = resources.Resources.SingleOrDefault(item => item.ModelName == objectName)
+            ?? throw new ActionDataAccessException(400, "ButtonExecution.ObjectUnknown");
+        if (!candidate.TryGetValue(resource.IdField, out var id) || id is not string objectId || !objectId.StartsWith(objectName + "_", StringComparison.Ordinal)
+            || actions.Count == 0 || actions.Distinct(StringComparer.Ordinal).Count() != actions.Count
+            || actions.Any(key => key == "read" || !plan.DataActionCatalog.Any(item => item.Key == key)
+                || resources.ActionKeysFor(resource.ResourceKey) is { } applicable && !applicable.Contains(key)))
+            throw new ActionDataAccessException(400, "ButtonExecution.CandidateInvalid");
+        foreach (var key in actions)
+            if (!await decisions.IsCandidateAllowedAsync(resource.ResourceKey, candidate, key, cancellationToken))
+                return DataExecutionDecision.Denied;
+        return DataExecutionDecision.Allowed;
+    }
+
     // 读取上下文只是正式输入；完整访问服务仍对当前目标执行read及资源边界，不继承外层允许。
     private async Task<DataExecutionDecision> CheckAsyncCore(string objectName, string objectId, IReadOnlyList<string> actions,
         object? readContext, CancellationToken cancellationToken)

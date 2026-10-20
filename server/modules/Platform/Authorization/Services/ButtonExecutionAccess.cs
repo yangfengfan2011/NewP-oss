@@ -31,37 +31,17 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
     }
 
     /// <inheritdoc/>
-    public async Task<TResult> ExecuteAsync<TResult>(ButtonBusinessInvocation invocation, ButtonExecutionTarget? target,
+    public async Task<TResult> ExecuteAsync<TResult>(ButtonBusinessInvocation invocation, ButtonBusinessTarget? target,
         Func<CancellationToken, Task<TResult>> execute, CancellationToken cancellationToken = default)
     {
         if (BindHandler(invocation.HandlerType) != invocation) throw new ActionDataAccessException(400, "ButtonExecution.BindingInvalid");
         var declaration = plan.ActionDataAccessCatalog.Single(item => item.Id == invocation.ButtonId);
-        if (target is null)
-        {
-            if (declaration.Object is not null) throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
-        }
-        else
-        {
-            var resource = resources.Resources.SingleOrDefault(item => item.ResourceKey == target.ResourceKey);
-            if (resource is null || resource.ModelName != target.ObjectName || !target.ObjectId.StartsWith(target.ObjectName + "_", StringComparison.Ordinal)
-                || !target.Before.TryGetValue(resource.IdField, out var id) || id?.ToString() != target.ObjectId
-                || declaration.Object is not null && (declaration.Object != target.ObjectName || !declaration.Resources.SequenceEqual([target.ResourceKey])))
-                throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
-            if (declaration.Object is not null)
-            {
-                var decision = target.ReadContext is null
-                    ? await access.CheckAsync(declaration.Object, target.ObjectId, declaration.Actions, cancellationToken)
-                    : await access.CheckAsync(declaration.Object, target.ObjectId, declaration.Actions, target.ReadContext, cancellationToken);
-                if (decision != DataExecutionDecision.Allowed)
-                    throw new ActionDataAccessException(decision == DataExecutionDecision.NotFound ? 404 : 403,
-                        decision == DataExecutionDecision.NotFound ? "StandardCrud.NotFound" : "DataScope.ActionDenied");
-            }
-        }
+        await CheckTargetAsync(declaration, target, cancellationToken);
         return await execute(cancellationToken);
     }
 
     /// <inheritdoc/>
-    public ButtonExecutionContext Bind(string resourceKey, string objectName, string operation, string objectId)
+    public ButtonExecutionContext Bind(string resourceKey, string objectName, string operation, string? objectId)
     {
         var request = http.HttpContext ?? throw new ActionDataAccessException(400, "ButtonExecution.ContextRequired");
         var ids = request.Request.Headers["X-NewP-Button"];
@@ -78,7 +58,7 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
             || !declaration.Resources.SequenceEqual([resourceKey]) || owners?.Count != 1 || owners[0].ModuleId != resource.ModuleId
             || endpoint != new ButtonExecutionEndpoint(resourceKey + "." + operation, resourceKey, objectName)
             || bindings?.Count != 1 || bindings[0].BehaviorKey != resourceKey + "." + operation
-            || string.IsNullOrWhiteSpace(objectId) || !objectId.StartsWith(objectName + "_", StringComparison.Ordinal))
+            || (operation == "create" ? objectId is not null : string.IsNullOrWhiteSpace(objectId) || !objectId.StartsWith(objectName + "_", StringComparison.Ordinal)))
             throw new ActionDataAccessException(400, "ButtonExecution.BindingInvalid");
         if (positions.Count != 1 || !declaration.FeaturePositions.Contains(positions[0]!, StringComparer.Ordinal))
             throw new ActionDataAccessException(403, "ButtonExecution.FeatureMismatch");
@@ -86,22 +66,48 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
     }
 
     /// <inheritdoc/>
-    public async Task<TResult> ExecuteAsync<TResult>(ButtonExecutionContext context, ButtonExecutionTarget target,
+    public async Task<TResult> ExecuteAsync<TResult>(ButtonExecutionContext context, ButtonBusinessTarget target,
         Func<CancellationToken, Task<TResult>> execute, CancellationToken cancellationToken = default)
     {
         var current = Bind(context.ResourceKey, context.ObjectName, context.BusinessBinding[(context.ResourceKey.Length + 1)..], context.ObjectId);
-        var resource = resources.Resources.Single(item => item.ResourceKey == context.ResourceKey);
-        if (current != context || target.ResourceKey != context.ResourceKey || target.ObjectName != context.ObjectName
-            || target.ObjectId != context.ObjectId || !target.Before.TryGetValue(resource.IdField, out var id) || id?.ToString() != target.ObjectId)
+        if (current != context || target is not ButtonObjectTarget objectTarget
+            || objectTarget.ResourceKey != context.ResourceKey || objectTarget.ObjectName != context.ObjectName
+            || (target is ButtonCreationTarget ? context.ObjectId is not null
+                : target is not ButtonExecutionTarget existing || existing.ObjectId != context.ObjectId))
             throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
         var declaration = plan.ActionDataAccessCatalog.Single(item => item.Id == context.ButtonId);
-        if (declaration.Object is not null)
-        {
-            var decision = await access.CheckAsync(declaration.Object, target.ObjectId, declaration.Actions, cancellationToken);
-            if (decision != DataExecutionDecision.Allowed)
-                throw new ActionDataAccessException(decision == DataExecutionDecision.NotFound ? 404 : 403,
-                    decision == DataExecutionDecision.NotFound ? "StandardCrud.NotFound" : "DataScope.ActionDenied");
-        }
+        await CheckTargetAsync(declaration, target, cancellationToken);
         return await execute(cancellationToken);
+    }
+
+    // 目标种类来自服务器业务适配；候选直接消费完整事实，不经已有对象read或借用外层允许。
+    private async Task CheckTargetAsync(ActionDataAccessRequirement declaration, ButtonBusinessTarget? target, CancellationToken token)
+    {
+        if (target is null)
+        {
+            if (declaration.Object is not null) throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
+            return;
+        }
+        if (target is not ButtonObjectTarget objectTarget) throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
+        var resource = resources.Resources.SingleOrDefault(item => item.ResourceKey == objectTarget.ResourceKey);
+        var values = target switch { ButtonExecutionTarget existing => existing.Before, ButtonCreationTarget candidate => candidate.Values,
+            _ => throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch") };
+        if (resource is null || resource.ModelName != objectTarget.ObjectName
+            || !values.TryGetValue(resource.IdField, out var id) || id is not string actualId || !actualId.StartsWith(objectTarget.ObjectName + "_", StringComparison.Ordinal)
+            || target is ButtonExecutionTarget before && actualId != before.ObjectId
+            || declaration.Object is not null && (declaration.Object != objectTarget.ObjectName || !declaration.Resources.SequenceEqual([objectTarget.ResourceKey])))
+            throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
+        if (declaration.Object is null) return;
+        var decision = target switch
+        {
+            ButtonCreationTarget candidate => await access.CheckCandidateAsync(declaration.Object, candidate.Values, declaration.Actions, token),
+            ButtonExecutionTarget existing => existing.ReadContext is null
+                ? await access.CheckAsync(declaration.Object, existing.ObjectId, declaration.Actions, token)
+                : await access.CheckAsync(declaration.Object, existing.ObjectId, declaration.Actions, existing.ReadContext, token),
+            _ => throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch")
+        };
+        if (decision != DataExecutionDecision.Allowed)
+            throw new ActionDataAccessException(decision == DataExecutionDecision.NotFound ? 404 : 403,
+                decision == DataExecutionDecision.NotFound ? "StandardCrud.NotFound" : "DataScope.ActionDenied");
     }
 }

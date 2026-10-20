@@ -66,16 +66,28 @@ public sealed class StandardCrudDefaultWriter
         IReadOnlyDictionary<string, object?> values,
         ObjectOperationWriteSource? source, CancellationToken cancellationToken)
     {
-        if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
+        if (_transactionExecutor is { IsActive: false } && (source is ObjectOperationWriteSource.Button || _transactionExecutor.HasParticipants(descriptor.ModelName)))
             return await ExecuteCoordinatedAsync(
                 descriptor,
                 token => CreateAsync(descriptor, values, source, token).AsTask(),
                 cancellationToken);
-        var preparation = await PrepareCreateCandidateAsync(descriptor, values, source, cancellationToken);
-        if (!preparation.Succeeded)
-            return StandardCrudMutationResult.Failure(preparation.Error!);
-        IReadOnlyDictionary<string, object?> allowed = preparation.Detail!.Fields;
+        AssertWriteSource(descriptor, "create", null, source);
+        var preparation = source is ObjectOperationWriteSource.Button
+            ? await PrepareCreateCandidateCoreAsync(descriptor, values, cancellationToken)
+            : await PrepareCreateCandidateAsync(descriptor, values, source, cancellationToken);
+        if (!preparation.Succeeded) return preparation;
+        var candidate = preparation.Detail!.Fields;
+        return source is ObjectOperationWriteSource.Button button
+            ? await (_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED")).ExecuteAsync(button.Context,
+                new ButtonCreationTarget(descriptor.ResourceKey, descriptor.ModelName, candidate),
+                token => CreateAuthorizedCoreAsync(descriptor, candidate, token), cancellationToken)
+            : await CreateAuthorizedCoreAsync(descriptor, candidate, cancellationToken);
+    }
 
+    // 唯一规范候选在自动检查后进入原持久化与记录器；不重新补字段或替换候选身份。
+    private async Task<StandardCrudMutationResult> CreateAuthorizedCoreAsync(StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> allowed, CancellationToken cancellationToken)
+    {
         IReadOnlyDictionary<string, object?> created;
         try
         {
@@ -129,6 +141,22 @@ public sealed class StandardCrudDefaultWriter
         IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken cancellationToken = default)
     {
         AssertWriteSource(descriptor, "create", null, source);
+        var preparation = await PrepareCreateCandidateCoreAsync(descriptor, values, cancellationToken);
+        if (!preparation.Succeeded) return preparation;
+        var candidate = preparation.Detail!.Fields;
+        if (source is ObjectOperationWriteSource.Button button)
+            return await (_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED")).ExecuteAsync(button.Context,
+                new ButtonCreationTarget(descriptor.ResourceKey, descriptor.ModelName, candidate), _ => Task.FromResult(preparation), cancellationToken);
+        if (source is ObjectOperationWriteSource.Declared declared && await _executions.EvaluateCandidateAsync(declared.Context, descriptor.ResourceKey,
+            "candidate", candidate, cancellationToken) != DataExecutionDecision.Allowed)
+            return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
+        return preparation;
+    }
+
+    // 业务字段、服务端默认值、可信审计、归属和真实新EID只在这里补齐，不携带权限允许状态。
+    private async Task<StandardCrudMutationResult> PrepareCreateCandidateCoreAsync(StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken)
+    {
         var preparation = await _rules.PrepareCreateAsync(descriptor, values, cancellationToken);
         if (!preparation.Succeeded) return StandardCrudMutationResult.Failure(preparation.Error!);
         var ownedCandidate = new Dictionary<string, object?>(preparation.Values!, StringComparer.Ordinal);
@@ -143,9 +171,6 @@ public sealed class StandardCrudDefaultWriter
         {
             [descriptor.IdField] = _objectIds.NewId(descriptor.ModelName)
         };
-        if (source is ObjectOperationWriteSource.Declared declared && await _executions.EvaluateCandidateAsync(declared.Context, descriptor.ResourceKey,
-            "candidate", candidate, cancellationToken) != DataExecutionDecision.Allowed)
-            return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
         return StandardCrudMutationResult.Success(new StandardCrudDetail { Fields = candidate });
     }
 
@@ -415,7 +440,7 @@ public sealed class StandardCrudDefaultWriter
         }
         if (source is ObjectOperationWriteSource.Button button)
         {
-            if (operation != "update" || button.Context.ResourceKey != descriptor.ResourceKey || button.Context.ObjectName != descriptor.ModelName
+            if (operation is not ("create" or "update") || button.Context.ResourceKey != descriptor.ResourceKey || button.Context.ObjectName != descriptor.ModelName
                 || button.Context.ObjectId != id || button.Context.BusinessBinding != descriptor.ResourceKey + "." + operation
                 || descriptor.DataExecutions.ContainsKey(operation))
                 throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");

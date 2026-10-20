@@ -400,7 +400,7 @@ public sealed class StandardCrudService : IStandardCrudService
     private ObjectOperationWriteSource EntryWriteSource(StandardCrudDescriptor descriptor, string operation, string? id)
         => descriptor.DataExecutions.TryGetValue(operation, out var execution)
             ? new ObjectOperationWriteSource.Declared(new(new(execution, "standardCrud." + operation, "submit"), descriptor.ResourceKey, id))
-            : operation == "update" && id is not null
+            : operation is "create" or "update"
                 ? new ObjectOperationWriteSource.Button((_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED"))
                     .Bind(descriptor.ResourceKey, descriptor.ModelName, operation, id))
                 : throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");

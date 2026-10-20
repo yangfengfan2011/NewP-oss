@@ -80,7 +80,7 @@ public static class StandardCrudDataExecutions
         {
             var buttons = services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog
                 .Where(item => item.BusinessBinding == descriptor.ResourceKey + "." + operation).ToArray();
-            if (operation != "update" || buttons.Length == 0 || buttons.Any(item => item.ModuleId != descriptor.ModuleId
+            if (operation is not ("create" or "update") || buttons.Length == 0 || buttons.Any(item => item.ModuleId != descriptor.ModuleId
                 || item.Object is not null && item.Object != descriptor.ModelName))
                 throw new InvalidOperationException("STANDARD_CRUD_BUTTON_BINDING_INVALID");
             endpoint.WithMetadata(new ButtonExecutionEndpoint(descriptor.ResourceKey + "." + operation, descriptor.ResourceKey, descriptor.ModelName));
@@ -88,7 +88,7 @@ public static class StandardCrudDataExecutions
             {
                 try
                 {
-                    var id = context.HttpContext.Request.RouteValues["id"]?.ToString() ?? "";
+                    var id = operation == "create" ? null : context.HttpContext.Request.RouteValues["id"]?.ToString();
                     context.HttpContext.RequestServices.GetRequiredService<IButtonExecutionAccess>()
                         .Bind(descriptor.ResourceKey, descriptor.ModelName, operation, id);
                     return await next(context);

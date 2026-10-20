@@ -70,7 +70,7 @@
       {
         "key": "create",
         "labelKey": "Action_Create",
-        "standardAction": "create", "dataAccess": { "execution": "organization.position.create", "resources": ["organization.position"] },
+        "standardAction": "create", "dataAccess": { "object": "Position", "actions": ["create"] },
         "variant": "primary"
       }
     ],

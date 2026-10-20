@@ -17,8 +17,8 @@ public sealed class WorkspaceReorderHandler(WorkspaceContents contents)
         Func<WorkspaceReorderState, CancellationToken, Task<WorkspaceTreeOrderResult>> execute, CancellationToken cancellationToken) =>
         contents.WithReorderBoundaryAsync(input, actionKey, execute, cancellationToken).AsTask();
     /// <inheritdoc/>
-    public ButtonExecutionTarget Target(WorkspaceReorderState state) =>
-        new("workspace.folder", "WorkspaceFolder", state.ParentId, state.Before) { ReadContext = state.ParentPosition };
+    public ButtonBusinessTarget Target(WorkspaceReorderState state) =>
+        new ButtonExecutionTarget("workspace.folder", "WorkspaceFolder", state.ParentId, state.Before) { ReadContext = state.ParentPosition };
     /// <inheritdoc/>
     public Task<WorkspaceTreeOrderResult> ExecuteAsync(WorkspaceReorderState state, CancellationToken cancellationToken) =>
         contents.ExecuteReorderAsync(state, cancellationToken);

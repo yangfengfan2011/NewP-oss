@@ -107,7 +107,7 @@ public sealed class ButtonBusinessEndpointTests
             try { return await execute(input, token); }
             finally { Protected = false; }
         }
-        public ButtonExecutionTarget? Target(int state) { Assert.True(Protected); return target; }
+        public ButtonBusinessTarget? Target(int state) { Assert.True(Protected); return target; }
         public Task<int> ExecuteAsync(int state, CancellationToken token) { Assert.True(Protected); Executed = true; return Task.FromResult(state); }
     }
     private sealed class ResourceCatalog : IDataScopeResourceCatalog

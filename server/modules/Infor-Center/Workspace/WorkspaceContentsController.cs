@@ -19,6 +19,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
     ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler, WorkspaceEditValuesHandler editValuesHandler,
     WorkspacePartCreationHandler partCreationHandler, WorkspaceFolderCreationHandler folderCreationHandler, WorkspaceRemoveReferencesHandler removeReferencesHandler,
+    WorkspaceClipboardSelectionHandler clipboardSelectionHandler, WorkspacePasteReferencesHandler pasteReferencesHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)
@@ -31,43 +32,49 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>只读复制预检使用正式copy功能，快照仅用于本次页面交互，不生成持久凭证。</summary>
     [HttpPost("content/clipboard/validate"), RequireFeature("workspace.folder.copy")]
-    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Copy, "prepare")]
+    [ButtonBusinessHandler(typeof(WorkspaceClipboardSelectionHandler))]
     public async Task<IResult> ValidateClipboard(JsonElement input, CancellationToken token)
     {
         try
         {
             var request = ReadClipboardInput(input, false);
             if (request.Mode != "copy") throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
-            return Results.Ok(await contents.ValidateClipboardAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, token));
+            return Results.Ok(await buttonBusiness.ExecuteAsync(clipboardSelectionHandler,
+                new WorkspaceClipboardSelectionInput(Actor(), request.Mode, request.SourcePosition, request.LinkIds), token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
     }
 
     /// <summary>剪切预检绑定自己的正式功能，客户端mode或复制功能位置不能替代cut资格。</summary>
     [HttpPost("content/clipboard/cut/validate"), RequireFeature("workspace.folder.cut")]
-    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Cut, "prepare")]
+    [ButtonBusinessHandler(typeof(WorkspaceClipboardSelectionHandler))]
     public async Task<IResult> ValidateCutClipboard(JsonElement input, CancellationToken token)
     {
         try
         {
             var request = ReadClipboardInput(input, false);
             if (request.Mode != "cut") throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
-            return Results.Ok(await contents.ValidateClipboardAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, token));
+            return Results.Ok(await buttonBusiness.ExecuteAsync(clipboardSelectionHandler,
+                new WorkspaceClipboardSelectionInput(Actor(), request.Mode, request.SourcePosition, request.LinkIds), token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
     }
 
     /// <summary>粘贴仅接受来源与目标完整位置和LID，提交后的展示读取不参与写入回执。</summary>
     [HttpPost("content/paste"), RequireFeature("workspace.folder.paste")]
-    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Paste, "submit")]
+    [ButtonBusinessHandler(typeof(WorkspacePasteReferencesHandler))]
     public async Task<IResult> Paste(JsonElement input, CancellationToken token)
     {
         try
         {
             var request = ReadClipboardInput(input, true);
-            return Results.Ok(await contents.PasteAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token));
+            return Results.Ok(await buttonBusiness.ExecuteAsync(pasteReferencesHandler,
+                new WorkspacePasteReferencesInput(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!), token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
     }
 
     /// <summary>名称输入只读准备返回本次已核证源和目标，不形成随后提交的授权凭证。</summary>

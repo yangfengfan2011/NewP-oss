@@ -26,13 +26,13 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var body = new { mode = "copy", sourcePosition = source, linkIds = new[] { child.LinkIds[^1] } };
         using (var missing = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post,
             "/api/workspace/content/clipboard/validate", body))
-            await Problem(missing, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Problem(missing, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var cut = Point(fixture, "workspace.folder.cut");
-        var borrowed = plan.ActionDataAccessCatalog.Single(item => item.Execution == "workspace.clipboard.cut" && item.FeaturePositions.Contains(cut.Position));
+        var borrowed = plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "workspace.folder.cut" && item.Surface == "pageActions" && item.FeaturePositions.Contains(cut.Position));
         using (var wrongExecution = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post,
             "/api/workspace/content/clipboard/validate", body, borrowed))
-            await Problem(wrongExecution, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Problem(wrongExecution, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         await Command(fixture, admin, "workspace.folder.copy", "/api/workspace/content/clipboard/validate", body);
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
         Assert.Equal(auditBefore, Snapshot(await Rows(fixture, "BusinessChange")));

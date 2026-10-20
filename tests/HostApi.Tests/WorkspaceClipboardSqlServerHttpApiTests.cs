@@ -33,22 +33,25 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         var linkId = (await Rows(fixture, "WorkspaceFolderContent")).Single(row => Equals(row["ChildModelKey"], "Part"))["LID"] as string;
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        var contents = scope.ServiceProvider.GetRequiredService<WorkspaceContents>();
+        var executor = scope.ServiceProvider.GetRequiredService<ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor>();
+        var handler = scope.ServiceProvider.GetRequiredService<WorkspaceClipboardSelectionHandler>();
         var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>(); var previous = accessor.HttpContext;
         accessor.HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, fixture.ActorId)], "qualification-test")) };
         var qualificationFeature = Point(fixture, "workspace.folder.copy");
         accessor.HttpContext.SetEndpoint(new Endpoint(_ => Task.CompletedTask,
-            new EndpointMetadataCollection(new ICP.Platform.Authorization.Http.EndpointModuleAttribute("Workspace")), "clipboard-connection-owner"));
+            new EndpointMetadataCollection(new ICP.Platform.Authorization.Http.EndpointModuleAttribute("Workspace"),
+                new ICP.Platform.Authorization.Http.RequireFeatureAttribute("workspace.folder.copy"),
+                new ICP.Platform.Authorization.Http.ButtonBusinessHandlerAttribute(typeof(WorkspaceClipboardSelectionHandler))), "clipboard-connection-owner"));
         accessor.HttpContext.Request.Headers["X-NewP-Feature"] = qualificationFeature.Position;
-        accessor.HttpContext.Request.Headers["X-NewP-Data-Declaration"] = ClipboardDeclaration(fixture, qualificationFeature)!.Id;
+        accessor.HttpContext.Request.Headers["X-NewP-Button"] = ClipboardDeclaration(fixture, qualificationFeature)!.Id;
         try
         {
             var connection = db.Database.GetDbConnection();
-            await Assert.ThrowsAsync<ICP.Platform.Crud.LinkQueries.LinkQueryException>(() => contents.ValidateClipboardAsync(fixture.ActorId, "copy", source, ["missing-link"], CancellationToken.None));
+            await Assert.ThrowsAsync<ICP.Platform.Crud.LinkQueries.LinkQueryException>(() => Select(["missing-link"], CancellationToken.None));
             Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
             control.Pause = true;
             using var cancellation = new CancellationTokenSource();
-            var pending = contents.ValidateClipboardAsync(fixture.ActorId, "copy", source, [linkId!], cancellation.Token);
+            var pending = Select([linkId!], cancellation.Token);
             try
             {
                 await control.Reached.Task.WaitAsync(TimeSpan.FromSeconds(20)); cancellation.Cancel();
@@ -59,15 +62,18 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
             await db.Database.OpenConnectionAsync();
             try
             {
-                var snapshot = await contents.ValidateClipboardAsync(fixture.ActorId, "copy", source, [linkId!], CancellationToken.None);
+                var snapshot = await Select([linkId!], CancellationToken.None);
                 Assert.Equal(linkId, Assert.Single(snapshot.Items).LinkId); Assert.Equal(System.Data.ConnectionState.Open, connection.State);
-                await Assert.ThrowsAsync<ICP.Platform.Crud.LinkQueries.LinkQueryException>(() => contents.ValidateClipboardAsync(fixture.ActorId, "copy", source, ["missing-link"], CancellationToken.None));
+                await Assert.ThrowsAsync<ICP.Platform.Crud.LinkQueries.LinkQueryException>(() => Select(["missing-link"], CancellationToken.None));
                 Assert.Equal(System.Data.ConnectionState.Open, connection.State); Assert.Null(db.Database.CurrentTransaction);
             }
             finally { await db.Database.CloseConnectionAsync(); }
         }
         finally { accessor.HttpContext = previous; }
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+
+        Task<WorkspaceClipboardSnapshot> Select(string[] linkIds, CancellationToken token) =>
+            executor.ExecuteAsync(handler, new WorkspaceClipboardSelectionInput(fixture.ActorId, "copy", source, linkIds), token);
     }
 
     private sealed class QualificationReadControl : DbCommandInterceptor
@@ -775,7 +781,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
             _ => null
         };
         return fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.SingleOrDefault(item =>
-            (folderExecution is null ? item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal) : item.Execution == folderExecution)
+            (folderExecution is null ? item.BusinessBinding == feature.BehaviorKey && item.Surface is "pageActions" or "rowActions" : item.Execution == folderExecution)
             && item.FeaturePositions.Contains(feature.Position));
     }
     private static async Task Rule(BusinessAuditHostFixture fixture, HttpClient admin, string key, string resource, string id, string action, string opinion)

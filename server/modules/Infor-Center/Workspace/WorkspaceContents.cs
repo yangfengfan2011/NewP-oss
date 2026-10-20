@@ -24,7 +24,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership,
     ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor,
     IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization, IDataExecutionAccess executionAccess,
-    IObjectActionAccess objectActions, IStandardCrudRepository mutationRepository)
+    IObjectActionAccess objectActions, IStandardCrudRepository mutationRepository, IDataScopeObjectDecisionProvider objectDecisions)
 {
     // 正式处理器只交当前业务输入；候选与persist在原事务内部形成，不从缺HTTP身份选择旧来源。
     internal Task<string> WithinFolderCreationAsync(WorkspaceFolderCreationInput input,

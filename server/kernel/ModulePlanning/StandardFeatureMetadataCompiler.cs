@@ -243,8 +243,9 @@ public static class StandardFeatureMetadataCompiler
                     ActionReads(view, action, operation),
                     FullTitleKey(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")));
                 DataAccess(view, action, property, Text(action, "key"), result[^1].ReferenceKey!);
-                // 只有动作显式要求所属资源read时才投影已有列表来源；隐含ActionReads不授予查询调用身份。
-                if (action.TryGetProperty("readBehaviors", out var explicitReads)
+                // 纯功能输入显式读取所属资源目录时才复用已有List来源；对象按钮和旧执行仍保留各自读取合同。
+                if (!action.TryGetProperty("dataAccess", out _) && Optional(action, "handlerKey") is not null
+                    && action.TryGetProperty("readBehaviors", out var explicitReads)
                     && explicitReads.EnumerateArray().Any(read => read.GetString() == resource + ".read"))
                 {
                     var source = Optional(view, "mode") == "detail"

@@ -10,6 +10,39 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class PartDocumentReadExecutionSqlServerTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "对象管理或移交读取资格不能变成全局列表查询来源")]
+    public async Task ObjectManagementActions_DoNotAcquireTheirResourcesListSource()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
+        var actions = plan.FeatureCatalog.Where(point => point.ModuleId is "Part" or "Document"
+            && point.ActionScope == "list.rowActions" && point.Key is "authorize" or "transfer").ToArray();
+        Assert.Equal(4, actions.Length);
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ReadSource336", "对象管理来源",
+            "read-source336", "对象管理主体", actions);
+        using var ordinary = actor.Client;
+        foreach (var action in actions)
+        {
+            var resource = action.ModuleId == "Part" ? "part.part" : "document.document";
+            var list = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == resource + ".list");
+            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, action, HttpMethod.Get,
+                action.ModuleId == "Part" ? "/api/part/parts" : "/api/document/documents", dataAccess: list);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Contains("ActionDataAccess.FeatureMismatch", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+        foreach (var module in new[] { "Part", "Document" })
+        {
+            var resource = module == "Part" ? "part.part" : "document.document";
+            var entry = Assert.Single(plan.FeatureCatalog, point => point.ModuleId == module && point.Kind == "navigation"
+                && point.BehaviorKey == resource + ".read");
+            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get,
+                module == "Part" ? "/api/part/parts" : "/api/document/documents",
+                dataAccess: OwnedResourceReadHttpRequests.Declaration(fixture, entry, resource, "list"));
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "实际Part标准读取只接受自身list/read声明；普通主体范围与撤权由真实SQL裁剪")]
     public Task PartOwnedReads_RejectMissingAndBorrowedDeclarations_AndRecheckCurrentScope() => VerifyAsync("Part", "part.part");
 

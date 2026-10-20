@@ -25,7 +25,7 @@ public sealed class StandardReadExecutionContractTests
     }
 
     [Fact]
-    public void FormalStandardRead_DetailKeepsEveryActualListReadOccurrenceWithoutAddingAFeature()
+    public void FormalStandardRead_DetailKeepsListOccurrencesAndSeparatesActualDirectoryOnlyInputs()
     {
         var result = new CanonicalModulePlanCompiler().Compile("detail-read-occurrences", new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
@@ -33,7 +33,25 @@ public sealed class StandardReadExecutionContractTests
         {
             var list = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Execution == resource + ".list" && item.Surface == "read");
             var detail = Assert.Single(result.Plan.ActionDataAccessCatalog, item => item.Execution == resource + ".read");
-            Assert.Empty(list.FeaturePositions.Except(detail.FeaturePositions, StringComparer.Ordinal));
+            var presentation = list.FeaturePositions.Where(position => result.Plan.FeatureCatalog.Single(item => item.Position == position)
+                .Kind is "navigation" or "tab").ToArray();
+            Assert.NotEmpty(presentation);
+            Assert.Empty(presentation.Except(detail.FeaturePositions, StringComparer.Ordinal));
+            var directoryOnly = list.FeaturePositions.Except(detail.FeaturePositions, StringComparer.Ordinal).ToArray();
+            if (resource == "authorization.role")
+            {
+                // RoleOptions原本读取全局角色目录；实际用户角色输入不因此取得角色对象详情身份。
+                var inputs = result.Plan.FeatureCatalog.Where(point => point.ModuleId == "Authorization"
+                    && point.Key == "userRoles" && point.BehaviorKey == "authorization.role.userRoles").ToArray();
+                Assert.NotEmpty(inputs);
+                Assert.Equal(inputs.Select(point => point.Position).Order(StringComparer.Ordinal), directoryOnly.Order(StringComparer.Ordinal));
+                Assert.All(inputs, point =>
+                {
+                    Assert.Contains("authorization.role.read", point.ReadBehaviors);
+                    Assert.DoesNotContain(point.Position, detail.FeaturePositions);
+                });
+            }
+            else Assert.Empty(directoryOnly);
             Assert.Equal("target", Assert.Single(detail.Requirements!).Role);
             Assert.Equal("object", Assert.Single(detail.Requirements!).Shape);
         }

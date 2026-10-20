@@ -18,14 +18,25 @@ public static class ButtonBusinessEndpointBindings
         if (owners.Count != 1) return false;
         if (dynamic.Count == 0)
             return operation is null && owners[0].ModuleId == moduleId && features.Count == 1 && features[0].BehaviorKey == businessBinding;
-        return dynamic.Count == 1 && features.Count == 0 && resource is not null
-            && endpoint.Metadata.GetOrderedMetadata<AuthenticatedOnlyAttribute>().Count == 1
-            && endpoint is RouteEndpoint route
-            && route.RoutePattern.Parameters.Any(parameter => parameter.Name == "resourceKey" && !parameter.IsOptional && !parameter.IsCatchAll)
-            && route.RoutePattern.Parameters.Any(parameter => parameter.Name == "objectId" && !parameter.IsOptional && !parameter.IsCatchAll)
-            && resource.ModuleId == moduleId
+        return IsResourceEndpoint(endpoint) && resource is not null && resource.ModuleId == moduleId
             && (operation is null || !string.IsNullOrWhiteSpace(operation)
                 && featureBehavior == resource.ResourceKey + "." + dynamic[0].ActionKey)
             && businessBinding == resource.ResourceKey + "." + (operation ?? dynamic[0].ActionKey);
+    }
+
+    /// <summary>核验通用资源端点的固定结构；注册不代表当前存在可调用按钮或取得对象允许。</summary>
+    public static bool IsResourceEndpoint(Endpoint? endpoint)
+    {
+        if (endpoint is null) return false;
+        var bindings = endpoint.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>();
+        var operation = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.OperationKey;
+        return endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>().Count == 1
+            && bindings.Count == 1 && !string.IsNullOrWhiteSpace(bindings[0].ActionKey)
+            && endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>().Count == 0
+            && endpoint.Metadata.GetOrderedMetadata<AuthenticatedOnlyAttribute>().Count == 1
+            && (operation is null || !string.IsNullOrWhiteSpace(operation))
+            && endpoint is RouteEndpoint route
+            && route.RoutePattern.Parameters.Any(parameter => parameter.Name == "resourceKey" && !parameter.IsOptional && !parameter.IsCatchAll)
+            && route.RoutePattern.Parameters.Any(parameter => parameter.Name == "objectId" && !parameter.IsOptional && !parameter.IsCatchAll);
     }
 }

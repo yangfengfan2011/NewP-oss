@@ -70,6 +70,68 @@ public sealed class ButtonBusinessOperationTests
     }
 
     [Theory]
+    [InlineData("valid")]
+    [InlineData("missing-authentication")]
+    [InlineData("wrong-route")]
+    [InlineData("duplicate-owner")]
+    [InlineData("duplicate-binding")]
+    [InlineData("static-feature")]
+    [InlineData("empty-operation")]
+    [InlineData("empty-action")]
+    [InlineData("wrong-type")]
+    [InlineData("unregistered")]
+    public void ResourceEndpointWithoutProducer_StillRequiresItsRegisteredStaticContract(string problem)
+    {
+        var original = OperationPlan();
+        var plan = new CanonicalModulePlan(original.CandidateId, original.CompilerContractVersion, original.PlanHash,
+            original.SnapshotId, original.CanonicalBytes, original.Modules.Where(module => module.ModuleId != "Example").ToArray());
+        Assert.Empty(plan.ActionDataAccessCatalog);
+        var services = new ServiceCollection().AddSingleton<IDataScopeResourceCatalog, OperationResources>();
+        if (problem != "unregistered") services.AddScoped<OperationHandler>();
+        using var provider = services.BuildServiceProvider();
+        var metadata = new List<object>
+        {
+            new EndpointModuleAttribute("Authorization"),
+            new ResourceFeatureBindingAttribute(problem == "empty-action" ? "" : "authorize"),
+            new ButtonBusinessHandlerAttribute(problem == "wrong-type" ? typeof(object) : typeof(OperationHandler),
+                problem == "empty-operation" ? "" : "viewAuthorization")
+        };
+        if (problem != "missing-authentication") metadata.Add(new AuthenticatedOnlyAttribute());
+        if (problem == "duplicate-owner") metadata.Add(new EndpointModuleAttribute("Other"));
+        if (problem == "duplicate-binding") metadata.Add(new ResourceFeatureBindingAttribute("authorize"));
+        if (problem == "static-feature") metadata.Add(new RequireFeatureAttribute("example.record.authorize"));
+        var route = problem == "wrong-route" ? "api/objects/{resourceKey}/{id}" : "api/objects/{resourceKey}/{objectId}/inspection";
+        EndpointDataSource[] endpoints = [new DefaultEndpointDataSource(new RouteEndpoint(_ => Task.CompletedTask,
+            RoutePatternFactory.Parse(route), 0, new EndpointMetadataCollection(metadata), "optional-resource-implementation"))];
+        if (problem == "valid") StandardCrudDataExecutions.ValidateCoverage(endpoints, plan, provider);
+        else Assert.StartsWith("BUTTON_", Assert.Throws<InvalidOperationException>(() =>
+            StandardCrudDataExecutions.ValidateCoverage(endpoints, plan, provider)).Message);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task NoRequirementIdentity_StillBindsTheActualImplementationAtInvocation(bool correctEndpoint)
+    {
+        var plan = OperationPlan(withoutRequirements: true);
+        var declaration = plan.ActionDataAccessCatalog.Single(item => item.ActionKey == "viewAuthorization");
+        Assert.Empty(declaration.GetObjectRequirements());
+        var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "actor")], "no-requirement")) };
+        http.SetEndpoint(OperationEndpoint(correctEndpoint ? "viewAuthorization" : null));
+        http.Request.RouteValues["resourceKey"] = "example.record";
+        http.Request.RouteValues["objectId"] = "ExampleRecord_official";
+        http.Request.Headers["X-NewP-Button"] = declaration.Id;
+        http.Request.Headers["X-NewP-Feature"] = declaration.FeaturePositions[0];
+        var checks = new OperationChecks();
+        var handler = new OperationHandler();
+        var executor = new ButtonBusinessExecutor(new ButtonExecutionAccess(plan, new HttpContextAccessor { HttpContext = http }, new OperationResources(), checks));
+        if (correctEndpoint) Assert.Equal(1, await executor.ExecuteAsync(handler, 1));
+        else Assert.Equal(400, (await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync(handler, 1))).Status);
+        Assert.Equal(correctEndpoint ? 1 : 0, handler.Calls);
+        Assert.Null(checks.Actions);
+    }
+
+    [Theory]
     [InlineData("viewAuthorization", "example.record.viewAuthorization", "example.record.authorize", "Example", true)]
     [InlineData("viewAuthorization", "example.record.authorize", "example.record.authorize", "Example", false)]
     [InlineData(null, "example.record.viewAuthorization", "example.record.authorize", "Example", false)]
@@ -93,7 +155,7 @@ public sealed class ButtonBusinessOperationTests
         new EndpointMetadataCollection(new EndpointModuleAttribute("Authorization"), new AuthenticatedOnlyAttribute(),
             new ResourceFeatureBindingAttribute("authorize"), new ButtonBusinessHandlerAttribute(typeof(OperationHandler), operation)), "operation-proof");
 
-    private static CanonicalModulePlan OperationPlan(bool wrongFeature = false)
+    private static CanonicalModulePlan OperationPlan(bool wrongFeature = false, bool withoutRequirements = false)
     {
         var result = new CanonicalModulePlanCompiler().Compile("operation-source", new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
@@ -106,8 +168,8 @@ public sealed class ButtonBusinessOperationTests
                 BehaviorKey = wrongFeature && feature.ModuleId == "Example" && feature.Key == "viewAuthorization" ? "example.record.read" : feature.BehaviorKey,
                 DataAccess = feature.DataAccess.Where(item => item.ModuleId == "Example" && item.Surface == "rowActions"
                     && item.ViewKey == "example.record.list" && item.ActionKey is "authorize" or "viewAuthorization")
-                    .Select(item => new ActionDataAccessDeclaration(item.ModuleId, item.ViewKey, item.Surface, item.ActionKey, "", ["example.record"], ["read", "authorize"])
-                        { Object = "ExampleRecord", BusinessBinding = "example.record." + item.ActionKey }).ToArray()
+                    .Select(item => new ActionDataAccessDeclaration(item.ModuleId, item.ViewKey, item.Surface, item.ActionKey, "", withoutRequirements ? [] : ["example.record"], withoutRequirements ? [] : ["read", "authorize"])
+                        { Object = withoutRequirements ? null : "ExampleRecord", BusinessBinding = "example.record." + item.ActionKey }).ToArray()
             }).ToArray()
         }).ToArray();
         return new(plan.CandidateId, plan.CompilerContractVersion, plan.PlanHash, plan.SnapshotId, plan.CanonicalBytes, modules);

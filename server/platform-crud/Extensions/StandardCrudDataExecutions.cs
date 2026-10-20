@@ -41,12 +41,14 @@ public static class StandardCrudDataExecutions
                 || resourceCatalog?.Resources.Any(resource => ButtonBusinessEndpointBindings.Matches(endpoint,
                     button.ModuleId, button.BusinessBinding!, resource, features.Length == 1 ? features[0] : null)) == true;
         }
+        // 通用实现可先于可选按钮发布者注册；类型和DI仍须有效，实际按钮继续按正向覆盖与调用绑定核验。
         foreach (var endpoint in handlers)
         {
             var handler = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()!.HandlerType;
             if (handler.IsAbstract || !handler.GetInterfaces().Any(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IButtonBusinessHandler<,,>))
                 || services is not null && services.GetRequiredService<IServiceProviderIsService>().IsService(handler) != true
-                || !plan.ActionDataAccessCatalog.Any(button => button.BusinessBinding is not null && MatchesHandler(endpoint, button)))
+                || !ButtonBusinessEndpointBindings.IsResourceEndpoint(endpoint)
+                    && !plan.ActionDataAccessCatalog.Any(button => button.BusinessBinding is not null && MatchesHandler(endpoint, button)))
                 throw new InvalidOperationException("BUTTON_BUSINESS_HANDLER_INVALID");
         }
         foreach (var button in plan.ActionDataAccessCatalog.Where(item => item.BusinessBinding is not null && item.GetObjectRequirements().Count > 0))

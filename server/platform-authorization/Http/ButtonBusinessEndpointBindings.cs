@@ -8,20 +8,24 @@ namespace ICP.Platform.Authorization.Http;
 public static class ButtonBusinessEndpointBindings
 {
     /// <summary>静态端点匹配原模块行为；资源端点只匹配已登记资源拥有者及其真实行为。</summary>
-    public static bool Matches(Endpoint? endpoint, string moduleId, string businessBinding, DataScopeResource? resource = null)
+    public static bool Matches(Endpoint? endpoint, string moduleId, string businessBinding, DataScopeResource? resource = null, string? featureBehavior = null)
     {
         if (endpoint is null) return false;
         var owners = endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
         var features = endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>();
         var dynamic = endpoint.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>();
+        var operation = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.OperationKey;
         if (owners.Count != 1) return false;
         if (dynamic.Count == 0)
-            return owners[0].ModuleId == moduleId && features.Count == 1 && features[0].BehaviorKey == businessBinding;
+            return operation is null && owners[0].ModuleId == moduleId && features.Count == 1 && features[0].BehaviorKey == businessBinding;
         return dynamic.Count == 1 && features.Count == 0 && resource is not null
             && endpoint.Metadata.GetOrderedMetadata<AuthenticatedOnlyAttribute>().Count == 1
             && endpoint is RouteEndpoint route
             && route.RoutePattern.Parameters.Any(parameter => parameter.Name == "resourceKey" && !parameter.IsOptional && !parameter.IsCatchAll)
             && route.RoutePattern.Parameters.Any(parameter => parameter.Name == "objectId" && !parameter.IsOptional && !parameter.IsCatchAll)
-            && resource.ModuleId == moduleId && businessBinding == resource.ResourceKey + "." + dynamic[0].ActionKey;
+            && resource.ModuleId == moduleId
+            && (operation is null || !string.IsNullOrWhiteSpace(operation)
+                && featureBehavior == resource.ResourceKey + "." + dynamic[0].ActionKey)
+            && businessBinding == resource.ResourceKey + "." + (operation ?? dynamic[0].ActionKey);
     }
 }

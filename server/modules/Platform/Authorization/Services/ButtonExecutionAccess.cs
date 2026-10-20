@@ -19,9 +19,13 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
         var declaration = ids.Count == 1 ? plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Id == ids[0]) : null;
         var endpoint = request.GetEndpoint();
         var resource = resources.Resources.SingleOrDefault(item => item.ResourceKey == request.Request.RouteValues["resourceKey"]?.ToString());
+        var featureBehaviors = endpoint?.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.OperationKey is not null && declaration is not null
+            ? plan.FeatureCatalog.Where(point => declaration.FeaturePositions.Contains(point.Position, StringComparer.Ordinal))
+                .Select(point => point.BehaviorKey).Distinct(StringComparer.Ordinal).Take(2).ToArray() : [];
         if (request.Request.Headers.ContainsKey("X-NewP-Data-Declaration") || declaration?.BusinessBinding is null
             || declaration.Execution.Length != 0
-            || !ButtonBusinessEndpointBindings.Matches(endpoint, declaration.ModuleId, declaration.BusinessBinding, resource)
+            || !ButtonBusinessEndpointBindings.Matches(endpoint, declaration.ModuleId, declaration.BusinessBinding, resource,
+                featureBehaviors.Length == 1 ? featureBehaviors[0] : null)
             || endpoint?.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>().Count > 0
                 && string.IsNullOrWhiteSpace(request.Request.RouteValues["objectId"]?.ToString())
             || endpoint?.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.HandlerType != handlerType)

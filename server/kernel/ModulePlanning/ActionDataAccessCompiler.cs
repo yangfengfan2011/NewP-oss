@@ -65,12 +65,15 @@ public static partial class ActionDataAccessCompiler
         {
             if (declaration.BusinessBinding is not null)
             {
+                // 呈现按钮的实现来自真实handler/standardAction；不同功能资格由装配与运行时共同核对，非呈现来源保持原绑定。
                 var objects = declaration.ObjectRequirements;
                 if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
                     || string.IsNullOrWhiteSpace(declaration.ActionKey) || declaration.Execution.Length != 0
                     || declaration.Resources.Distinct(StringComparer.Ordinal).Count() != declaration.Resources.Count
                     || declaration.Resources.Any(resource => !resources.Contains(resource))
-                    || declaration.AdditionalActions.Count != 0 || declaration.BusinessBinding != feature.BehaviorKey
+                    || declaration.AdditionalActions.Count != 0 || string.IsNullOrWhiteSpace(declaration.BusinessBinding)
+                    || declaration.BusinessBinding != feature.BehaviorKey && !(feature.Kind == "action"
+                        && declaration.Surface is "pageActions" or "rowActions")
                     || (objects is null
                         ? declaration.Resources.Count > 1 || declaration.Object is not null && declaration.Resources.Count != 1
                             || declaration.Object is null && declaration.Actions.Count != 0

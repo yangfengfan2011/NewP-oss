@@ -238,11 +238,14 @@ public static class StandardFeatureMetadataCompiler
                     DataAccess(view, action, property, Text(action, "key"), owner);
                     continue;
                 }
+                // 显式功能资格可以与真实实现不同；缺省仍保留原资源动作绑定，不从输入类型猜测只读。
+                var implementation = resource + "." + (operation == "edit" ? "update" : operation);
+                var behavior = action.TryGetProperty("behaviorKey", out _) ? Text(action, "behaviorKey") : implementation;
                 Action(owner, scope, Text(action, "key"), Title(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")),
-                    resource + "." + (operation == "edit" ? "update" : operation), Text(view, "mode") + "." + property,
+                    behavior, Text(view, "mode") + "." + property,
                     ActionReads(view, action, operation),
                     FullTitleKey(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")));
-                DataAccess(view, action, property, Text(action, "key"), result[^1].ReferenceKey!);
+                DataAccess(view, action, property, Text(action, "key"), result[^1].ReferenceKey!, implementationBinding: implementation);
                 // 纯功能输入显式读取所属资源目录时才复用已有List来源；对象按钮和旧执行仍保留各自读取合同。
                 if (!action.TryGetProperty("dataAccess", out _) && Optional(action, "handlerKey") is not null
                     && action.TryGetProperty("readBehaviors", out var explicitReads)
@@ -284,7 +287,8 @@ public static class StandardFeatureMetadataCompiler
         }
 
         // 直接要求附在已有功能位置；查看和输出不因此增加可授权动作。
-        void DataAccess(JsonElement view, JsonElement action, string surface, string key, string owner, string? sourceKey = null)
+        void DataAccess(JsonElement view, JsonElement action, string surface, string key, string owner, string? sourceKey = null,
+            string? implementationBinding = null)
         {
             var hasDataAccess = action.TryGetProperty("dataAccess", out var declared);
             var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey")
@@ -317,7 +321,7 @@ public static class StandardFeatureMetadataCompiler
                     !hasDataAccess ? [Text(view, "resourceKey")] : requirements.Select(entry => entry.ResourceKey).Distinct(StringComparer.Ordinal).ToArray(),
                     multiple || !hasDataAccess ? [] : requirements[0].Actions)
                 { Object = multiple || !hasDataAccess ? null : requirements[0].Object, ObjectRequirements = multiple ? requirements : null,
-                    BusinessBinding = node.BehaviorKey, InputReadSourceKey = inputReadSource };
+                    BusinessBinding = implementationBinding ?? node.BehaviorKey, InputReadSourceKey = inputReadSource };
                 if (!node.DataAccess.Any(item => item.Id == button.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, button] };
                 return;
             }
@@ -365,14 +369,16 @@ public static class StandardFeatureMetadataCompiler
                 var definition = referenced.Definition;
                 var operation = Optional(definition, "standardAction") ?? Optional(definition, "handlerKey")
                     ?? throw new InvalidOperationException("树动作引用缺少资源执行行为。");
-                var behavior = Text(target, "resourceKey") + "." + (operation is "view" or "refresh" ? "read" : operation == "edit" ? "update" : operation);
-                if (Optional(definition, "behaviorKey") is { } declared && declared != behavior)
+                var implementation = Text(target, "resourceKey") + "." + (operation is "view" or "refresh" ? "read" : operation == "edit" ? "update" : operation);
+                var behavior = definition.TryGetProperty("behaviorKey", out _) ? Text(definition, "behaviorKey") : implementation;
+                if (referenced.Surface is not ("pageActions" or "rowActions") && behavior != implementation)
                     throw new InvalidOperationException("树动作的功能声明与资源执行行为不一致。");
                 Action(owner, scope, Text(action, "key"), Title(Text(action, "labelKey"), dictionary),
-                    Text(target, "resourceKey") + "." + (operation is "view" or "refresh" ? "read" : operation == "edit" ? "update" : operation), property,
+                    behavior, property,
                     ActionReads(target, definition, operation),
                     FullTitleKey(Text(action, "labelKey"), dictionary));
-                DataAccess(target, definition, referenced.Surface, Text(definition, "key"), result[^1].ReferenceKey!);
+                DataAccess(target, definition, referenced.Surface, Text(definition, "key"), result[^1].ReferenceKey!,
+                    implementationBinding: referenced.Surface is "pageActions" or "rowActions" ? implementation : null);
                 if (operation is "create" or "edit") BindLookupDataAccess(target, true, result[^1].ReferenceKey!);
                 // 节点行与 feature 动作沿原目标详情预取，绑定其既有树位置；page 动作不增加读取。
                 if (operation == "edit" || operation != "create" && referenced.Surface is ("rowActions" or "featureActions"))

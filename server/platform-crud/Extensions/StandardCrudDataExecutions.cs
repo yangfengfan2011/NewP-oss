@@ -32,10 +32,15 @@ public static class StandardCrudDataExecutions
             .Where(endpoint => endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>() is not null).ToArray();
         var resourceCatalog = services?.GetService<IDataScopeResourceCatalog>();
         // 通用资源端点的声明仍由资源拥有者发布，不能从端点模块推导或补造按钮。
-        bool MatchesHandler(Endpoint endpoint, ActionDataAccessRequirement button) =>
-            ButtonBusinessEndpointBindings.Matches(endpoint, button.ModuleId, button.BusinessBinding!)
-            || resourceCatalog?.Resources.Any(resource => ButtonBusinessEndpointBindings.Matches(endpoint,
-                button.ModuleId, button.BusinessBinding!, resource)) == true;
+        bool MatchesHandler(Endpoint endpoint, ActionDataAccessRequirement button)
+        {
+            var features = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.OperationKey is not null
+                ? plan.FeatureCatalog.Where(point => button.FeaturePositions.Contains(point.Position, StringComparer.Ordinal))
+                    .Select(point => point.BehaviorKey).Distinct(StringComparer.Ordinal).Take(2).ToArray() : [];
+            return ButtonBusinessEndpointBindings.Matches(endpoint, button.ModuleId, button.BusinessBinding!)
+                || resourceCatalog?.Resources.Any(resource => ButtonBusinessEndpointBindings.Matches(endpoint,
+                    button.ModuleId, button.BusinessBinding!, resource, features.Length == 1 ? features[0] : null)) == true;
+        }
         foreach (var endpoint in handlers)
         {
             var handler = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()!.HandlerType;

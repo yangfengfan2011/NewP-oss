@@ -18,6 +18,7 @@ public static class StandardFeatureMetadataCompiler
         var result = customFeatures?.ToList() ?? [];
         var scopeTitles = new Dictionary<(string Owner, string Scope), (string Title, string? TitleKey)>();
         var entered = new HashSet<string>(StringComparer.Ordinal);
+        var expandedActions = new HashSet<(string View, string Surface, string Owner, string? Scope, string Key)>();
         foreach (var item in navigation.Values)
             if (item.TryGetProperty("featureAuthorization", out var enabled) && enabled.ValueKind == JsonValueKind.True)
                 Navigation(item);
@@ -200,14 +201,15 @@ public static class StandardFeatureMetadataCompiler
         void Actions(JsonElement view, string property, string owner, string? scope, string resource, bool newButtonsOnly = false)
         {
             if (!view.TryGetProperty(property, out var actions)) return;
-            if (actions.EnumerateArray().GroupBy(action => Text(action, "key"), StringComparer.Ordinal)
-                .Any(group => group.Count() > 1 && group.Any(action => action.TryGetProperty("dataAccess", out _))))
+            if (actions.EnumerateArray().GroupBy(action => Text(action, "key"), StringComparer.Ordinal).Any(group => group.Count() > 1))
                 throw new InvalidOperationException("按钮声明身份冲突。");
             foreach (var action in actions.EnumerateArray())
             {
                 if (newButtonsOnly && (action.TryGetProperty("dataAccess", out var buttonAccess)
                     ? !buttonAccess.TryGetProperty("object", out _)
                     : Optional(action, "handlerKey") is null or "view" or "refresh")) continue;
+                // 同一不可变动作源可经List→Detail及显式routeOnly重复到达；只复用完全相同的正式引用。
+                if (!expandedActions.Add((Text(view, "key"), property, owner, scope, Text(action, "key")))) continue;
                 // 普通快捷跳转复用目标资格；标准行查看可沿当前读取资格进入无独立授权的呈现页。
                 if (Optional(action, "navigationTargetKey") is { } target)
                 {
@@ -249,7 +251,8 @@ public static class StandardFeatureMetadataCompiler
                         ? views.Values.Single(candidate => Optional(candidate, "mode") == "list"
                             && Optional(candidate, "resourceKey") == resource && Optional(candidate, "detailViewKey") == Text(view, "key"))
                         : view;
-                    DataAccess(source, source, "read", "", result[^1].ReferenceKey!);
+                    // Link呈现的查询来源属于另一正式能力；对象read不能借此取得Link列表调用身份。
+                    if (!source.TryGetProperty("querySource", out _)) DataAccess(source, source, "read", "", result[^1].ReferenceKey!);
                 }
                 if (operation is "create" or "edit") BindLookupDataAccess(view, true, result[^1].ReferenceKey!);
                 if (operation == "edit") BindDetailRead(view, result[^1].ReferenceKey!);

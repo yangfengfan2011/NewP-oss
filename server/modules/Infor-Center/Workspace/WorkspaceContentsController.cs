@@ -17,7 +17,7 @@ namespace ICP.Platform.Modules.Workspace;
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
-    ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler,
+    ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler, WorkspaceEditValuesHandler editValuesHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)
@@ -175,13 +175,13 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     }
 
     /// <summary>编辑装载重新验证当前出现位置与对象 edit 资格。</summary>
-    [HttpPost("content/{linkId}/edit-values"), RequireFeature("workspace.folder.editObject")]
+    [HttpPost("content/{linkId}/edit-values"), RequireFeature("workspace.folder.editObject"), ButtonBusinessHandler(typeof(WorkspaceEditValuesHandler))]
     public async Task<IResult> EditValues(string linkId, RemoveReferenceInput input, CancellationToken token)
     {
         try
         {
             if (input.Position is null) throw new LinkQueryException(400, "Workspace.InvalidEditInput");
-            return Results.Ok(new { fields = await contents.ReadEditValuesAsync(Actor(), input.Position, linkId, token) });
+            return Results.Ok(new { fields = await buttonBusiness.ExecuteAsync(editValuesHandler, new WorkspaceEditValuesInput(Actor(), input.Position, linkId), token) });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
@@ -192,7 +192,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     }
 
     /// <summary>编辑使用当前 LID 定位真实对象；字段规则由对象拥有者执行。</summary>
-    [HttpPut("content/{linkId}"), RequireFeature("workspace.folder.editObject")]
+    [HttpPut("content/{linkId}"), RequireFeature("workspace.folder.editObject"), ButtonBusinessHandler(typeof(WorkspaceMutationHandler))]
     public Task<IResult> EditObject(string linkId, CreateFolderInput input, CancellationToken token) =>
         MutateObjectsAsync(input.Position, [linkId], input.Values, ObjectOperationAction.Update, token);
 
@@ -214,10 +214,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         {
             if (position is null || linkIds is null || action == ObjectOperationAction.Update && values is null)
                 throw new LinkQueryException(400, "Workspace.InvalidEditInput");
-            var result = action == ObjectOperationAction.Delete
-                ? await buttonBusiness.ExecuteAsync(mutationHandler, new WorkspaceMutationInput(Actor(), position, linkIds, values, action), token)
-                : await operations.ExecuteAsync(WorkspaceObjectMutation.BehaviorDefinition.ObjectKey, action, null,
-                    new Dictionary<string, object?> { ["ActorId"] = Actor(), ["Position"] = position, ["LinkIds"] = linkIds, ["Values"] = values }, token);
+            var result = await buttonBusiness.ExecuteAsync(mutationHandler, new WorkspaceMutationInput(Actor(), position, linkIds, values, action), token);
             return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }

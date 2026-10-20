@@ -242,77 +242,14 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             return handoff is WorkspaceMutationContinuation continuation
                 ? await WithButtonMutationAsync(context, continuation, cancellationToken)
                 : throw new InvalidOperationException("WORKSPACE_BUTTON_CONTINUATION_INVALID");
-        var actor = (string)context.Values["ActorId"]!;
-        var position = (WorkspacePosition)context.Values["Position"]!;
-        var linkIds = (string[])context.Values["LinkIds"]!;
-        var editing = context.Action == ObjectOperationAction.Update;
-        ValidateSelection(linkIds);
-        if (editing && linkIds.Length != 1) throw new LinkQueryException(400, "Workspace.InvalidSelection");
-        // 与创建、引用变更取得同一图锁；等待之后重新验证整个位置和对象资格。
-        var binding = editing ? WorkspaceFolderExecutions.EditBinding("submit") : WorkspaceObjectExecutions.DeleteBinding();
-        executionAccess.Validate([binding], "workspace.folder");
-        await LockGraphAsync(cancellationToken);
-        var path = await ResolveClipboardPositionAsync(binding, "parent", position, cancellationToken);
-        var targets = editing
-            ? await ResolveFolderEditTargetsAsync(path.FolderId, linkIds, false, cancellationToken)
-            : await ResolveDeclaredMutationTargetsAsync(path.FolderId, linkIds, WorkspaceObjectExecutions.DeleteTargetCaller(), "target", cancellationToken);
-        if (!editing)
-        {
-            var folders = targets.Where(target => target.ModelKey == WorkspacePositions.FolderModel).Select(target => target.Id).ToArray();
-            // 在任何引用被清理前检查整批文件夹，避免选择的其他对象使原本非空的文件夹变空。
-            if (folders.Length > 0 && await Links.AnyAsync(row => folders.Contains(EF.Property<string>(row, "PEID")), cancellationToken))
-                throw new LinkQueryException(409, "Workspace.FolderNotEmpty");
-        }
-        foreach (var target in targets)
-        {
-            if (editing)
-            {
-                var values = ReadValues((IReadOnlyDictionary<string, JsonElement>)context.Values["Values"]!, target.ModelKey);
-                if (target.ModelKey == WorkspacePositions.FolderModel) await UpdateFolderAsync(target.Id, values, cancellationToken);
-                else
-                {
-                    var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Update, target.Id, values,
-                        WorkspaceObjectExecutions.MutationSource(target.ModelKey, target.Id, ObjectOperationAction.Update), cancellationToken);
-                    if (!result.Succeeded) return result;
-                }
-            }
-            else
-            {
-                var deletedFolder = target.ModelKey == WorkspacePositions.FolderModel
-                    ? await Folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == target.Id, cancellationToken) : null;
-                // 旧行仍在时流式登记全部入向事实；不把删除后的LID再查回来，也不引入关系数量上限。
-                await foreach (var link in Links.AsNoTracking()
-                    .Where(row => EF.Property<string>(row, "ChildModelKey") == target.ModelKey && EF.Property<string>(row, "CEID") == target.Id)
-                    .Select(row => new { Id = EF.Property<string>(row, "LID"), ParentId = EF.Property<string>(row, "PEID") })
-                    .AsAsyncEnumerable().WithCancellation(cancellationToken))
-                    await referenceAudit.RemovedAsync(link.Id, link.ParentId, new(target.ModelKey, target.Id), cancellationToken);
-                // 清理全部入向关系留在 SQL 内；后续对象失败时同一事务回滚，包括先前成功的批量项。
-                await Links.Where(row => EF.Property<string>(row, "ChildModelKey") == target.ModelKey && EF.Property<string>(row, "CEID") == target.Id)
-                    .ExecuteDeleteAsync(cancellationToken);
-                if (target.ModelKey == WorkspacePositions.FolderModel)
-                {
-                    await Folders.Where(row => EF.Property<string>(row, "EID") == target.Id).ExecuteDeleteAsync(cancellationToken);
-                    await referenceAudit.FolderDeletedAsync(deletedFolder!, cancellationToken);
-                }
-                else
-                {
-                    var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Delete, target.Id, new Dictionary<string, object?>(),
-                        WorkspaceObjectExecutions.MutationSource(target.ModelKey, target.Id, ObjectOperationAction.Delete), cancellationToken);
-                    if (!result.Succeeded) return result;
-                }
-            }
-        }
-        return StandardCrudMutationResult.Success();
+        throw new InvalidOperationException("WORKSPACE_BUTTON_CONTINUATION_REQUIRED");
     }
 
     /// <summary>编辑装载不取图写锁，仍验证完整位置和 edit 资格；提交时另行执行锁后重验。</summary>
-    public async Task<IReadOnlyDictionary<string, object?>> ReadEditValuesAsync(string actor, WorkspacePosition position, string linkId, CancellationToken token)
+    public async Task<IReadOnlyDictionary<string, object?>> ReadEditValuesAsync(WorkspaceMutationState state, CancellationToken token)
     {
-        ValidateSelection([linkId]);
-        var binding = WorkspaceFolderExecutions.EditBinding("prepare");
-        executionAccess.Validate([binding], "workspace.folder");
-        var path = await ResolveClipboardPositionAsync(binding, "parent", position, token);
-        var target = (await ResolveFolderEditTargetsAsync(path.FolderId, [linkId], true, token)).Single();
+        var normalized = state.Targets.Single();
+        var target = new LinkObjectReference(normalized.Model, normalized.Id);
         var detail = await crud.GetDetailFromSourceAsync(target.ModelKey == WorkspacePositions.FolderModel
                 ? folderDescriptor.Value : resources.FindByResourceKey(Resource(target.ModelKey))!, target.Id,
             new("workspace.editValues.detail", "workspace.backend", typeof(WorkspaceContents), nameof(ReadEditValuesAsync)), token);
@@ -350,29 +287,6 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             .Select(row => new { Model = EF.Property<string>(row, "ChildModelKey"), Id = EF.Property<string>(row, "CEID") }).ToArrayAsync(token);
         if (rows.Length != linkIds.Length) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
         return rows.Select(row => new LinkObjectReference(row.Model, row.Id)).Distinct().ToArray();
-    }
-
-    // 文件夹内容的实际目标复用原阶段与读取解析器；对象所属写入仍在原before-facts点复核。
-    private Task<LinkObjectReference[]> ResolveFolderEditTargetsAsync(string parentId, string[] linkIds, bool preparing, CancellationToken token) =>
-        ResolveDeclaredMutationTargetsAsync(parentId, linkIds, WorkspaceFolderExecutions.EditTargetCaller(preparing),
-            WorkspaceFolderExecutions.EditTargetRole(preparing), token);
-
-    // 父裁决之后只执行原一次LID查询，并按原目标顺序消费固定内部read/action及根约束。
-    private async Task<LinkObjectReference[]> ResolveDeclaredMutationTargetsAsync(string parentId, string[] linkIds,
-        DataExecutionInternalBinding source, string role, CancellationToken token)
-    {
-        var targets = await ReadMutationTargetsAsync(parentId, linkIds, token);
-        foreach (var target in targets)
-        {
-            var resource = Resource(target.ModelKey);
-            var result = await executionAccess.EvaluateInternalObjectAsync(source, role, new(resource, target.Id, target), token);
-            if (result.Decision == DataExecutionDecision.NotFound) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            if (result.Decision == DataExecutionDecision.Denied) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
-            if (result.Target?.ResourceKey != resource || result.Target.ObjectId != target.Id)
-                throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
-            await RequireNonRootMutationTargetAsync(target, token);
-        }
-        return targets;
     }
 
     // 根约束保持在该对象read/edit裁决之后，不能因正式绑定而提前或省略。

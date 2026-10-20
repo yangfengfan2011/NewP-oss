@@ -160,10 +160,10 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         Assert.Equal("EditSource314", (await RowAsync(fixture, child))["ENAME"]);
         var declaration = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-            item => item.Execution == "workspace.content.edit" && item.FeaturePositions.Contains(feature.Position));
-        using (var prepared = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, path + "/edit-values", new { position }, declaration))
+            item => item.ActionKey == "edit" && item.Surface == "rowActions" && item.FeaturePositions.Contains(feature.Position));
+        using (var prepared = await SendButton(admin, feature, HttpMethod.Post, path + "/edit-values", new { position }, declaration))
             Assert.Equal(HttpStatusCode.OK, prepared.StatusCode);
-        using (var submitted = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Put, path,
+        using (var submitted = await SendButton(admin, feature, HttpMethod.Put, path,
             new { position, values = new { ENAME = "EditedSource314" } }, declaration))
             Assert.Equal(HttpStatusCode.OK, submitted.StatusCode);
         Assert.Equal("EditedSource314", (await RowAsync(fixture, child))["ENAME"]);
@@ -176,6 +176,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             parentId = (string)(await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>()
                 .Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking()
                 .SingleAsync(row => EF.Property<string>(row, "LID") == parentLinkId))["CEID"]!;
+        var authorization = new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize"));
         foreach (var unreadable in new[] { false, true })
         {
             var subjects = new[] { new DataScopeDirectSubjectDto("EditOrderSubject314", "user", actor.AccountId, 1,
@@ -183,14 +184,14 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             var parentScope = new { spaceId = position.SpaceId, rootFolderId = position.RootFolderId, linkIds = position.LinkIds[..^1] };
             using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
                 "/api/workspace/content/" + position.LinkIds[^1] + "/permissions?queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(parentScope)),
-                new DataScopeObjectConfiguration("workspace.folder", parentId, subjects)))
+                new DataScopeObjectConfiguration("workspace.folder", parentId, subjects), authorization))
                 Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
             foreach (var preparing in new[] { true, false })
             {
                 probe.TargetCommands = 0; probe.Capturing = true;
                 try
                 {
-                    using var rejected = await FeatureHttpTestRequests.SendAsync(ordinary, feature, preparing ? HttpMethod.Post : HttpMethod.Put,
+                    using var rejected = await SendButton(ordinary, feature, preparing ? HttpMethod.Post : HttpMethod.Put,
                         "/api/workspace/content/" + EditTargetLookupProbe.MissingTarget + (preparing ? "/edit-values" : ""),
                         preparing ? new { position } : (object)new { position, values = new { ENAME = "NeverWrite314" } }, declaration);
                     Assert.Equal(unreadable ? HttpStatusCode.NotFound : HttpStatusCode.Forbidden, rejected.StatusCode);
@@ -202,6 +203,16 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             }
         }
         Assert.Equal("EditedSource314", (await RowAsync(fixture, child))["ENAME"]);
+
+        static Task<HttpResponseMessage> SendButton(HttpClient client, FeaturePoint point, HttpMethod method, string url,
+            object value, ActionDataAccessRequirement source)
+        {
+            var request = new HttpRequestMessage(method, url);
+            request.Headers.Add("X-NewP-Feature", point.Position);
+            request.Headers.Add("X-NewP-Button", source.Id);
+            request.Content = System.Net.Http.Json.JsonContent.Create(value, options: new JsonSerializerOptions());
+            return client.SendAsync(request);
+        }
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "正式内容列表消费实际link view读取声明，不借树声明且保留位置、SQL过滤和分页")]

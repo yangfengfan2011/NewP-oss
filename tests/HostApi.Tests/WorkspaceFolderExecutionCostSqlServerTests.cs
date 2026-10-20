@@ -161,8 +161,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                     var surface = operation.StartsWith("create-", StringComparison.Ordinal) ? "pageActions"
                         : operation == "edit" ? "rowActions" : operation == "reorder" ? "featureActions" : "read";
                     var action = surface == "pageActions" ? "create" : surface == "rowActions" ? "edit" : surface == "featureActions" ? "moveUp" : "";
-                    var actualExecution = operation == "edit" ? WorkspaceFolderExecutions.Edit : execution;
-                    declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == actualExecution && item.ViewKey == view
+                    declaration = Assert.Single(plan.ActionDataAccessCatalog, item => (item.Execution == execution || item.BusinessBinding == feature.BehaviorKey) && item.ViewKey == view
                         && item.Surface == surface && item.ActionKey == action && item.FeaturePositions.Contains(feature.Position));
                 }
             }

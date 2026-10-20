@@ -15,8 +15,21 @@ public sealed partial class WorkspaceContents
     {
         var input = continuation.ReadInput(context);
 
-        ValidateSelection(input.LinkIds);
+        ValidateButtonMutationInput(input);
         await LockGraphAsync(token);
+        return await continuation.Execute(await ReadButtonMutationStateAsync(input, true, token), token);
+    }
+
+    // 准备阶段保留原无图写锁读取，提交阶段另在原root锁内规范化并重验全部事实。
+    internal Task<WorkspaceMutationState> PrepareEditStateAsync(WorkspaceMutationInput input, CancellationToken token)
+    {
+        ValidateButtonMutationInput(input);
+        return ReadButtonMutationStateAsync(input, false, token);
+    }
+
+    // 整批目标来自同一个父位置与LID集合，不以类型或额外引用替代用户实际输入。
+    private async Task<WorkspaceMutationState> ReadButtonMutationStateAsync(WorkspaceMutationInput input, bool protect, CancellationToken token)
+    {
         var path = await positions.ResolveAsync(input.ActorId, input.Position, token);
         // 父资格是本业务的关联检查，不能把它当成所选对象的按钮要求或以LID冒充父EID。
         var parent = await objectActions.CheckAsync(WorkspacePositions.FolderModel, path.FolderId, ["read", "edit"], input.Position, token);
@@ -30,8 +43,8 @@ public sealed partial class WorkspaceContents
         var byLink = rows.ToDictionary(row => row.Link, StringComparer.OrdinalIgnoreCase);
         var targets = input.LinkIds.Select(id => byLink[id]).Select(row => new LinkObjectReference(row.Model, row.Id)).Distinct().ToArray();
         var facts = new List<WorkspaceMutationObject>();
-        var participant = mutationRepository as IStandardCrudUpdateParticipant
-            ?? throw new InvalidOperationException("WORKSPACE_PROTECTED_FACTS_REQUIRED");
+        var participant = protect ? mutationRepository as IStandardCrudUpdateParticipant
+            ?? throw new InvalidOperationException("WORKSPACE_PROTECTED_FACTS_REQUIRED") : null;
         foreach (var target in targets)
         {
             var resource = Resource(target.ModelKey);
@@ -40,17 +53,27 @@ public sealed partial class WorkspaceContents
             await RequireNonRootMutationTargetAsync(target, token);
             var descriptor = target.ModelKey == WorkspacePositions.FolderModel ? folderDescriptor.Value
                 : resources.FindByResourceKey(resource) ?? throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
-            var before = await participant.ReadForUpdateAsync(descriptor, target.Id, token)
+            var before = await (participant is null ? mutationRepository.GetByIdAsync(descriptor, target.Id, token)
+                : participant.ReadForUpdateAsync(descriptor, target.Id, token))
                 ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
             facts.Add(new(resource, target.ModelKey, target.Id, before));
         }
-        return await continuation.Execute(new(input, facts), token);
+        return new(input, facts);
     }
 
-    // 全批按钮要求通过后才检查并执行实体删除；入向引用、owner行为和审计仍在原root事务中。
+    // 全批按钮要求通过后才进入实际更新或删除；入向引用、owner行为和审计仍在原root事务中。
     internal async Task<StandardCrudMutationResult> ExecuteButtonMutationAsync(WorkspaceMutationState state,
         IObjectOperationExecutor operations, CancellationToken token)
     {
+        if (state.Input.Action == ObjectOperationAction.Update)
+        {
+            var target = state.Targets.Single();
+            var values = ReadValues(state.Input.Values!, target.Model);
+            if (target.Model == WorkspacePositions.FolderModel) await UpdateFolderAsync(target.Id, values, token);
+            else return await operations.ExecuteAsync(target.Resource, ObjectOperationAction.Update, target.Id, values,
+                new ObjectOperationWriteSource.Internal(target.Resource, target.Model, ObjectOperationAction.Update, target.Id), token);
+            return StandardCrudMutationResult.Success();
+        }
         var folders = state.Targets.Where(target => target.Model == WorkspacePositions.FolderModel).Select(target => target.Id).ToArray();
         if (folders.Length > 0 && await Links.AnyAsync(row => folders.Contains(EF.Property<string>(row, "PEID")), token))
             throw new LinkQueryException(409, "Workspace.FolderNotEmpty");
@@ -77,5 +100,14 @@ public sealed partial class WorkspaceContents
             }
         }
         return StandardCrudMutationResult.Success();
+    }
+    // 与原编辑一项/删除1..100项规则一致，未知动作不进入任何读取或锁。
+    private static void ValidateButtonMutationInput(WorkspaceMutationInput input)
+    {
+        ValidateSelection(input.LinkIds);
+        if (input.Action != ObjectOperationAction.Update && input.Action != ObjectOperationAction.Delete)
+            throw new InvalidOperationException("WORKSPACE_BUTTON_ACTION_INVALID");
+        if (input.Action == ObjectOperationAction.Update && (input.LinkIds.Length != 1 || input.Values is null))
+            throw new LinkQueryException(400, "Workspace.InvalidSelection");
     }
 }

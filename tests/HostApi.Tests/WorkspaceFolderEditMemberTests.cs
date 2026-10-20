@@ -1,61 +1,31 @@
-using System.Security.Claims;
 using System.Text.Json;
-using ICP.Platform.Authorization.Contracts;
-using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Kernel.ModulePlanning;
-using ICP.Platform.Modules.Authorization.Services;
-using ICP.Platform.Modules.Workspace;
-using Microsoft.AspNetCore.Http;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
 public sealed class WorkspaceFolderEditMemberTests
 {
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task FolderEditInternalRole_AcceptsOnlyItsActualPublicOrInternalMember(bool preparing)
+    [Fact, Trait("Category", "ModuleMetadataConsumer")]
+    public void FolderEdit_UsesOnlyButtonRequirementsAndPreservesPreparationReadSource()
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));
-        var compiled = new CanonicalModulePlanCompiler().Compile("folder-edit-member-314", candidates);
+        var compiled = new CanonicalModulePlanCompiler().Compile("folder-edit-button-327", candidates);
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
-        var http = new HttpContextAccessor { HttpContext = new DefaultHttpContext
-        { User = new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "member-test")], "test")) } };
-        var operations = new CountedOperations();
-        var resolver = new CountedEndpoint();
-        var access = new DataExecutionAccess(compiled.Plan!, http, operations, operations, resolvers: [resolver]);
-        var binding = WorkspaceFolderExecutions.EditTargetCaller(preparing);
-        var role = WorkspaceFolderExecutions.EditTargetRole(preparing);
-        var target = new DataExecutionTargetInput("workspace.folder", "real-folder", new LinkObjectReference("WorkspaceFolder", "real-folder"));
-        Assert.Equal(DataExecutionDecision.Allowed, (await access.EvaluateInternalObjectAsync(binding, role, target)).Decision);
-        Assert.Equal(1, resolver.Reads); Assert.Equal(1, operations.Actions);
-        foreach (var invalid in new[] { binding with { Caller = typeof(WorkspaceFolderEditMemberTests) }, binding with { Member = "NotARealMember" },
-            binding with { Execution = WorkspaceFolderExecutions.Create }, binding with { Provider = "example.backend" } })
-            await Assert.ThrowsAsync<ActionDataAccessException>(() => access.EvaluateInternalObjectAsync(invalid, role, target));
-        http.HttpContext = null;
-        await Assert.ThrowsAsync<ActionDataAccessException>(() => access.EvaluateInternalObjectAsync(binding, role, target));
-        Assert.Equal(1, resolver.Reads); Assert.Equal(1, operations.Actions);
-    }
-
-    // 这里只核真实合同/成员与调用计数，不作为目标读取或edit权限的允许证明。
-    private sealed class CountedOperations : IDataScopeObjectAccess, IDataScopeObjectDecisionProvider
-    {
-        internal int Actions;
-        public Task<bool> IsReadableAsync(string resource, string id, CancellationToken token = default) =>
-            throw new InvalidOperationException("The formal endpoint resolver must perform this read.");
-        public Task<bool> IsAllowedAsync(string resource, string id, string action, CancellationToken token = default)
-        { Assert.Equal("workspace.folder", resource); Assert.Equal("real-folder", id); Assert.Equal("edit", action); Actions++; return Task.FromResult(true); }
-        public Task<bool> IsCandidateAllowedAsync(string resource, IReadOnlyDictionary<string, object?> values, string action, CancellationToken token = default) =>
-            throw new InvalidOperationException("Existing Folder edit cannot become a candidate check.");
-    }
-
-    private sealed class CountedEndpoint : IDataExecutionTargetResolver
-    {
-        internal int Reads;
-        public string ModuleId => "Workspace";
-        public string Key => "workspace.clipboard.endpoint";
-        public Task<DataExecutionResolvedTarget?> ResolveAsync(DataExecutionTargetInput target, CancellationToken token)
-        { Reads++; return Task.FromResult<DataExecutionResolvedTarget?>(new(target.ResourceKey, target.ObjectId!, target.Source)); }
+        var plan = compiled.Plan!;
+        var edit = Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Workspace"
+            && item.ActionKey == "edit" && item.Surface == "rowActions");
+        Assert.Empty(edit.Execution);
+        Assert.Equal("workspace.folder.editObject", edit.BusinessBinding);
+        Assert.Equal(["Document", "Part", "WorkspaceFolder"], edit.ObjectRequirements.Select(item => item.Object).Order().ToArray());
+        Assert.All(edit.ObjectRequirements, item => Assert.Equal(["edit"], item.Actions));
+        var workspace = plan.Modules.Single(item => item.ModuleId == "Workspace");
+        Assert.DoesNotContain(workspace.DataExecutions, item => item.Key is "workspace.content.edit" or "workspace.folder.edit.target"
+            or "workspace.content.delete" or "workspace.content.delete.target");
+        var read = Assert.Single(workspace.DataExecutions, item => item.Key == "workspace.editValues.detail");
+        Assert.Equal(["read"], Assert.Single(Assert.Single(read.Requirements).AnyOf));
+        foreach (var module in plan.Modules.Where(item => item.ModuleId is "Part" or "Document"))
+            Assert.DoesNotContain(module.DataExecutions, item => item.Key.EndsWith(".update", StringComparison.Ordinal)
+                || item.Key.EndsWith(".delete", StringComparison.Ordinal));
     }
 }

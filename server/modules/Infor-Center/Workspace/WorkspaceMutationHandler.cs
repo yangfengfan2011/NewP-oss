@@ -61,7 +61,7 @@ public sealed class WorkspaceMutationHandler(WorkspaceContents contents, Func<IO
     public Task<StandardCrudMutationResult> WithinBoundaryAsync(WorkspaceMutationInput input, string actionKey,
         Func<WorkspaceMutationState, CancellationToken, Task<StandardCrudMutationResult>> execute, CancellationToken cancellationToken)
     {
-        if (input.Action != ObjectOperationAction.Delete) throw new InvalidOperationException("WORKSPACE_BUTTON_ACTION_INVALID");
+        if (input.Action != ObjectOperationAction.Delete && input.Action != ObjectOperationAction.Update) throw new InvalidOperationException("WORKSPACE_BUTTON_ACTION_INVALID");
         var owned = input with { Position = input.Position with { LinkIds = input.Position.LinkIds.ToArray() }, LinkIds = input.LinkIds.ToArray() };
         return operations().ExecuteAsync(WorkspaceObjectMutation.BehaviorDefinition.ObjectKey, owned.Action, null,
             new Dictionary<string, object?> { ["ActorId"] = owned.ActorId, ["Position"] = owned.Position,

@@ -135,6 +135,21 @@ describe('standard CRUD action runtime', () => {
     expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
   });
 
+  it('carries the compiled heterogeneous object requirements from the clicked button without separate permission inputs', async () => {
+    const id = 'Test/view:items/rowActions/action:history';
+    const objectRequirements = [{ object: 'Part', actions: ['read'], resourceKey: 'part.part' },
+      { object: 'Document', actions: ['read'], resourceKey: 'document.document' }];
+    const definition = bindActionDataAccess({ view: { key: 'items', rowActions: [{ key: 'history', labelKey: '履历', handlerKey: 'history',
+      dataAccess: objectRequirements.map(({ object, actions }) => ({ object, actions })) }] } }, [{ id, moduleId: 'Test', viewKey: 'items',
+      surface: 'rowActions', actionKey: 'history', execution: '', resources: ['part.part', 'document.document'], actions: [],
+      featurePositions: ['history'], businessBinding: 'test.history', objectRequirements }]);
+    const handler = vi.fn();
+    await renderActions({ actions: definition.view.rowActions as StandardCrudActionDefinition[], grantedPositions: ['history'], handlers: { history: handler } });
+    await clickActionButton('履历');
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler.mock.calls[0][0]).toMatchObject({ buttonId: id, action: { dataAccess: { objectRequirements } } });
+  });
+
   it.each([true, false])('checks a declared handler entry before executing it (allowed=%s)', async allowed => {
     const handler = vi.fn();
     const precheck = vi.fn(async () => { if (!allowed) throw new Error('Entry denied'); });

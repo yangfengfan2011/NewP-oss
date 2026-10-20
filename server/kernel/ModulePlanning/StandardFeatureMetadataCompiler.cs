@@ -206,7 +206,7 @@ public static class StandardFeatureMetadataCompiler
             foreach (var action in actions.EnumerateArray())
             {
                 if (newButtonsOnly && (action.TryGetProperty("dataAccess", out var buttonAccess)
-                    ? !buttonAccess.TryGetProperty("object", out _)
+                    ? buttonAccess.ValueKind != JsonValueKind.Array && !buttonAccess.TryGetProperty("object", out _)
                     : Optional(action, "handlerKey") is null or "view" or "refresh")) continue;
                 // 同一不可变动作源可经List→Detail及显式routeOnly重复到达；只复用完全相同的正式引用。
                 if (!expandedActions.Add((Text(view, "key"), property, owner, scope, Text(action, "key")))) continue;
@@ -293,24 +293,26 @@ public static class StandardFeatureMetadataCompiler
             var index = result.FindIndex(feature => (feature.ReferenceKey ?? feature.Key) == owner);
             if (index < 0) throw new InvalidOperationException("数据声明缺少合法功能归属。");
             var node = result[index];
-            if (isButton && (!hasDataAccess || declared.TryGetProperty("object", out _)))
+            if (isButton && (!hasDataAccess || declared.ValueKind == JsonValueKind.Array
+                || declared.ValueKind == JsonValueKind.Object && declared.TryGetProperty("object", out _)))
             {
-                if (operation is null || hasDataAccess && (declared.ValueKind != JsonValueKind.Object
-                    || declared.EnumerateObject().Any(property => property.Name is not ("object" or "actions"))
-                    || !declared.TryGetProperty("actions", out var actionKeys) || actionKeys.ValueKind != JsonValueKind.Array))
+                if (operation is null)
                     throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
-                var objectName = hasDataAccess ? Text(declared, "object") : null;
-                if (objectName is not null && !all.Any(document => document.TryGetProperty(objectName, out var definition) && Optional(definition, "kind") == "Entity"))
-                    throw new InvalidOperationException("BUTTON_DATA_ACCESS_OBJECT_UNKNOWN");
-                // 对象声明引用既有Entity绑定；model-less履历等呈现资源不能替代真实对象资源。
-                var targetResources = objectName is null ? [Text(view, "resourceKey")] : views.Values
-                    .Where(candidate => Optional(candidate, "model") == objectName && !candidate.TryGetProperty("querySource", out _))
-                    .Select(candidate => Text(candidate, "resourceKey"))
-                    .Distinct(StringComparer.Ordinal).ToArray();
-                if (targetResources.Length != 1) throw new InvalidOperationException($"BUTTON_DATA_ACCESS_OBJECT_BINDING_INVALID: {moduleId}/{objectName}/{Text(view, "key")}: {string.Join(",", targetResources)}");
+                var multiple = hasDataAccess && declared.ValueKind == JsonValueKind.Array;
+                var entries = !hasDataAccess ? [] : multiple ? declared.EnumerateArray().ToArray() : new[] { declared };
+                if (multiple && entries.Length == 0 || entries.Any(entry => entry.ValueKind != JsonValueKind.Object
+                    || entry.EnumerateObject().Any(property => property.Name is not ("object" or "actions"))
+                    || !entry.TryGetProperty("actions", out var actionKeys) || actionKeys.ValueKind != JsonValueKind.Array))
+                    throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
+                var requirements = entries.Select(entry => new ButtonObjectRequirement(Text(entry, "object"),
+                    entry.GetProperty("actions").EnumerateArray().Select(item => item.GetString()!).ToArray(),
+                    ButtonObjectResource(Text(entry, "object")))).ToArray();
+                if (requirements.Select(entry => entry.Object).Distinct(StringComparer.Ordinal).Count() != requirements.Length)
+                    throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
                 var button = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, "",
-                    targetResources, hasDataAccess ? declared.GetProperty("actions").EnumerateArray().Select(item => item.GetString()!).ToArray() : [])
-                { Object = objectName, BusinessBinding = node.BehaviorKey };
+                    !hasDataAccess ? [Text(view, "resourceKey")] : requirements.Select(entry => entry.ResourceKey).Distinct(StringComparer.Ordinal).ToArray(),
+                    multiple || !hasDataAccess ? [] : requirements[0].Actions)
+                { Object = multiple || !hasDataAccess ? null : requirements[0].Object, ObjectRequirements = multiple ? requirements : null, BusinessBinding = node.BehaviorKey };
                 if (!node.DataAccess.Any(item => item.Id == button.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, button] };
                 return;
             }
@@ -323,6 +325,22 @@ public static class StandardFeatureMetadataCompiler
             { AdditionalActions = declared.TryGetProperty("additionalActions", out var additional) ? additional.EnumerateArray().Select(item => item.GetString()!).ToArray() : [] };
             // 相同 View 可由多个树节点引用到同一功能；相同结构的展开不制造重复声明。
             if (!node.DataAccess.Any(item => item.Id == declaration.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, declaration] };
+        }
+
+        // 对象资源只从既有直接Entity视图或正式Link端点派生；呈现资源和客户端字段不能另定义映射。
+        string ButtonObjectResource(string objectName)
+        {
+            var direct = views.Values.Where(candidate => Optional(candidate, "model") == objectName && !candidate.TryGetProperty("querySource", out _))
+                .Select(candidate => Text(candidate, "resourceKey"));
+            var endpoints = all.SelectMany(document => document.EnumerateObject()).Where(property => property.Value.ValueKind == JsonValueKind.Object
+                && Optional(property.Value, "kind") == "Link" && property.Value.TryGetProperty("linkQuery", out _))
+                .Select(property => property.Value.GetProperty("linkQuery"))
+                .Where(query => query.TryGetProperty("endpoints", out var values) && values.TryGetProperty(objectName, out _))
+                .Select(query => Text(query.GetProperty("endpoints").GetProperty(objectName), "resourceKey")).ToArray();
+            if (!all.Any(document => document.TryGetProperty(objectName, out var definition) && Optional(definition, "kind") == "Entity") && endpoints.Length == 0)
+                throw new InvalidOperationException("BUTTON_DATA_ACCESS_OBJECT_UNKNOWN");
+            var targets = direct.Concat(endpoints).Distinct(StringComparer.Ordinal).ToArray();
+            return targets.Length == 1 ? targets[0] : throw new InvalidOperationException($"BUTTON_DATA_ACCESS_OBJECT_BINDING_INVALID: {moduleId}/{objectName}");
         }
 
         // 树引用原 View 动作的行为；节点类型范围只参与静态身份。

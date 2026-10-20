@@ -229,6 +229,8 @@ export interface StandardCrudActionDefinition {
 
 export interface ActionDataAccessRequirement {
   object?: string;
+  /** 异构按钮的对象条目来自正式编译；资源键由已有对象绑定派生。 */
+  objectRequirements?: readonly { object: string; actions: readonly string[]; resourceKey: string }[];
   businessBinding?: string;
   id: string;
   moduleId: string;

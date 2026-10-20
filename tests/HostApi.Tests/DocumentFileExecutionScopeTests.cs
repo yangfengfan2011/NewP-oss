@@ -89,7 +89,8 @@ public sealed class DocumentFileExecutionScopeTests
         var binding = new DataExecutionBindingReference(declaration.Execution, declaration.Provider!, "prepare");
         http.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Authorization"), new ResourceFeatureBindingAttribute("authorize")), "generic"));
         Assert.Equal(DataExecutionDecision.Allowed, await access.EvaluateObjectAsync(binding, "example.record", "target", "example-one"));
-        http.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Example"), new RequireFeatureAttribute("example.record.authorize")), "wrong-owned-endpoint"));
+        Assert.Contains(plan.FeatureCatalog, point => point.ModuleId == "Example" && point.BehaviorKey == "example.record.update");
+        http.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Example"), new RequireFeatureAttribute("example.record.update")), "wrong-owned-endpoint"));
         await Assert.ThrowsAsync<ActionDataAccessException>(() => access.EvaluateObjectAsync(binding, "example.record", "target", "example-one"));
     }
 

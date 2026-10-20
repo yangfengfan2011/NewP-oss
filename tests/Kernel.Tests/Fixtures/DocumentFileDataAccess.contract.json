@@ -636,7 +636,9 @@
         "read"
       ],
       "featurePositions": [
-        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:transfer"
       ],
       "requirements": [
         {

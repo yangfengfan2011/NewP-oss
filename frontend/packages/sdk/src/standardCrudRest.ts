@@ -176,8 +176,8 @@ async function requestBlob(
   };
 }
 
-/** 创建标准 CRUD fetch 客户端；调用方可注入 fetcher 用于测试、鉴权包装或 Host 级横切处理。 */
-function featureHeaders(context?: StandardCrudFeatureRequestContext): Record<string, string> {
+/** 统一传递实际按钮或独立读取身份；模块命令不再自行拼装权限请求头。 */
+export function standardCrudRequestHeaders(context?: StandardCrudFeatureRequestContext): Record<string, string> {
   return {
     ...(context?.featurePosition ? { 'X-NewP-Feature': context.featurePosition } : {}),
     ...(context?.buttonId || context?.dataAccess?.businessBinding
@@ -201,7 +201,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
       buildStandardCrudPath(apiRoute, { ...query, ...(readContext?.queryScope ? { queryScope: JSON.stringify(readContext.queryScope) } : {}) }),
       {
         method: 'GET',
-        ...(readContext?.featurePosition || readContext?.dataAccess?.id ? { headers: featureHeaders(readContext) } : {}),
+        ...(readContext?.featurePosition || readContext?.dataAccess?.id ? { headers: standardCrudRequestHeaders(readContext) } : {}),
         ...(readContext?.signal ? { signal: readContext.signal } : {}),
       },
       '加载标准列表失败',
@@ -212,7 +212,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
         `${apiRoute}/export`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...featureHeaders(context) },
+          headers: { 'Content-Type': 'application/json', ...standardCrudRequestHeaders(context) },
           body: JSON.stringify(request),
         },
         '导出标准列表失败',
@@ -224,7 +224,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
           `${apiRoute}/${encodeURIComponent(id)}`,
           {
             method: 'GET',
-            ...(readContext?.featurePosition || readContext?.dataAccess?.id ? { headers: featureHeaders(readContext) } : {}),
+            ...(readContext?.featurePosition || readContext?.dataAccess?.id ? { headers: standardCrudRequestHeaders(readContext) } : {}),
             ...(readContext?.signal ? { signal: readContext.signal } : {}),
           },
           '加载标准详情失败',
@@ -237,7 +237,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
           apiRoute,
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...featureHeaders(context) },
+            headers: { 'Content-Type': 'application/json', ...standardCrudRequestHeaders(context) },
             body: JSON.stringify(values),
           },
           '创建标准资源失败',
@@ -250,7 +250,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
           `${apiRoute}/${encodeURIComponent(id)}`,
           {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', ...featureHeaders(context) },
+            headers: { 'Content-Type': 'application/json', ...standardCrudRequestHeaders(context) },
             body: JSON.stringify(values),
           },
           '保存标准资源失败',
@@ -260,7 +260,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
       requestJson<void>(
         fetcher,
         `${apiRoute}/${encodeURIComponent(id)}`,
-        { method: 'DELETE', ...(context?.featurePosition || context?.dataAccess?.id ? { headers: featureHeaders(context) } : {}) },
+        { method: 'DELETE', ...(context?.featurePosition || context?.dataAccess?.id ? { headers: standardCrudRequestHeaders(context) } : {}) },
         '删除标准资源失败',
       ),
     enable: async (id, context) =>
@@ -268,7 +268,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
         await requestJson<unknown>(
           fetcher,
           `${apiRoute}/${encodeURIComponent(id)}/enable`,
-          { method: 'POST', ...(context?.featurePosition || context?.dataAccess?.id ? { headers: featureHeaders(context) } : {}) },
+          { method: 'POST', ...(context?.featurePosition || context?.dataAccess?.id ? { headers: standardCrudRequestHeaders(context) } : {}) },
           '启用标准资源失败',
         ),
       ),
@@ -277,7 +277,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
         await requestJson<unknown>(
           fetcher,
           `${apiRoute}/${encodeURIComponent(id)}/disable`,
-          { method: 'POST', ...(context?.featurePosition || context?.dataAccess?.id ? { headers: featureHeaders(context) } : {}) },
+          { method: 'POST', ...(context?.featurePosition || context?.dataAccess?.id ? { headers: standardCrudRequestHeaders(context) } : {}) },
           '停用标准资源失败',
         ),
       ),
@@ -357,7 +357,7 @@ export function createStandardCrudRestLookupProvider(
         options.fetcher,
         `${options.apiRoute.replace(/\/$/, '')}/options?${search.toString()}`,
         {
-          headers: { Accept: 'application/json', ...featureHeaders(context) },
+          headers: { Accept: 'application/json', ...standardCrudRequestHeaders(context) },
           ...(context?.signal ? { signal: context.signal } : {}),
         },
         '加载标准 CRUD lookup 失败',

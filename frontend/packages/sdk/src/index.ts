@@ -206,6 +206,7 @@ export {
   createStandardCrudRestLookupProvider,
   StandardCrudRequestError,
   readStandardCrudRequestError,
+  standardCrudRequestHeaders,
 } from './standardCrudRest';
 export type { StandardCrudFieldErrorFact, StandardCrudProblemFact } from './standardCrudRest';
 

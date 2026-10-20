@@ -123,7 +123,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         }
         var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(model)).AsNoTracking();
         Assert.True(await rows.AnyAsync(row => EF.Property<string>(row, "EID") == alias));
-        using (var deleted = await SendAsync(admin, http.Organization(tab, "delete", "list.rowActions"), HttpMethod.Delete,
+        using (var deleted = await http.SendButtonAsync(admin, http.Organization(tab, "delete", "list.rowActions"), HttpMethod.Delete,
             $"/api/organization/{tab}/{alias}"))
         {
             output.WriteLine($"DELETE status={(int)deleted.StatusCode}; body={await deleted.Content.ReadAsStringAsync()}");
@@ -188,7 +188,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         var cache = (FailedPublicationCache)fixture.Services.GetRequiredService<OrganizationCache>();
         cache.Fail = true;
 
-        using var response = await SendAsync(
+        using var response = await http.SendButtonAsync(
             admin,
             http.Organization("companies", "delete", "list.rowActions"),
             HttpMethod.Delete,
@@ -258,7 +258,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         var http = new FeatureHttpTestRequests(fixture);
         var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
             "/api/organization/companies", new { ECODE = "LOAD", ENAME = "装载公司", SortOrder = "01" }));
-        using (var disabled = await SendAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var disabled = await http.SendButtonAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/companies/{company}", new { IsEnabled = false }))
             Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
         var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
@@ -347,7 +347,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
             "/api/organization/companies", new { ECODE = "BOUND", ENAME = "绑定人员公司", SortOrder = "01" }));
         var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = "BOUND", ENAME = "绑定人员部门", CompanyId = company, SortOrder = "01" }));
-        using (var assigned = await SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var assigned = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{person}", new { CompanyId = company, DepartmentId = department }))
             Assert.True(assigned.StatusCode == HttpStatusCode.OK, await assigned.Content.ReadAsStringAsync());
         var assignedSnapshot = await cache.ReadAsync();
@@ -375,7 +375,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
             Assert.Equal(fixture.ActorId, snapshot.Persons[person]["UpdatedBy"]);
             Assert.Equal("正式绑定", snapshot.Persons[person]["AccountBindingReason"]);
         }
-        using var denied = await SendAsync(admin, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete,
+        using var denied = await http.SendButtonAsync(admin, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete,
             $"/api/organization/persons/{person}");
         Assert.Equal(HttpStatusCode.Conflict, denied.StatusCode);
         Assert.Equal(accountId, (await cache.ReadAsync()).Persons[person]["AccountEID"]);
@@ -424,7 +424,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
 
         // 数据库提交故障发生于候选准备之后，正式接口必须回滚记录并保留原缓存对象。
         fixture.Fault.Mode = "commit";
-        using (var failed = await SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var failed = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{person}", new { DepartmentId = parent }))
             Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
         fixture.Fault.Mode = "";
@@ -437,7 +437,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         Assert.Equal([otherDepartment], moved.ChildDepartments[parent]);
         await Update("departments", otherDepartment, new { ParentDepartmentId = parent });
         Assert.Equal([otherDepartment], (await cache.ReadAsync()).ChildDepartments[parent]);
-        using (var disabled = await SendAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var disabled = await http.SendButtonAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/companies/{company}", new { IsEnabled = false }))
         {
             Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
@@ -479,12 +479,12 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
             await http.CreateButtonAsync(admin, http.Organization(tab, "create", "list.pageActions"), $"/api/organization/{tab}", data));
         async Task Delete(string tab, string id)
         {
-            using var response = await SendAsync(admin, http.Organization(tab, "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/{tab}/{id}");
+            using var response = await http.SendButtonAsync(admin, http.Organization(tab, "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/{tab}/{id}");
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         }
         async Task Update(string tab, string id, object data)
         {
-            using var response = await SendAsync(admin, http.Organization(tab, "edit", "list.rowActions"), HttpMethod.Put, $"/api/organization/{tab}/{id}", data);
+            using var response = await http.SendButtonAsync(admin, http.Organization(tab, "edit", "list.rowActions"), HttpMethod.Put, $"/api/organization/{tab}/{id}", data);
             Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         }
     }

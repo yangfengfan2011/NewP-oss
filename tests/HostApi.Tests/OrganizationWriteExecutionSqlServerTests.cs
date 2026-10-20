@@ -22,6 +22,7 @@ public sealed class OrganizationWriteExecutionSqlServerTests
             .ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
         Assert.True(result.IsSuccess, System.Text.Json.JsonSerializer.Serialize(result.Diagnostics));
         var plan = result.Plan!;
+        var http = new FeatureHttpTestRequests(plan.FeatureCatalog, plan.ActionDataAccessCatalog);
         foreach (var descriptor in new[] { CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(),
             PositionCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create() })
         {
@@ -41,7 +42,7 @@ public sealed class OrganizationWriteExecutionSqlServerTests
                     var point = plan.FeatureCatalog.Single(item => item.Position == button.FeaturePositions[0]);
                     using var capture = new HeaderCapture();
                     using var client = new HttpClient(capture) { BaseAddress = new Uri("http://metadata-test") };
-                    using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, "/source", dataAccess: button);
+                    using var response = await http.SendButtonAsync(client, point, HttpMethod.Post, "/source");
                     Assert.Equal(button.Id, capture.Button);
                     Assert.Equal(point.Position, capture.Feature);
                     Assert.False(capture.Legacy);

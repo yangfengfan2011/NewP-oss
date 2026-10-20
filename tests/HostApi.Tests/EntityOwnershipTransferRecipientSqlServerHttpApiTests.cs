@@ -99,7 +99,7 @@ public sealed class EntityOwnershipTransferRecipientSqlServerHttpApiTests
         try
         {
             await probe.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            using (var moved = await FeatureHttpTestRequests.SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+            using (var moved = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
                        "/api/organization/persons/" + personId, new { CompanyId = companyId, DepartmentId = newDepartment }))
                 await ReadOkAsync(moved);
             using (var confirmation = fixture.Services.CreateScope())

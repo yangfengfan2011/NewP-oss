@@ -59,7 +59,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests(ITestOutp
 
             await Measure("reparent", async () =>
             {
-                using var response = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+                using var response = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
                     $"/api/organization/departments/{branch}", new { ParentDepartmentId = target });
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             });

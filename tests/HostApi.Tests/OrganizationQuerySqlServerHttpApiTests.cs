@@ -94,7 +94,7 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
             Assert.Equal("AUTH_FORBIDDEN", denied.GetProperty("code").GetString());
             Assert.False(string.IsNullOrWhiteSpace(denied.GetProperty("traceId").GetString()));
         }
-        using (var moved = await SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var moved = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{person}", new { CompanyId = company, DepartmentId = root }))
             Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
         Assert.Equal(leaf, current.Department["EID"]);

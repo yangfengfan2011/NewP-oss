@@ -87,7 +87,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         await LoginAsync(second, "Audit-test-secure-938!");
         foreach (var enabled in new[] { false, true })
         {
-            using var response = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+            using var response = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
                 $"/api/organization/departments/{prepared.Department}", new { IsEnabled = enabled });
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
@@ -159,7 +159,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
 
     private static async Task UpdateAsync(HttpClient admin, FeatureHttpTestRequests http, string person, object values)
     {
-        using var response = await SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, $"/api/organization/persons/{person}", values);
+        using var response = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, $"/api/organization/persons/{person}", values);
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
     }
 }

@@ -286,10 +286,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var b = await http.CreateButtonAsync(client, http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments", new { ECODE = "EDIT-B", ENAME = "部门B", CompanyId = Id(company), SortOrder = "0100" });
         var person = await http.CreateButtonAsync(client, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "EDIT-1", ENAME = "旧姓名", CompanyId = Id(company), DepartmentId = Id(a), BirthDate = "2000-02-29", EmploymentStatus = "Active", IsEnabled = true });
         var edit = new { ENAME = "新姓名", CompanyId = Id(company), DepartmentId = Id(b), BirthDate = (string?)null, EmploymentStatus = "Active", EmploymentStartedAt = "2026-01-01T01:02:03Z" };
-        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), edit);
-        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), edit);
+        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), edit, http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
+        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), edit, http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
         // 等价时间表达规范化为相同 UTC 时间；四字段变化不能生成业务记录。
-        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), new { EmploymentStartedAt = "2026-01-01T09:02:03" });
+        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), new { EmploymentStartedAt = "2026-01-01T09:02:03" }, http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
         var page = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={Id(person)}&EventType=person.updated");
         var row = Assert.Single(page.GetProperty("items").EnumerateArray());
         var fields = row.GetProperty("Changes").EnumerateArray().ToDictionary(c => c.GetProperty("field").GetString()!);
@@ -303,7 +303,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(JsonValueKind.Null, fields["BirthDate"].GetProperty("after").GetProperty("value").ValueKind);
         Assert.Equal("2026-01-01T01:02:03.0000000Z", fields["EmploymentStartedAt"].GetProperty("after").GetProperty("value").GetString());
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        using var renamed = await FeatureHttpTestRequests.SendAsync(client, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/departments/" + Id(b), new { ENAME = "当前部门B" });
+        using var renamed = await FeatureHttpTestRequests.SendAsync(client, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/departments/" + Id(b), new { ENAME = "当前部门B" }, dataAccess: http.Declaration("organization.department.update", http.Organization("departments", "edit", "list.rowActions")));
         Assert.True(renamed.IsSuccessStatusCode, await renamed.Content.ReadAsStringAsync());
         var currentNames = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes/{row.GetProperty("EID").GetString()}");
         var departmentChange = Assert.Single(currentNames.GetProperty("fields").GetProperty("Changes").EnumerateArray(), c => c.GetProperty("field").GetString() == "DepartmentId");
@@ -316,10 +316,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         fixture.Fault.Mode = "";
     }
 
-    internal static async Task UpdateAsync(HttpClient client, FeaturePoint point, string id, object value)
+    internal static async Task UpdateAsync(HttpClient client, FeaturePoint point, string id, object value, ActionDataAccessRequirement dataAccess)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Put, "/api/organization/persons/" + id, value);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Put, "/api/organization/persons/" + id, value, dataAccess);
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
     }
 
@@ -334,10 +334,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         {
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
             fixture.Fault.Mode = mode;
-            using var response = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "不应提交" });
+            using var response = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "不应提交" }, dataAccess: http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
             fixture.Fault.Mode = "";
-            var actual = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person));
+            var actual = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person), http.Declaration("organization.person.read", http.Organization("persons")));
             Assert.Equal("原姓名", actual.GetProperty("fields").GetProperty("ENAME").GetString());
             var records = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={Id(person)}");
             Assert.Equal(1, records.GetProperty("total").GetInt32());
@@ -345,14 +345,14 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         foreach (var invalid in new object[] { new { UpdatedBy = "client-actor" }, new { CompanyId = "missing-company" }, new { BirthDate = "2999-01-01" }, new { EmploymentStartedAt = "2026-09-10T00:00:00Z", EmploymentEndedAt = "2026-09-09T00:00:00Z" } })
         {
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-            using var response = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), invalid);
+            using var response = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), invalid, dataAccess: http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
             var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
             Assert.NotEmpty(problem.GetProperty("fieldErrors").EnumerateArray());
         }
         // 启停不属于普通编辑字段；客户端塞入的字段不会扩大事件白名单。
-        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), new { PersonNo = "OTHER", IsEnabled = false, Arbitrary = "ignored" });
-        var unchanged = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person));
+        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), new { PersonNo = "OTHER", IsEnabled = false, Arbitrary = "ignored" }, http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
+        var unchanged = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person), http.Declaration("organization.person.read", http.Organization("persons")));
         Assert.True(unchanged.GetProperty("fields").GetProperty("IsEnabled").GetBoolean());
         Assert.Equal("FAIL-UPDATE", unchanged.GetProperty("fields").GetProperty("PersonNo").GetString());
         var final = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={Id(person)}");
@@ -377,12 +377,12 @@ public sealed class BusinessAuditSqlServerHttpApiTests
                 await release.Task.WaitAsync(token);
             }
         };
-        var first = FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "第一位" });
+        var first = FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "第一位" }, dataAccess: http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
         Task<HttpResponseMessage>? second = null;
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            second = FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "第二位" });
+            second = FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "第二位" }, dataAccess: http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
             // 第一笔仍未保存；第二请求已到数据库边界，再给出真实 SQL 执行窗口。
             await fixture.Fault.ConcurrentCommand.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await Task.Delay(200);
@@ -399,7 +399,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var secondChange = Assert.Single(changes, c => c.GetProperty("after").GetProperty("value").GetString() == "第二位");
         Assert.Equal("起点", firstChange.GetProperty("before").GetProperty("value").GetString());
         Assert.Equal("第一位", secondChange.GetProperty("before").GetProperty("value").GetString());
-        var final = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person));
+        var final = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person), http.Declaration("organization.person.read", http.Organization("persons")));
         Assert.Equal("第二位", final.GetProperty("fields").GetProperty("ENAME").GetString());
     }
 
@@ -839,7 +839,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.True(control.AfterMutationBlocked);
 
         control.Mode = ObjectOperationExtensionProbeMode.InvalidFinalInput;
-        using var invalid = await FeatureHttpTestRequests.SendAsync(
+        using var invalid = await http.SendButtonAsync(
             client,
             http.Organization("persons", "create", "list.pageActions"),
             HttpMethod.Post,
@@ -848,7 +848,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
 
         control.Mode = ObjectOperationExtensionProbeMode.Reject;
-        using var rejected = await FeatureHttpTestRequests.SendAsync(
+        using var rejected = await http.SendButtonAsync(
             client,
             http.Organization("persons", "create", "list.pageActions"),
             HttpMethod.Post,
@@ -857,7 +857,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
 
         control.Mode = ObjectOperationExtensionProbeMode.ProtectedInput;
-        using var protectedFailure = await FeatureHttpTestRequests.SendAsync(
+        using var protectedFailure = await http.SendButtonAsync(
             client,
             http.Organization("persons", "create", "list.pageActions"),
             HttpMethod.Post,
@@ -866,7 +866,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.InternalServerError, protectedFailure.StatusCode);
 
         control.Mode = ObjectOperationExtensionProbeMode.AfterFailure;
-        using var afterFailure = await FeatureHttpTestRequests.SendAsync(
+        using var afterFailure = await http.SendButtonAsync(
             client,
             http.Organization("persons", "create", "list.pageActions"),
             HttpMethod.Post,
@@ -916,7 +916,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         stamps.Begin(fixture.ActorId, auditStart);
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
 
-        var request = FeatureHttpTestRequests.SendAsync(
+        var request = http.SendButtonAsync(
             client,
             http.Organization("companies", "create", "list.pageActions"),
             HttpMethod.Post,
@@ -1012,7 +1012,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             http.Organization("companies", "edit", "list.rowActions"),
             HttpMethod.Put,
             "/api/organization/companies/" + Id(company),
-            new { ENAME = "不应提交的公司名" });
+            new { ENAME = "不应提交的公司名" }, dataAccess: http.Declaration("organization.company.update", http.Organization("companies", "edit", "list.rowActions")));
         Assert.Equal(HttpStatusCode.BadRequest, disabled.StatusCode);
         Assert.Equal("Organization.Person.DepartmentDisabled", control.NestedPersonResult?.Error?.Code);
 
@@ -1035,7 +1035,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             http.Organization("companies", "edit", "list.rowActions"),
             HttpMethod.Put,
             "/api/organization/companies/" + Id(company),
-            new { ENAME = "仍不应提交" });
+            new { ENAME = "仍不应提交" }, dataAccess: http.Declaration("organization.company.update", http.Organization("companies", "edit", "list.rowActions")));
         Assert.Equal(HttpStatusCode.BadRequest, deleted.StatusCode);
         Assert.Equal("Organization.Person.DepartmentNotFound", control.NestedPersonResult?.Error?.Code);
         control.Mode = ObjectOperationExtensionProbeMode.None;
@@ -1068,7 +1068,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             client,
             http.Organization("companies", "delete", "list.rowActions"),
             HttpMethod.Delete,
-            "/api/organization/companies/" + companyId);
+            "/api/organization/companies/" + companyId, dataAccess: http.Declaration("organization.company.delete", http.Organization("companies", "delete", "list.rowActions")));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("StandardCrud.NotFound", control.RepeatedDeleteResult?.Error?.Code);
@@ -1119,7 +1119,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             http.Organization("companies", "edit", "list.rowActions"),
             HttpMethod.Put,
             "/api/organization/companies/" + Id(company),
-            new { ENAME = "不应提交的公司名" });
+            new { ENAME = "不应提交的公司名" }, dataAccess: http.Declaration("organization.company.update", http.Organization("companies", "edit", "list.rowActions")));
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         control.Mode = ObjectOperationExtensionProbeMode.None;
@@ -1172,7 +1172,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             http.Organization("companies", "edit", "list.rowActions"),
             HttpMethod.Put,
             "/api/organization/companies/" + Id(company),
-            new { ENAME = "跟踪链已提交" });
+            new { ENAME = "跟踪链已提交" }, dataAccess: http.Declaration("organization.company.update", http.Organization("companies", "edit", "list.rowActions")));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(control.NestedPersonResult?.Succeeded);
@@ -1212,7 +1212,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         {
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
             fixture.Fault.Mode = mode;
-            using var failure = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", new
+            using var failure = await http.SendButtonAsync(client, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", new
                 { PersonNo = "ROLLBACK-" + mode, ENAME = "故障人员", EmploymentStatus = "Active", IsEnabled = true });
             Assert.True(failure.StatusCode == HttpStatusCode.InternalServerError, mode);
             fixture.Fault.Mode = "";
@@ -1222,7 +1222,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             Assert.Equal(0, records.GetProperty("total").GetInt32());
         }
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        using var invalid = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", new { PersonNo = "INVALID", ENAME = "校验失败", CompanyId = "absent", EmploymentStatus = "Active", IsEnabled = true });
+        using var invalid = await http.SendButtonAsync(client, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", new { PersonNo = "INVALID", ENAME = "校验失败", CompanyId = "absent", EmploymentStatus = "Active", IsEnabled = true });
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
         Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), "/api/audit/business-changes")).GetProperty("total").GetInt32());
     }
@@ -1246,7 +1246,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         using var writer = actor.Client;
         var first = await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "QUERY-A", ENAME = "管理员创建", EmploymentStatus = "Active", IsEnabled = true });
         var second = await http.CreateButtonAsync(writer, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "QUERY-B", ENAME = "维护者创建", EmploymentStatus = "Active", IsEnabled = true });
-        using var deniedUpdate = await FeatureHttpTestRequests.SendAsync(writer, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(second), new { ENAME = "无权编辑" });
+        using var deniedUpdate = await FeatureHttpTestRequests.SendAsync(writer, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(second), new { ENAME = "无权编辑" }, dataAccess: http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
         Assert.Equal(HttpStatusCode.Forbidden, deniedUpdate.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(writer, http.Audit(), HttpMethod.Get, "/api/audit/business-changes")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/audit/business-changes")).StatusCode);
@@ -1277,7 +1277,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(Id(first), Assert.Single(degraded.GetProperty("items").EnumerateArray()).GetProperty("TargetId").GetString());
         fixture.Fault.Mode = "";
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
-        Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{Id(second)}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{Id(second)}", dataAccess: http.Declaration("organization.person.delete", http.Organization("persons", "delete", "list.rowActions")))).StatusCode);
         var retained = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes/{secondRecord.GetProperty("EID").GetString()}");
         Assert.Equal(Id(second), retained.GetProperty("fields").GetProperty("TargetId").GetString());
         Assert.Equal(JsonValueKind.Null, retained.GetProperty("fields").GetProperty("TargetId_DisplayValue").ValueKind);

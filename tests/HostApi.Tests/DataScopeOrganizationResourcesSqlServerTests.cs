@@ -50,7 +50,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         {
             foreach (var target in targets)
             {
-                using var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+                using var response = await http.SendButtonAsync(ordinary,
                     http.Organization(target.Tab, "create", "list.pageActions"), HttpMethod.Post,
                     "/api/organization/" + target.Tab, CreatePayload(target.Tab));
                 Assert.True(response.StatusCode == HttpStatusCode.Forbidden,
@@ -62,7 +62,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         {
             foreach (var target in targets)
             {
-                using (var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+                using (var response = await http.SendButtonAsync(ordinary,
                     http.Organization(target.Tab, "create", "list.pageActions"), HttpMethod.Post,
                     "/api/organization/" + target.Tab, CreatePayload(target.Tab)))
                     Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -71,7 +71,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
                     $"/api/organization/{target.Tab}/{target.Id}"))
                     Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
             }
-            using (var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+            using (var response = await http.SendButtonAsync(ordinary,
                 http.Organization("departments", "create", "list.pageActions"), HttpMethod.Post,
                 "/api/organization/departments", new { ECODE = "INVALID-234", ENAME = "无公司部门", SortOrder = "0100" }))
                 Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -81,7 +81,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         {
             foreach (var target in targets)
             {
-                using var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+                using var response = await http.SendButtonAsync(ordinary,
                     http.Organization(target.Tab, "edit", "list.rowActions"), HttpMethod.Put,
                     $"/api/organization/{target.Tab}/{target.Id}", new { ENAME = "仍有读取依赖" });
                 Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -92,7 +92,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         {
             foreach (var target in targets)
             {
-                using var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+                using var response = await http.SendButtonAsync(ordinary,
                     http.Organization(target.Tab, "edit", "list.rowActions"), HttpMethod.Put,
                     $"/api/organization/{target.Tab}/{target.Id}", new { ENAME = "读取和编辑关闭-" + target.Tab });
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -103,7 +103,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         {
             foreach (var target in targets)
             {
-                using var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+                using var response = await http.SendButtonAsync(ordinary,
                     http.Organization(target.Tab, "edit", "list.rowActions"), HttpMethod.Put,
                     $"/api/organization/{target.Tab}/{target.Id}", new { ENAME = "编辑恢复仍拒绝" });
                 Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -114,7 +114,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         {
             foreach (var target in new[] { targets[0], targets[2] })
             {
-                using var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+                using var response = await http.SendButtonAsync(ordinary,
                     http.Organization(target.Tab, "delete", "list.rowActions"), HttpMethod.Delete,
                     $"/api/organization/{target.Tab}/{target.Id}");
                 Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -125,7 +125,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         {
             foreach (var target in new[] { targets[0], targets[2] })
             {
-                using var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+                using var response = await http.SendButtonAsync(ordinary,
                     http.Organization(target.Tab, "delete", "list.rowActions"), HttpMethod.Delete,
                     $"/api/organization/{target.Tab}/{target.Id}");
                 Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -134,11 +134,11 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         await fixture.RestartWithActionsAsync(new Dictionary<string, bool> { ["read"] = false, ["delete"] = false });
         using (var ordinary = await LoginCurrentAsync())
         {
-            using (var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+            using (var response = await http.SendButtonAsync(ordinary,
                 http.Organization("companies", "delete", "list.rowActions"), HttpMethod.Delete,
                 "/api/organization/companies/" + company))
                 Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            using (var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+            using (var response = await http.SendButtonAsync(ordinary,
                 http.Organization("positions", "delete", "list.rowActions"), HttpMethod.Delete,
                 "/api/organization/positions/" + position))
                 Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -224,12 +224,12 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         foreach (var target in new[] { (Tab: "departments", Id: disposableDepartment),
                      (Tab: "companies", Id: disposableCompany), (Tab: "positions", Id: disposablePosition) })
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+            using var response = await http.SendButtonAsync(ordinary,
                 http.Organization(target.Tab, "delete", "list.rowActions"), HttpMethod.Delete,
                 $"/api/organization/{target.Tab}/{target.Id}");
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+        using (var response = await http.SendButtonAsync(ordinary,
             http.Organization("companies", "delete", "list.rowActions"), HttpMethod.Delete,
             "/api/organization/companies/" + company))
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);

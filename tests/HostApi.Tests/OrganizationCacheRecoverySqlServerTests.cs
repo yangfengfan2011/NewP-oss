@@ -43,7 +43,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
 
         cache.Arm(!unknownCommit);
         acknowledgement.Enabled = unknownCommit;
-        using var write = await SendAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
+        using var write = await http.SendButtonAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/companies/{prepared.Company}", new { ENAME = "已保存等待恢复" });
         await AssertFailureAsync(write);
         await cache.ReloadEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -85,7 +85,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         // 实际子树停用与会话撤销已经共同提交，即使发布失败，也不得在恢复/重新启用后复活。
         cache.Arm(!unknownCommit);
         acknowledgement.Enabled = unknownCommit;
-        using var disable = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+        using var disable = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/departments/{prepared.Department}", new { IsEnabled = false });
         await AssertFailureAsync(disable);
         await cache.ReloadEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));

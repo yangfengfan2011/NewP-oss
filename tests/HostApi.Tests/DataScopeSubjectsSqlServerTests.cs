@@ -217,7 +217,7 @@ public sealed class DataScopeSubjectsSqlServerTests(Xunit.Abstractions.ITestOutp
         await SaveAndRead(HttpStatusCode.OK);
         rule = rule with { Subjects = [rule.Subjects[0], rule.Subjects[1] with { Type = "department", SubjectId = department }] };
         await SaveAndRead(HttpStatusCode.OK);
-        using (var moved = await FeatureHttpTestRequests.SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var moved = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{person}", new { CompanyId = company, DepartmentId = child }))
             Assert.True(moved.IsSuccessStatusCode, await moved.Content.ReadAsStringAsync());
         // 同一个 Cookie 在 owner 发布后匹配新的直属部门，默认不匹配祖先。

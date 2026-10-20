@@ -40,7 +40,7 @@ public sealed class DataScopePersonMutationSqlServerTests
             "/api/authorization/data-scope/rules/PersonReadFaultRule", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
-            $"/api/organization/persons/{id}", new { ENAME = "不得误报成功" }))
+            $"/api/organization/persons/{id}", new { ENAME = "不得误报成功" }, dataAccess: http.Declaration("organization.person.update", edit)))
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }
 
@@ -66,7 +66,7 @@ public sealed class DataScopePersonMutationSqlServerTests
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var payload = new { PersonNo = "WRITE-FAULT", ENAME = "故障人员", EmploymentStatus = "Active", IsEnabled = true };
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
-            "/api/organization/persons", payload))
+            "/api/organization/persons", payload, dataAccess: http.Declaration("organization.person.create", create)))
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         var created = await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons", payload);
         Assert.NotNull(created);
@@ -110,7 +110,7 @@ public sealed class DataScopePersonMutationSqlServerTests
             }
         };
         var first = FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
-            $"/api/organization/persons/{id}", new { ENAME = "判权后" });
+            $"/api/organization/persons/{id}", new { ENAME = "判权后" }, dataAccess: http.Declaration("organization.person.update", edit));
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -127,10 +127,10 @@ public sealed class DataScopePersonMutationSqlServerTests
         using (var response = await first)
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
-            $"/api/organization/persons/{id}", new { ENAME = "后来请求" }))
+            $"/api/organization/persons/{id}", new { ENAME = "后来请求" }, dataAccess: http.Declaration("organization.person.update", edit)))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get,
-            $"/api/organization/persons/{id}"))
+            $"/api/organization/persons/{id}", dataAccess: http.Declaration("organization.person.read", read)))
         {
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Contains("判权后", await response.Content.ReadAsStringAsync());
@@ -181,19 +181,19 @@ public sealed class DataScopePersonMutationSqlServerTests
         await fixture.RestartWithActionAsync("edit", false);
         using (var ordinary = await LoginCurrentAsync())
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
-            $"/api/organization/persons/{id}", new { ENAME = "仍不可编辑" }))
+            $"/api/organization/persons/{id}", new { ENAME = "仍不可编辑" }, dataAccess: http.Declaration("organization.person.update", edit)))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
         await fixture.RestartWithActionsAsync(new Dictionary<string, bool> { ["read"] = false, ["edit"] = false });
         using (var ordinary = await LoginCurrentAsync())
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
-            $"/api/organization/persons/{id}", new { ENAME = "读取关闭可编辑" }))
+            $"/api/organization/persons/{id}", new { ENAME = "读取关闭可编辑" }, dataAccess: http.Declaration("organization.person.update", edit)))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         await fixture.RestartWithActionAsync("read", false);
         using (var ordinary = await LoginCurrentAsync())
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
-            $"/api/organization/persons/{id}", new { ENAME = "编辑重新启用" }))
+            $"/api/organization/persons/{id}", new { ENAME = "编辑重新启用" }, dataAccess: http.Declaration("organization.person.update", edit)))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
 
         var createRule = rule with { Id = "PersonCreateSwitchRule", RootId = "PersonCreateSwitchRule",
@@ -207,36 +207,36 @@ public sealed class DataScopePersonMutationSqlServerTests
         var createPayload = new { PersonNo = "WRITE-CREATE-SWITCH", ENAME = "开关创建", EmploymentStatus = "Active", IsEnabled = true };
         using (var ordinary = await LoginCurrentAsync())
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
-            "/api/organization/persons", createPayload))
+            "/api/organization/persons", createPayload, dataAccess: http.Declaration("organization.person.create", create)))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         await fixture.RestartWithActionAsync("create", false);
         using (var ordinary = await LoginCurrentAsync())
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
-            "/api/organization/persons", createPayload))
+            "/api/organization/persons", createPayload, dataAccess: http.Declaration("organization.person.create", create)))
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         await fixture.RestartWithActionAsync("delete", false);
         using (var ordinary = await LoginCurrentAsync())
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
-            $"/api/organization/persons/{id}"))
+            $"/api/organization/persons/{id}", dataAccess: http.Declaration("organization.person.delete", delete)))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         await fixture.RestartWithActionAsync("read", false);
         using (var ordinary = await LoginCurrentAsync())
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
-            $"/api/organization/persons/{id}"))
+            $"/api/organization/persons/{id}", dataAccess: http.Declaration("organization.person.delete", delete)))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         await fixture.RestartWithActionsAsync(new Dictionary<string, bool> { ["read"] = false, ["delete"] = false });
         using (var ordinary = await LoginCurrentAsync())
         {
             using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
-                $"/api/organization/persons/{boundId}"))
+                $"/api/organization/persons/{boundId}", dataAccess: http.Declaration("organization.person.delete", delete)))
             {
                 Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
                 var error = await response.Content.ReadFromJsonAsync<JsonElement>();
                 Assert.Equal("Organization.Person.DeleteBlockedByUserBinding", error.GetProperty("code").GetString());
             }
             using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
-                $"/api/organization/persons/{id}"))
+                $"/api/organization/persons/{id}", dataAccess: http.Declaration("organization.person.delete", delete)))
                 Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
 

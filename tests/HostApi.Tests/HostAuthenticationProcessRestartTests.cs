@@ -94,7 +94,7 @@ public sealed partial class HostAuthenticationProcessRestartTests
                 "/api/organization/departments", new { ECODE = "RESTART-D", ENAME = "重启部门", CompanyId = company, SortOrder = "0100" }));
             var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(client, http.Organization("persons", "create", "list.pageActions"),
                 "/api/organization/persons", new { PersonNo = "RESTART-P", ENAME = "重启人员", CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
-            await BusinessAuditSqlServerHttpApiTests.UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), person, new { ENAME = "持久姓名" });
+            await BusinessAuditSqlServerHttpApiTests.UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), person, new { ENAME = "持久姓名" }, http.Declaration("organization.person.update", http.Organization("persons", "edit", "list.rowActions")));
             using var roleResponse = await http.SendButtonAsync(client, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "restart-reader", Name = "重启查询职责" });
             Assert.Equal(HttpStatusCode.Created, roleResponse.StatusCode);
             var roleId = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();

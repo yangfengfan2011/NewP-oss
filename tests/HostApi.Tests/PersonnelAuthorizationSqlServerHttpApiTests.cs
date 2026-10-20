@@ -52,13 +52,13 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
             await AssertStatusAsync(client.GetAsync("/api/authorization/permissions"), HttpStatusCode.NotFound);
             foreach (var route in new[] { "/api/identity/accounts", "/api/authorization/roles", "/api/audit/business-changes" })
                 await AssertStatusAsync(client.GetAsync(route), HttpStatusCode.Forbidden);
-            await AssertStatusAsync(SendAsync(client, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{person}"), HttpStatusCode.Forbidden);
+            await AssertStatusAsync(http.SendButtonAsync(client, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{person}"), HttpStatusCode.Forbidden);
             await AssertStatusAsync(http.SendButtonAsync(client, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put, $"/api/organization/persons/{person}/user-binding", new { UserId = reader.AccountId, Reason = "不应绑定" }), HttpStatusCode.Forbidden);
             foreach (var (route, id) in new[] { ("companies", company), ("departments", a), ("positions", position) })
             {
-                await AssertStatusAsync(SendAsync(client, http.Organization(route, "create", "list.pageActions"), HttpMethod.Post, $"/api/organization/{route}", new { ECODE = "DENIED", ENAME = "禁止" }), HttpStatusCode.Forbidden);
-                await AssertStatusAsync(SendAsync(client, http.Organization(route, "edit", "list.rowActions"), HttpMethod.Put, $"/api/organization/{route}/{id}", new { ENAME = "禁止" }), HttpStatusCode.Forbidden);
-                await AssertStatusAsync(SendAsync(client, http.Organization(route, "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/{route}/{id}"), HttpStatusCode.Forbidden);
+                await AssertStatusAsync(http.SendButtonAsync(client, http.Organization(route, "create", "list.pageActions"), HttpMethod.Post, $"/api/organization/{route}", new { ECODE = "DENIED", ENAME = "禁止" }), HttpStatusCode.Forbidden);
+                await AssertStatusAsync(http.SendButtonAsync(client, http.Organization(route, "edit", "list.rowActions"), HttpMethod.Put, $"/api/organization/{route}/{id}", new { ENAME = "禁止" }), HttpStatusCode.Forbidden);
+                await AssertStatusAsync(http.SendButtonAsync(client, http.Organization(route, "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/{route}/{id}"), HttpStatusCode.Forbidden);
             }
             await AssertStatusAsync(http.SendButtonAsync(client, http.Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "denied", ENAME = "禁止" }), HttpStatusCode.Forbidden);
             await AssertStatusAsync(http.SendButtonAsync(client, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{maintainer.RoleId}", new { positions = Array.Empty<string>() }), HttpStatusCode.Forbidden);

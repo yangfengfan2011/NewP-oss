@@ -30,7 +30,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         using var old = await fixture.LoginAsync("moving", actor.Password);
         foreach (var validParent in new[] { target, prepared.Department })
         {
-            using var changed = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+            using var changed = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
                 $"/api/organization/departments/{child}", new { ParentDepartmentId = validParent });
             Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await old.GetAsync("/api/auth/current-user")).StatusCode);
@@ -39,22 +39,22 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         }
         await SetOrganizationStateAsync(admin, http, "departments", prepared.Department, false);
 
-        using (var create = await SendAsync(admin, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post,
+        using (var create = await http.SendButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post,
             "/api/organization/persons", new { PersonNo = "BLOCKED", ENAME = "不应调入", CompanyId = prepared.Company, DepartmentId = leaf, EmploymentStatus = "Active", IsEnabled = true }))
             await AssertTargetProblemAsync(create, "Organization.Person.DepartmentChainDisabled", "DepartmentId");
-        using (var move = await SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var move = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{prepared.Person}", new { DepartmentId = leaf }))
             await AssertTargetProblemAsync(move, "Organization.Person.DepartmentChainDisabled", "DepartmentId");
-        using (var reparent = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var reparent = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/departments/{target}", new { ParentDepartmentId = leaf }))
             await AssertTargetProblemAsync(reparent, "Organization.Department.ParentChainDisabled", "ParentDepartmentId");
 
         // 标准Drawer可能回传未改变的父级；普通维护和停复均不能因此变成调入校验。
-        using (var unchanged = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var unchanged = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/departments/{child}", new { ENAME = "停用范围内维护", ParentDepartmentId = prepared.Department }))
             Assert.Equal(HttpStatusCode.OK, unchanged.StatusCode);
         await UpdateAsync(admin, http, actor.Person, new { ENAME = "保持原归属" });
-        using (var moveOut = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var moveOut = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/departments/{child}", new { ParentDepartmentId = target }))
             Assert.True(moveOut.IsSuccessStatusCode, await moveOut.Content.ReadAsStringAsync());
         var view = await fixture.Services.GetRequiredService<IOrganizationQuery>().ReadAsync();
@@ -74,15 +74,15 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             "/api/organization/companies", new { ECODE = "OTHER", ENAME = "另一公司", SortOrder = "02" }));
         var otherDepartment = await CreateDepartmentAsync(admin, http, otherCompany, "OTHER");
         await SetOrganizationStateAsync(admin, http, "companies", prepared.Company, false);
-        using (var rootMove = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var rootMove = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/departments/{child}", new { ParentDepartmentId = (string?)null }))
             await AssertTargetProblemAsync(rootMove, "Organization.Department.CompanyDisabled", "CompanyId", HttpStatusCode.Conflict);
         await UpdateAsync(admin, http, actor.Person, new { CompanyId = otherCompany, DepartmentId = otherDepartment });
         Assert.Equal(otherCompany, (await fixture.Services.GetRequiredService<IOrganizationQuery>().ReadAsync()).FindByAccount(actor.Account)!.Company!["EID"]);
-        using (var crossCompany = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var crossCompany = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/departments/{child}", new { CompanyId = otherCompany }))
             Assert.Equal(HttpStatusCode.BadRequest, crossCompany.StatusCode);
-        using (var delete = await SendAsync(admin, http.Organization("companies", "delete", "list.rowActions"), HttpMethod.Delete,
+        using (var delete = await http.SendButtonAsync(admin, http.Organization("companies", "delete", "list.rowActions"), HttpMethod.Delete,
             $"/api/organization/companies/{prepared.Company}"))
         {
             Assert.Equal(HttpStatusCode.Conflict, delete.StatusCode);
@@ -120,7 +120,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             writeFault.Enabled = stage == "write";
             writeFault.Hits = 0;
             var id = resource == "companies" ? prepared.Company : prepared.Department;
-            using var failed = await SendAsync(admin, http.Organization(resource, "edit", "list.rowActions"), HttpMethod.Put,
+            using var failed = await http.SendButtonAsync(admin, http.Organization(resource, "edit", "list.rowActions"), HttpMethod.Put,
                 $"/api/organization/{resource}/{id}", new { IsEnabled = false });
             Assert.True(failed.StatusCode == HttpStatusCode.InternalServerError, $"{resource}/{stage}: {failed.StatusCode}; hits={writeFault.Hits}");
             control.FailAfterRevocation = false;
@@ -257,7 +257,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
 
     private static async Task SetOrganizationStateAsync(HttpClient admin, FeatureHttpTestRequests http, string resource, string id, bool enabled)
     {
-        using var response = await SendAsync(admin, http.Organization(resource, "edit", "list.rowActions"), HttpMethod.Put,
+        using var response = await http.SendButtonAsync(admin, http.Organization(resource, "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/{resource}/{id}", new { IsEnabled = enabled });
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
     }

@@ -78,7 +78,7 @@ public sealed class StandardReadExecutionSqlServerTests
 
         async Task<string> CreatePositionAsync(string name)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, http.Organization("positions", "create", "list.pageActions"),
+            using var response = await http.SendButtonAsync(admin, http.Organization("positions", "create", "list.pageActions"),
                 HttpMethod.Post, "/api/organization/positions", new { ENAME = name });
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
             return BusinessAuditSqlServerHttpApiTests.Id(JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync()));

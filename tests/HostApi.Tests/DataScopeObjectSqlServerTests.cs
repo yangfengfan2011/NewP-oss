@@ -182,7 +182,7 @@ public sealed class DataScopeObjectSqlServerTests
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, allow))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary,
+        using (var response = await http.SendButtonAsync(ordinary,
             http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var roleManage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "authorization.role.authorize");
@@ -259,7 +259,7 @@ public sealed class DataScopeObjectSqlServerTests
         var audit = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(),
             $"/api/audit/business-changes?TargetId=organization.person%2F{id}&EventType=dataScope.object.changed");
         Assert.Equal(9, audit.GetProperty("items").GetArrayLength());
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin,
+        using (var response = await http.SendButtonAsync(admin,
             http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var scope = fixture.Services.CreateScope())

@@ -44,7 +44,7 @@ public sealed class DataScopeExplanationSqlServerTests
         Assert.DoesNotContain(result.Actions, item => item.Key == "create");
         using (var response = await FeatureHttpTestRequests.SendAsync(user, http.Organization("persons"), HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(user, http.Organization("persons", "edit", "detail.pageActions"), HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(user, http.Organization("persons", "edit", "detail.pageActions"), HttpMethod.Put,
             $"/api/organization/persons/{id}", new { ENAME = "不应保存" }))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(user, http.Organization("persons"), HttpMethod.Get, explanation))

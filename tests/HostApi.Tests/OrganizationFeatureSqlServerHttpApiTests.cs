@@ -28,7 +28,7 @@ public sealed class OrganizationFeatureSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.Forbidden, wrongRead.StatusCode);
             using var wrongUpdate = await SendAsync(user, create, HttpMethod.Put, "/api/organization/persons/" + id, new { ENAME = "不应更新" });
             Assert.Equal(HttpStatusCode.Forbidden, wrongUpdate.StatusCode);
-            using var ungrantedUpdate = await SendAsync(user, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + id, new { ENAME = "未授权编辑" });
+            using var ungrantedUpdate = await http.SendButtonAsync(user, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + id, new { ENAME = "未授权编辑" });
             Assert.Equal(HttpStatusCode.Forbidden, ungrantedUpdate.StatusCode);
             foreach (var path in new[] { "/api/organization/person-lookups/companies", "/api/organization/positions/options" })
             {

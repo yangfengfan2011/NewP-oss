@@ -118,7 +118,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             ? client.PostAsJsonAsync(path, new { ECODE = "admitted", Password = password })
             : client.PostAsJsonAsync(path, new { CurrentPassword = password, NewPassword = "Changed-secure-123!", ExpectedRevision = revision });
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
-        var interruption = SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+        var interruption = http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/departments/{prepared.Department}", new { IsEnabled = false });
         await mutationEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
         if (creationFirst) Assert.False(interruption.IsCompleted);
@@ -129,7 +129,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         }
         if (restoreBeforeCreation)
         {
-            using var restored = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+            using var restored = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
                 $"/api/organization/departments/{prepared.Department}", new { IsEnabled = true });
             Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
         }
@@ -148,7 +148,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             .CountAsync(row => EF.Property<string>(row, "AccountEID") == prepared.Account && EF.Property<DateTime?>(row, "RevokedAt") == null));
         control.BeforeExecute = null;
         control.AfterRegister = null;
-        using var enabled = await SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
+        using var enabled = await http.SendButtonAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/departments/{prepared.Department}", new { IsEnabled = true });
         Assert.Equal(HttpStatusCode.OK, enabled.StatusCode);
         using var fresh = fixture.CreateClient();
@@ -168,7 +168,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         {
             control.FailAfterRevocation = stage == "revoke";
             fixture.Fault.Mode = stage == "commit" ? "commit" : "";
-            using var failed = await SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+            using var failed = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
                 $"/api/organization/persons/{prepared.Person}", new { CompanyId = (string?)null, DepartmentId = (string?)null });
             Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
             control.FailAfterRevocation = false;

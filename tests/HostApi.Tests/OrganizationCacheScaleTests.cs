@@ -103,7 +103,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
 
         await Measure("person-local-update", async () =>
         {
-            using var response = await SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+            using var response = await http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
                 $"/api/organization/persons/{prepared.Person}", new { ENAME = "局部更新档案" });
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         });
@@ -119,7 +119,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
 
         commitWindow.Enabled = true;
         var writeWatch = Stopwatch.StartNew();
-        var write = SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
+        var write = http.SendButtonAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{prepared.Person}", new { ENAME = "提交发布等待" });
         await commitWindow.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var waits = Enumerable.Range(0, 32).Select(async _ =>

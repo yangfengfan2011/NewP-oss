@@ -39,8 +39,10 @@ function HistoryOutputInput({ options, context }: { options: ObjectHistoryResour
         throw new StandardCrudRequestError('操作履历来源已变化。', 409, {}, { reasonKey: 'ObjectHistory.SourceChanged' });
       return readObjectHistoryItem(row.historyItem).id;
     });
+    // 输入可引用全目录读取，履历输出仍只消费所属列表的正式声明，不能借其他模块的同名动作。
+    const declarations = context.dataAccessDeclarations?.filter(declaration => declaration.viewKey === options.listViewKey);
     return <ObjectHistoryOutput target={target} featurePosition={context.featurePosition} filter={objectHistoryOutputQuery(context.listQuery)}
-      selectedIds={ids} dataAccessDeclarations={context.dataAccessDeclarations} fetcher={options.fetcher} />;
+      selectedIds={ids} dataAccessDeclarations={declarations} fetcher={options.fetcher} />;
   } catch (error) { return <Alert type="error" message={formatRequestError(error, t)} />; }
 }
 

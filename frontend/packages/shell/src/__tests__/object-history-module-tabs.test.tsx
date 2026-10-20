@@ -247,8 +247,18 @@ it('opens the readonly output preview with no selection and prints all using the
   const printAll = () => [...document.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '打印全部');
   await vi.waitFor(() => expect(printAll()).toBeDefined());
   expect([...document.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '打印选中')?.disabled).toBe(true);
-  await act(async () => printAll()!.click());
-  await vi.waitFor(() => expect(document.querySelector('.ant-modal-body table')?.textContent).toContain('列表操作者'));
+  const outputCandidates = metadata.manifest.modules.flatMap(module => module.dataAccess ?? [])
+    .filter(declaration => declaration.surface === 'outputActions' && declaration.actionKey === 'printAll');
+  // 输入目录包含其他真实模块的同名输出；履历必须仍选择所属View的唯一正式来源。
+  expect(new Set(outputCandidates.map(declaration => declaration.viewKey)).size).toBeGreaterThan(1);
+  const clickedPrint = printAll()!;
+  const disabledAtClick = clickedPrint.disabled;
+  expect(disabledAtClick).toBe(false);
+  await act(async () => clickedPrint.click());
+  await vi.waitFor(() => expect(document.querySelector('.ant-modal-body table')?.textContent, JSON.stringify({ disabledAtClick, candidateIds: outputCandidates.map(declaration => declaration.id),
+    printRequests: requests.filter(request => new URL(request.url).pathname.endsWith('/history/print')).map(request => request.method),
+    modal: document.querySelector('.ant-modal-body')?.innerHTML,
+  })).toContain('列表操作者'));
   const request = requests.find(request => new URL(request.url).pathname.endsWith('/history/print'))!;
   expect(request.headers.get('X-NewP-Feature')).toBe(positions.historyPosition);
   expectFixedReadHistoryRequests(metadata, requests);

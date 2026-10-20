@@ -1,5 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using ICP.Platform.Organization.Contracts;
+using ICP.Platform.Persistence.EfCore;
+using Microsoft.EntityFrameworkCore;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Testing;
@@ -110,7 +114,9 @@ public sealed class OrganizationWriteExecutionSqlServerTests
                 "companies" => new { ECODE = "CHANGE310-C", ENAME = "更新删除公司", SortOrder = "0100" },
                 "departments" => new { CompanyId = company!, ECODE = "CHANGE310-D", ENAME = "更新删除部门", SortOrder = "0100" },
                 "positions" => new { ENAME = "更新删除岗位" },
-                _ => new { PersonNo = "CHANGE310-P", ENAME = "更新删除人员", EmploymentStatus = "FullTime", IsEnabled = true }
+                _ => new { PersonNo = "CHANGE310-P", ENAME = "更新删除人员", EmploymentStatus = "FullTime", IsEnabled = true,
+                    CompanyId = company!, DepartmentId = targets.Single(item => item.Tab == "departments").Id,
+                    PositionId = targets.Single(item => item.Tab == "positions").Id }
             };
             var created = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/" + tab, body,
                 http.Declaration(resource + ".create", create));
@@ -129,7 +135,18 @@ public sealed class OrganizationWriteExecutionSqlServerTests
                 http.Declaration(resource + ".update", edit)))
                 Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
         }
-        // 逆序删除保留公司/部门原引用约束，不把正确声明误作业务豁免。
+        var query = fixture.Services.GetRequiredService<IOrganizationQuery>();
+        var beforeBlocked = await SnapshotAsync(fixture);
+        foreach (var (tab, resource, id) in targets.Where(item => item.Tab != "persons"))
+        {
+            var delete = http.Organization(tab, "delete", "list.rowActions");
+            using var blocked = await FeatureHttpTestRequests.SendAsync(admin, delete, HttpMethod.Delete,
+                "/api/organization/" + tab + "/" + id, dataAccess: http.Declaration(resource + ".delete", delete));
+            Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+            Assert.Equal(beforeBlocked, await SnapshotAsync(fixture));
+            Assert.Equal("正式更新-" + tab, (await query.ReadAsync()).Find(Kind(resource), id)!["ENAME"]);
+        }
+        // 真实关联移除后才允许逆序删除，每次成功都更新同一组织缓存。
         foreach (var (tab, resource, id) in targets.AsEnumerable().Reverse())
         {
             var delete = http.Organization(tab, "delete", "list.rowActions");
@@ -142,7 +159,21 @@ public sealed class OrganizationWriteExecutionSqlServerTests
             using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, delete, HttpMethod.Delete, endpoint,
                 dataAccess: http.Declaration(resource + ".delete", delete)))
                 Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+            Assert.Null((await query.ReadAsync()).Find(Kind(resource), id));
         }
+    }
+
+    private static OrganizationRecordKind Kind(string resource) => Enum.Parse<OrganizationRecordKind>(resource.Split('.')[1], true);
+
+    private static async Task<string> SnapshotAsync(BusinessAuditHostFixture fixture)
+    {
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var result = new Dictionary<string, object>();
+        foreach (var model in new[] { "Company", "Department", "Position", "Person", "BusinessChange" })
+            result[model] = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(model)).AsNoTracking()
+                .OrderBy(row => EF.Property<string>(row, "EID")).ToListAsync();
+        return JsonSerializer.Serialize(result);
     }
 
 }

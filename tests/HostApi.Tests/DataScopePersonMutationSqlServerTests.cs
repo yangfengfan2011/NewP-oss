@@ -419,7 +419,7 @@ public sealed class DataScopePersonMutationSqlServerTests
                 : point.Position == read.Position ? "organization.person.read"
                 : point.Position == http.Organization("companies", "create", "list.pageActions").Position ? "organization.company.create"
                 : point.Position == http.Organization("departments", "create", "list.pageActions").Position ? "organization.department.create"
-                : point.Position == save.Position ? null : throw new InvalidOperationException("测试未登记该执行来源。");
+                : point.Position == save.Position ? "authorization.dataScope.save" : throw new InvalidOperationException("测试未登记该执行来源。");
             return execution is null ? null : http.Declaration(execution, point);
         }
         Task<HttpResponseMessage> SendAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object? body = null) =>

@@ -44,7 +44,7 @@
     "viewKey": "organization.company.list",
     "surface": "pageActions",
     "actionKey": "create",
-    "execution": "organization.company.create",
+    "execution": "",
     "resources": [
       "organization.company"
     ],
@@ -55,24 +55,8 @@
       "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.pageActions/action:create",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/surface:treeActions/action:createCompany"
     ],
-    "requirements": [
-      {
-        "role": "candidate",
-        "stage": "submit",
-        "shape": "candidate",
-        "resources": [
-          "organization.company"
-        ],
-        "anyOf": [
-          [
-            "create"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.create"
+    "object": "Company",
+    "businessBinding": "organization.company.create"
   },
   {
     "id": "Organization/view:organization.company.list/pageActions/action:initialize",
@@ -200,37 +184,19 @@
     "viewKey": "organization.company.list",
     "surface": "rowActions",
     "actionKey": "delete",
-    "execution": "organization.company.delete",
+    "execution": "",
     "resources": [
       "organization.company"
     ],
     "actions": [
-      "read",
       "delete"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.rowActions/action:delete",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:delete"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.company"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "delete"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.delete"
+    "object": "Company",
+    "businessBinding": "organization.company.delete"
   },
   {
     "id": "Organization/view:organization.company.list/rowActions/action:edit",
@@ -238,52 +204,19 @@
     "viewKey": "organization.company.list",
     "surface": "rowActions",
     "actionKey": "edit",
-    "execution": "organization.company.update",
+    "execution": "",
     "resources": [
       "organization.company"
     ],
     "actions": [
-      "read",
       "edit"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.rowActions/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:edit"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.company"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.company"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.update"
+    "object": "Company",
+    "businessBinding": "organization.company.update"
   },
   {
     "id": "Organization/view:organization.department.detail/read",
@@ -501,7 +434,7 @@
     "viewKey": "organization.department.list",
     "surface": "pageActions",
     "actionKey": "create",
-    "execution": "organization.department.create",
+    "execution": "",
     "resources": [
       "organization.department"
     ],
@@ -513,24 +446,8 @@
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.pageActions/action:create",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.pageActions/action:create"
     ],
-    "requirements": [
-      {
-        "role": "candidate",
-        "stage": "submit",
-        "shape": "candidate",
-        "resources": [
-          "organization.department"
-        ],
-        "anyOf": [
-          [
-            "create"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.create"
+    "object": "Department",
+    "businessBinding": "organization.department.create"
   },
   {
     "id": "Organization/view:organization.department.list/read",
@@ -646,12 +563,11 @@
     "viewKey": "organization.department.list",
     "surface": "rowActions",
     "actionKey": "delete",
-    "execution": "organization.department.delete",
+    "execution": "",
     "resources": [
       "organization.department"
     ],
     "actions": [
-      "read",
       "delete"
     ],
     "featurePositions": [
@@ -660,25 +576,8 @@
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:delete",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:delete"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.department"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "delete"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.delete"
+    "object": "Department",
+    "businessBinding": "organization.department.delete"
   },
   {
     "id": "Organization/view:organization.department.list/rowActions/action:edit",
@@ -686,12 +585,11 @@
     "viewKey": "organization.department.list",
     "surface": "rowActions",
     "actionKey": "edit",
-    "execution": "organization.department.update",
+    "execution": "",
     "resources": [
       "organization.department"
     ],
     "actions": [
-      "read",
       "edit"
     ],
     "featurePositions": [
@@ -700,40 +598,8 @@
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:edit"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.department"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.department"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.update"
+    "object": "Department",
+    "businessBinding": "organization.department.update"
   },
   {
     "id": "Organization/view:organization.person.detail/lookupBindings/action:organization.companies",
@@ -981,52 +847,19 @@
     "viewKey": "organization.person.detail",
     "surface": "pageActions",
     "actionKey": "edit",
-    "execution": "organization.person.update",
+    "execution": "",
     "resources": [
       "organization.person"
     ],
     "actions": [
-      "read",
       "edit"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:edit"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.update"
+    "object": "Person",
+    "businessBinding": "organization.person.update"
   },
   {
     "id": "Organization/view:organization.person.detail/read",
@@ -1269,7 +1102,7 @@
     "viewKey": "organization.person.list",
     "surface": "pageActions",
     "actionKey": "create",
-    "execution": "organization.person.create",
+    "execution": "",
     "resources": [
       "organization.person"
     ],
@@ -1279,24 +1112,8 @@
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.pageActions/action:create"
     ],
-    "requirements": [
-      {
-        "role": "candidate",
-        "stage": "submit",
-        "shape": "candidate",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "create"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.create"
+    "object": "Person",
+    "businessBinding": "organization.person.create"
   },
   {
     "id": "Organization/view:organization.person.list/read",
@@ -1339,37 +1156,19 @@
     "viewKey": "organization.person.list",
     "surface": "rowActions",
     "actionKey": "delete",
-    "execution": "organization.person.delete",
+    "execution": "",
     "resources": [
       "organization.person"
     ],
     "actions": [
-      "read",
       "delete"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:delete",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:delete"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "delete"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.delete"
+    "object": "Person",
+    "businessBinding": "organization.person.delete"
   },
   {
     "id": "Organization/view:organization.person.list/rowActions/action:disable",
@@ -1393,52 +1192,19 @@
     "viewKey": "organization.person.list",
     "surface": "rowActions",
     "actionKey": "edit",
-    "execution": "organization.person.update",
+    "execution": "",
     "resources": [
       "organization.person"
     ],
     "actions": [
-      "read",
       "edit"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.person"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.update"
+    "object": "Person",
+    "businessBinding": "organization.person.update"
   },
   {
     "id": "Organization/view:organization.person.list/rowActions/action:enable",
@@ -1518,7 +1284,7 @@
     "viewKey": "organization.position.list",
     "surface": "pageActions",
     "actionKey": "create",
-    "execution": "organization.position.create",
+    "execution": "",
     "resources": [
       "organization.position"
     ],
@@ -1528,24 +1294,8 @@
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.pageActions/action:create"
     ],
-    "requirements": [
-      {
-        "role": "candidate",
-        "stage": "submit",
-        "shape": "candidate",
-        "resources": [
-          "organization.position"
-        ],
-        "anyOf": [
-          [
-            "create"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.create"
+    "object": "Position",
+    "businessBinding": "organization.position.create"
   },
   {
     "id": "Organization/view:organization.position.list/read",
@@ -1657,36 +1407,18 @@
     "viewKey": "organization.position.list",
     "surface": "rowActions",
     "actionKey": "delete",
-    "execution": "organization.position.delete",
+    "execution": "",
     "resources": [
       "organization.position"
     ],
     "actions": [
-      "read",
       "delete"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:delete"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.position"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "delete"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.delete"
+    "object": "Position",
+    "businessBinding": "organization.position.delete"
   },
   {
     "id": "Organization/view:organization.position.list/rowActions/action:edit",

@@ -35,7 +35,7 @@ public sealed class OrganizationExecutionContractTests
         });
     }
     [Fact]
-    public void FourResources_ReuseStandardFloorsAndOnlyTheirExistingActionOccurrences()
+    public void FourResources_DeclareOnlyTheirButtonsAndPreserveEachExistingFeatureOccurrence()
     {
         var result = new CanonicalModulePlanCompiler().Compile("organization-writes",
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
@@ -43,31 +43,22 @@ public sealed class OrganizationExecutionContractTests
         foreach (var resource in new[] { "company", "department", "position", "person" })
         foreach (var operation in new[] { "create", "update", "delete" })
         {
-            var execution = "organization." + resource + "." + operation;
-            if (resource == "position" && operation == "update")
-            {
-                var button = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.BusinessBinding == execution && item.Surface == "rowActions");
-                Assert.Equal("Position", button.Object);
-                Assert.Equal(new[] { "edit" }, button.Actions);
-                Assert.Null(button.Requirements);
-                continue;
-            }
-            var entries = result.Plan!.ActionDataAccessCatalog.Where(item => item.Execution == execution).ToArray();
+            var business = "organization." + resource + "." + operation;
+            var entries = result.Plan!.ActionDataAccessCatalog.Where(item => item.BusinessBinding == business).ToArray();
             Assert.NotEmpty(entries);
+            Assert.DoesNotContain(result.Plan.Modules.SelectMany(module => module.DataExecutions), contract => contract.Key == business);
+            Assert.DoesNotContain(result.Plan.ActionDataAccessCatalog, item => item.Execution == business);
             Assert.All(entries, entry =>
             {
-                Assert.Equal("standardCrud." + operation, entry.Provider);
-                var submit = Assert.Single(entry.Requirements!, role => role.Stage == "submit");
-                Assert.Equal(new[] { "organization." + resource }, submit.Resources);
-                Assert.Equal(operation == "create" ? "candidate" : "target", submit.Role);
-                Assert.Equal(operation == "create" ? "candidate" : "object", submit.Shape);
-                Assert.Equal(operation == "create" ? new[] { "create" } : new[] { "read", operation == "update" ? "edit" : "delete" }, Assert.Single(submit.AnyOf));
-                if (operation == "update")
-                    Assert.Equal(new[] { "read" }, Assert.Single(Assert.Single(entry.Requirements!, role => role.Stage == "prepare").AnyOf));
+                Assert.Equal(char.ToUpperInvariant(resource[0]) + resource[1..], entry.Object);
+                Assert.Equal(new[] { operation == "update" ? "edit" : operation }, entry.Actions);
+                Assert.Equal(new[] { "organization." + resource }, entry.Resources);
+                Assert.Empty(entry.Execution);
+                Assert.Null(entry.Requirements);
                 Assert.All(entry.FeaturePositions, position =>
                 {
                     var point = result.Plan.FeatureCatalog.Single(feature => feature.Position == position);
-                    Assert.Equal("organization." + resource + "." + operation, point.BehaviorKey);
+                    Assert.Equal(business, point.BehaviorKey);
                 });
             });
         }

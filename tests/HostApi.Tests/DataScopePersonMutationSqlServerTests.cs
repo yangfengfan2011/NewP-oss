@@ -196,14 +196,15 @@ public sealed class DataScopePersonMutationSqlServerTests
             $"/api/organization/persons/{id}", new { ENAME = "编辑重新启用" }, dataAccess: http.Declaration("organization.person.update", edit)))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
 
-        var createRule = rule with { Id = "PersonCreateSwitchRule", RootId = "PersonCreateSwitchRule",
+        // 新根遵循正式同级名称唯一策略，保留前一根的读取与编辑规则。
+        var createRule = rule with { Id = "PersonCreateSwitchRule", RootId = "PersonCreateSwitchRule", Name = "创建开关规则",
             Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("开关创建")),
             Subjects = [rule.Subjects[0] with { Id = "PersonCreateSwitchSubject",
                 Actions = new Dictionary<string, string> { ["create"] = "deny" } }] };
         using (var administrator = await LoginCurrentAsync("admin"))
         using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(administrator, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonCreateSwitchRule", createRule))
-            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         var createPayload = new { PersonNo = "WRITE-CREATE-SWITCH", ENAME = "开关创建", EmploymentStatus = "Active", IsEnabled = true };
         using (var ordinary = await LoginCurrentAsync())
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,

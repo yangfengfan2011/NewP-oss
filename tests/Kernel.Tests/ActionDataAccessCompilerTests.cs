@@ -144,8 +144,22 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
             // 各真实入口具有自己的资源集合；编译与manifest不能把父要求扩成三个业务目标。
             var authored = candidates.SelectMany(candidate => candidate.Features).SelectMany(feature => feature.DataAccess)
                 .Where(declaration => declaration.Id == item.Id).ToArray();
-            Assert.NotEmpty(authored);
-            Assert.All(authored, declaration => Assert.Equal(declaration.Resources, item.Resources));
+            if (authored.Length == 0)
+            {
+                // 纯查询输入读取由实际按钮的来源引用派生，仍须绑定原合同与原功能位置。
+                Assert.Equal("read", item.Surface); Assert.Null(item.BusinessBinding);
+                var references = candidates.SelectMany(candidate => candidate.Features).Where(feature => feature.ModuleId == item.ModuleId
+                    && feature.DataAccess.Any(declaration => declaration.InputReadSourceKey == item.ViewKey)).ToArray();
+                Assert.NotEmpty(references);
+                var contract = Assert.Single(candidates.SelectMany(candidate => candidate.DataExecutions), source => source.Key == item.Execution);
+                var query = Assert.Single(contract.Requirements);
+                Assert.Equal(("query", "read", "query"), (query.Role, query.Stage, query.Shape));
+                Assert.Equal(contract.Provider, item.Provider); Assert.Equal(query.Resources, item.Resources);
+                Assert.Equal(new[] { "read" }, item.Actions);
+                Assert.All(item.FeaturePositions, position => Assert.Contains(references, feature => feature.BehaviorKey ==
+                    plan.FeatureCatalog.Single(point => point.Position == position).BehaviorKey));
+            }
+            else Assert.All(authored, declaration => Assert.Equal(declaration.Resources, item.Resources));
             Assert.All(item.FeaturePositions, position => Assert.Contains(plan.FeatureCatalog, point => point.Position == position && point.ModuleId == item.ModuleId));
         });
         var manifest = new MetadataRuntimeManifestBuilder().Build(AppContext.BaseDirectory, plan.Modules.Select(module => module.ModuleId).ToArray(),

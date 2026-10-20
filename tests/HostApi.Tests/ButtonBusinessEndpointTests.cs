@@ -51,7 +51,7 @@ public sealed partial class ButtonBusinessEndpointTests
     {
         var plan = Plan();
         var declaration = problem == "no-requirement"
-            ? plan.ActionDataAccessCatalog.First(item => item.ModuleId == "Workspace" && item.BusinessBinding is not null && item.Object is null)
+            ? plan.ActionDataAccessCatalog.First(item => item.ModuleId == "Workspace" && item.BusinessBinding is not null && item.GetObjectRequirements().Count == 0)
             : plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "workspace.folder.reorder" && item.ActionKey == "moveUp");
         var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "actor")], "button-business-test")) };
         http.SetEndpoint(new Endpoint(_ => Task.CompletedTask, new EndpointMetadataCollection(new EndpointModuleAttribute("Workspace"),

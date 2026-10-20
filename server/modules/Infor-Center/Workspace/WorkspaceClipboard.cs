@@ -24,8 +24,7 @@ public sealed partial class WorkspaceContents
         {
             if (openedHere) await db.Database.OpenConnectionAsync(token);
             var source = await positions.ResolveAsync(input.ActorId, position, token);
-            var before = await Folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == source.FolderId, token);
-            return await execute(new(input.Mode, position, source.FolderId, before.ToFrozenDictionary(StringComparer.Ordinal), selection), token);
+            return await execute(new(input.Mode, position, source.FolderId, ReferenceParentFacts(source), selection), token);
         }
         finally
         {
@@ -58,8 +57,7 @@ public sealed partial class WorkspaceContents
                 throw new LinkQueryException(403, "Workspace.ParentWriteDenied");
             var targets = await ReadClipboardButtonTargetsAsync(source.FolderId, selection.ToArray(), input.Mode, false, cancellation);
             var target = await positions.ResolveAsync(input.ActorId, targetPosition, cancellation);
-            var before = await Folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == target.FolderId, cancellation);
-            return await execute(new(input.Mode, sourcePosition, source, targetPosition, target, before.ToFrozenDictionary(StringComparer.Ordinal),
+            return await execute(new(input.Mode, sourcePosition, source, targetPosition, target, ReferenceParentFacts(target),
                 selection, Array.AsReadOnly(targets)), cancellation);
         }, token).AsTask();
     }
@@ -98,6 +96,10 @@ public sealed partial class WorkspaceContents
     private static WorkspacePosition FreezeClipboardPosition(WorkspacePosition position) => position?.LinkIds is not null
         ? position with { LinkIds = Array.AsReadOnly(position.LinkIds.ToArray()) }
         : throw new LinkQueryException(400, "Workspace.InvalidPosition");
+
+    // 引用不改父字段，原完整位置已读取真实父身份；规则事实仍由访问服务重验，不新增父实体物化或允许缓存。
+    private static IReadOnlyDictionary<string, object?> ReferenceParentFacts(WorkspacePositionPath path) =>
+        new Dictionary<string, object?>(StringComparer.Ordinal) { ["EID"] = path.FolderId }.ToFrozenDictionary(StringComparer.Ordinal);
 
     // 继续原Link完整read，再由通用裁决引擎检查实际用途；OR只属于copy选择业务，不成为新权限配置。
     private async Task<LinkObjectReference[]> ReadClipboardButtonTargetsAsync(string parentId, string[] linkIds, string mode,

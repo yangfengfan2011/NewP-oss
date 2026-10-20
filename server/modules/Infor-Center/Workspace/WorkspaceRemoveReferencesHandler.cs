@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.LinkQueries;
 using Microsoft.EntityFrameworkCore;
@@ -44,8 +43,7 @@ public sealed partial class WorkspaceContents
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
             var path = await positions.ResolveAsync(input.ActorId, position, cancellation);
-            var before = await Folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == path.FolderId, cancellation);
-            return await execute(new(path.FolderId, before.ToFrozenDictionary(StringComparer.Ordinal), position, selection), cancellation);
+            return await execute(new(path.FolderId, ReferenceParentFacts(path), position, selection), cancellation);
         }, token);
     }
 

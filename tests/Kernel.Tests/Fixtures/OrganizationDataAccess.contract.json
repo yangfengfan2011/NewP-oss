@@ -39,22 +39,6 @@
     "provider": "standardCrud.read"
   },
   {
-    "id": "Organization/view:organization.company.list/featureActions/action:initialize",
-    "moduleId": "Organization",
-    "viewKey": "organization.company.list",
-    "surface": "featureActions",
-    "actionKey": "initialize",
-    "execution": "",
-    "resources": [
-      "organization.company"
-    ],
-    "actions": [],
-    "featurePositions": [
-      "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.custom/action:initialize"
-    ],
-    "businessBinding": "organization.company.initialize"
-  },
-  {
     "id": "Organization/view:organization.company.list/pageActions/action:create",
     "moduleId": "Organization",
     "viewKey": "organization.company.list",

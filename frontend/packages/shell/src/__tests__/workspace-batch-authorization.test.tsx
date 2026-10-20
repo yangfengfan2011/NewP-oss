@@ -19,6 +19,7 @@ import { StandardCrudHostEnvironmentContext } from '../standard-crud/standardCru
 import { ActionInstanceContext } from '../composition/pageCompositionRuntime';
 import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTestSupport';
 import { platformTestCatalogs } from './localizationTestCatalogs';
+import dataScopeDictionary from '../../../../modules/platform/authorization/metadata/dictionaries/DataScope.dic.json';
 import workspace from '../../../../modules/infor-center/workspace/src';
 import { ActionInstanceScope } from '../composition/ActionInstanceScope';
 import { workspaceClipboard } from '../../../../modules/infor-center/workspace/src/workspaceClipboard';
@@ -75,7 +76,8 @@ async function mount(prepare?: (body: Record<string, unknown>) => unknown, save?
     return readdirSync(path).filter(file => file.endsWith('.json')).map(file => JSON.parse(readFileSync(resolve(path, file), 'utf8')));
   };
   const dictionary = documents('dictionaries').find(document => document.Workspace)!.Workspace;
-  const catalog = Object.fromEntries(Object.entries(dictionary).map(([key, value]) => [`Workspace.${key}`, (value as { zhs: string }).zhs]));
+  const catalog = { ...Object.fromEntries(Object.entries(dictionary).map(([key, value]) => [`Workspace.${key}`, (value as { zhs: string }).zhs])),
+    ...Object.fromEntries(Object.entries(dataScopeDictionary.DataScope).map(([key, value]) => [`DataScope.${key}`, value.zhs])) };
   const environment = createEmbeddedHostEnvironment({ input: { queryScope: { ...source, anchorId: 'container-eid', linkIds: JSON.stringify(source.linkIds) } } });
   function Consumer() {
     refreshIdentity = useAuth().retrySessionValidation;
@@ -195,6 +197,31 @@ it('appends clipboard sources, expands server descendants and submits only the f
   const saved = await requests.find(request => new URL(request.url).pathname.endsWith('/permissions/batch'))!.clone().json();
   expect(saved.sources.flatMap((value: { linkIds: string[] }) => value.linkIds).sort()).toEqual(['child-link', 'document-link']);
   expect(saved.resources.map((value: { resourceKey: string }) => value.resourceKey)).toEqual(['document.document']);
+});
+
+it('saves read subjects for both resources through the real inline editors', async () => {
+  const { requests } = await mount();
+  const sections = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+    .filter(button => button.textContent === '添加主体项').map(button => button.closest('section')!);
+  expect(sections).toHaveLength(2);
+  for (const section of sections) {
+    await act(async () => [...section.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '添加主体项')!.click());
+    await waitFor(() => expect(section.querySelector('[data-subject-editor]')?.getAttribute('aria-label')).toBe('添加授权主体'));
+    expect(document.querySelector('.ant-drawer-content')).toBeNull();
+    const editor = section.querySelector('[data-subject-editor]')!;
+    await act(async () => [...editor.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '确定')!.click());
+    await waitFor(() => expect(section.querySelector('[data-subject-editor]')).toBeNull());
+    await act(async () => section.querySelector<HTMLButtonElement>('button[role="checkbox"][aria-label="读取：不选"]')!.click());
+    expect(section.querySelector('button[role="checkbox"][aria-label="读取：同意"]')).not.toBeNull();
+  }
+  const confirm = () => document.querySelector<HTMLButtonElement>('[role="dialog"] .ant-modal-footer button.ant-btn-primary');
+  await waitFor(() => expect(confirm()?.disabled).toBe(false));
+  await act(async () => confirm()!.click());
+  await waitFor(() => expect(requests.filter(request => new URL(request.url).pathname.endsWith('/permissions/batch'))).toHaveLength(1));
+  const payload = await requests.find(request => new URL(request.url).pathname.endsWith('/permissions/batch'))!.clone().json();
+  expect(payload.mode).toBe('U');
+  expect(payload.resources).toHaveLength(2);
+  for (const resource of payload.resources) expect(resource.subjects).toEqual([{ type: 'all', subjectId: null, priority: 0, actions: { read: 'allow' }, expiresAt: null }]);
 });
 
 it('edits an actual subject with a full U template and carries R clear confirmation through the standard review', async () => {

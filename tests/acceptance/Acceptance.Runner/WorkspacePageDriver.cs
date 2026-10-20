@@ -96,11 +96,7 @@ internal sealed class WorkspacePageDriver(IPage page)
         await sections.Nth(1).WaitForAsync(new() { State = WaitForSelectorState.Visible });
         for (var index = 0; index < 2; index++)
         {
-            await sections.Nth(index).GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
-            var editor = crud.VisibleDrawer();
-            await editor.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
-            await editor.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
-            await sections.Nth(index).GetByRole(AriaRole.Checkbox, new() { Name = "读取：不选", Exact = true }).ClickAsync();
+            await AddReadSubjectAsync(sections.Nth(index));
         }
         await AcceptancePresentation.CaptureAsync(page, presentationPath);
         await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/permissions/batch", 200, "保存批量授权"));
@@ -208,13 +204,20 @@ internal sealed class WorkspacePageDriver(IPage page)
         var loaded = await configuration;
         if (!loaded.Ok) throw new InvalidOperationException($"对象授权装载失败：{loaded.Status} {await loaded.TextAsync()}");
         var dialog = crud.VisibleModal();
-        await dialog.GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
-        var editor = crud.VisibleDrawer();
-        await editor.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
-        await editor.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
-        await dialog.GetByRole(AriaRole.Checkbox, new() { Name = "读取：不选", Exact = true }).ClickAsync();
+        await AddReadSubjectAsync(dialog);
         await crud.ConfirmAsync(dialog, new("PUT", new Uri(loaded.Url).AbsolutePath, 204, "保存对象权限"));
         await crud.WaitForRowAsync(rowName);
+    }
+
+    // 对象授权在当前容器内联编辑；通用规则编辑器的Drawer不属于这条用户路径。
+    private static async Task AddReadSubjectAsync(ILocator container)
+    {
+        await container.GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
+        var editor = container.GetByRole(AriaRole.Region, new() { Name = "添加授权主体", Exact = true });
+        await editor.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
+        await editor.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        await container.GetByRole(AriaRole.Checkbox, new() { Name = "读取：不选", Exact = true }).ClickAsync();
+        await Assertions.Expect(container.GetByRole(AriaRole.Checkbox, new() { Name = "读取：同意", Exact = true })).ToBeCheckedAsync();
     }
 
     /// <summary>通过 Shell 的真实语言控件选择语言；只供原 Native 详情呈现核对使用。</summary>

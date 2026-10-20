@@ -199,9 +199,22 @@ it.each(['Part', 'Document'] as const)('passes the actual readonly %s tab source
 it('saves owner authorization through the real standalone Part route without an injected action instance', async () => {
   const { container, requests } = await mount();
   await openAuthorization(container);
+  await vi.waitFor(() => expect(button('添加主体项')?.disabled).toBe(false));
+  await act(async () => button('添加主体项')!.click());
+  const editor = () => document.querySelector<HTMLElement>('[data-subject-editor]');
+  await vi.waitFor(() => expect(editor()?.getAttribute('aria-label')).toBe('添加授权主体'));
+  expect(document.querySelector('.ant-drawer-content')).toBeNull();
+  const confirmSubject = [...editor()!.querySelectorAll<HTMLButtonElement>('button')].find(value => value.textContent?.replace(/\s/g, '') === '确定')!;
+  await act(async () => confirmSubject.click());
+  await vi.waitFor(() => expect(editor()).toBeNull());
+  const read = () => document.querySelector<HTMLButtonElement>('[role="dialog"] button[role="checkbox"][aria-label="读取：不选"]');
+  await vi.waitFor(() => expect(read()).not.toBeNull());
+  await act(async () => read()!.click());
   await vi.waitFor(() => expect(confirm()?.disabled).toBe(false));
   await act(async () => confirm()!.click());
   await vi.waitFor(() => expect(requests.filter(request => request.method === 'PUT')).toHaveLength(1));
+  const payload = await requests.find(request => request.method === 'PUT')!.clone().json();
+  expect(payload.subjects).toEqual([{ id: expect.stringMatching(/^DataScopeSubject_/), type: 'all', subjectId: null, priority: 0, actions: { read: 'allow' }, expiresAt: null }]);
   await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   const source = formalDataAccessFor('part.part.list', 'rowActions', 'authorize');
   const rowView = formalDataAccessFor('part.part.list', 'rowActions', 'viewAuthorization');

@@ -91,7 +91,7 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
         return await execute(cancellationToken);
     }
 
-    // 同一业务状态中的全部实际目标先完成检查；声明中未出现于本次输入的对象类型不产生额外目标。
+    // 同一状态中的目标逐项准备并立即检查；全部通过才执行业务，不提前读取后项而改变首错。
     private async Task CheckTargetAsync(ActionDataAccessRequirement declaration, ButtonBusinessTarget? target, CancellationToken token)
     {
         if (target is ButtonQueryTarget query)
@@ -100,6 +100,22 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
             return;
         }
         var requirements = declaration.GetObjectRequirements();
+        if (target is ButtonTargetSequence sequence)
+        {
+            var source = sequence.Targets?.Invoke(token) ?? throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
+            await using var iterator = source.GetAsyncEnumerator(token) ?? throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
+            var hasTargets = false;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                if (!await iterator.MoveNextAsync()) break;
+                token.ThrowIfCancellationRequested();
+                await CheckObjectAsync(requirements, iterator.Current, token);
+                hasTargets = true;
+            }
+            if (!hasTargets) throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
+            return;
+        }
         IReadOnlyList<ButtonObjectTarget> targets = target switch
         {
             null => Array.Empty<ButtonObjectTarget>(),

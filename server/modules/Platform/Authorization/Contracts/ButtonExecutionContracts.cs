@@ -20,7 +20,7 @@ public interface IObjectActionAccess
 public sealed record ButtonExecutionContext(string ButtonId, string FeaturePosition, string BusinessBinding,
     string ResourceKey, string ObjectName, string? ObjectId);
 
-/// <summary>业务正式输入规范化后的目标种类；已有对象与待创建候选互不伪装。</summary>
+/// <summary>同一正式业务状态提供的目标种类；已有对象、待创建候选与准备序列互不伪装。</summary>
 public abstract record ButtonBusinessTarget;
 
 /// <summary>一项正式对象目标的共同寻址；集合容器不冒充任何对象。</summary>
@@ -28,6 +28,9 @@ public abstract record ButtonObjectTarget(string ResourceKey, string ObjectName)
 
 /// <summary>同一业务状态中的实际对象集合；每项目标都通过当前按钮要求后才执行业务。</summary>
 public sealed record ButtonTargetSet(IReadOnlyList<ButtonObjectTarget> Targets) : ButtonBusinessTarget;
+
+/// <summary>服务端处理器逐项规范化正式输入；平台在推进下一项前检查当前目标，全部通过才执行业务。</summary>
+public sealed record ButtonTargetSequence(Func<CancellationToken, IAsyncEnumerable<ButtonObjectTarget>> Targets) : ButtonBusinessTarget;
 
 /// <summary>完整服务端新建候选；只有业务字段、默认值、可信审计及正式身份，不包含允许凭证。</summary>
 public sealed record ButtonCreationTarget(string ResourceKey, string ObjectName,
@@ -51,10 +54,10 @@ public sealed record ButtonBusinessInvocation(string ButtonId, string FeaturePos
 /// <summary>业务提供原有保护边界与正式目标；平台独占目标检查及实际执行的衔接。</summary>
 public interface IButtonBusinessHandler<TInput, TState, TResult>
 {
-    /// <summary>规范化正式输入并在业务所需保护范围内交出同一状态；不得提前执行业务变更。</summary>
+    /// <summary>冻结正式输入并在原保护范围内交出同一状态；目标可逐项规范化，不得提前执行业务变更。</summary>
     Task<TResult> WithinBoundaryAsync(TInput input, string actionKey,
         Func<TState, CancellationToken, Task<TResult>> execute, CancellationToken cancellationToken);
-    /// <summary>从已规范化状态取得实际目标；只有没有对象要求的按钮才允许返回空。</summary>
+    /// <summary>从同一状态取得实际目标或服务端准备序列；只有没有对象要求的按钮才允许返回空。</summary>
     ButtonBusinessTarget? Target(TState state);
     /// <summary>平台完成当前按钮要求后执行业务，关联对象检查仍由业务选择。</summary>
     Task<TResult> ExecuteAsync(TState state, CancellationToken cancellationToken);

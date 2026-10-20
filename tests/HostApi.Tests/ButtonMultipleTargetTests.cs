@@ -10,7 +10,7 @@ using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class ButtonMultipleTargetTests
+public sealed partial class ButtonMultipleTargetTests
 {
     [Theory]
     [InlineData(false)]

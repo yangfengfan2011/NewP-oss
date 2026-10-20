@@ -54,7 +54,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         Assert.Equal(read.Position, Assert.Single(actual.GetProperty("positions").EnumerateArray()).GetString());
 
         using (var missing = await FeatureHttpTestRequests.SendAsync(admin, read, HttpMethod.Get,
-            "/api/authorization/workbench/roles/Role_Missing", dataAccess: http.Declaration("authorization.workbench.read", read)))
+            "/api/authorization/workbench/roles/Role_Missing", dataAccess: http.ReadDeclaration("authorization.workbench.read", read)))
             Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
 
         var roles = await ReadWorkbenchAsync(fixture, admin,
@@ -101,7 +101,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         SetPosition(ordinary, read);
         fixture.Fault.FeatureCommands.Clear();
         using (var list = await FeatureHttpTestRequests.SendAsync(ordinary, http.Workbench("authorization.workbench.read"), HttpMethod.Get,
-            "/api/authorization/workbench/roles?pageIndex=1&pageSize=20", dataAccess: http.Declaration("authorization.workbench.read", http.Workbench("authorization.workbench.read")))) Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+            "/api/authorization/workbench/roles?pageIndex=1&pageSize=20", dataAccess: http.ReadDeclaration("authorization.workbench.read", http.Workbench("authorization.workbench.read")))) Assert.Equal(HttpStatusCode.OK, list.StatusCode);
         Assert.Single(fixture.Fault.FeatureCommands, command => command.Contains("EXISTS", StringComparison.Ordinal) && command.Contains("RoleFunctionGrant", StringComparison.Ordinal));
         SetPosition(ordinary, save);
         using (var denied = await http.SendButtonAsync(ordinary, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
@@ -264,7 +264,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         var http = new FeatureHttpTestRequests(fixture);
         var read = http.Workbench("authorization.workbench.read");
         using var response = await FeatureHttpTestRequests.SendAsync(client, read, HttpMethod.Get, path,
-            dataAccess: http.Declaration("authorization.workbench.read", read));
+            dataAccess: http.ReadDeclaration("authorization.workbench.read", read));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

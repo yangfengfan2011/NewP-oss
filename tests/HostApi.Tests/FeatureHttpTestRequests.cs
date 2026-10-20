@@ -42,6 +42,11 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
     internal ActionDataAccessRequirement Declaration(string execution, FeaturePoint point) =>
         _declarations.Single(item => (item.Execution == execution || item.BusinessBinding == execution) && item.FeaturePositions.Contains(point.Position));
 
+    // 读取目录与同位置导航按钮独立；调用者明确选择原执行，不按业务绑定挑一个按钮替代。
+    internal ActionDataAccessRequirement ReadDeclaration(string execution, FeaturePoint point) =>
+        _declarations.Single(item => item.Execution == execution && item.BusinessBinding is null && item.Surface == "read"
+            && item.FeaturePositions.Contains(point.Position));
+
     internal FeaturePoint Organization(string tab, string? action = null, string? surface = null, string? nodeType = null)
     {
         var entry = points.Single(point => point.ModuleId == "Organization" && point.Kind == "tab"

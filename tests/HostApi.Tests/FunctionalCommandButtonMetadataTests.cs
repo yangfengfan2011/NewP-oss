@@ -48,4 +48,25 @@ public sealed class FunctionalCommandButtonMetadataTests
             http.Workbench("authorization.dataScope.save") })
             Assert.Equal(point.BehaviorKey, http.Declaration(point.BehaviorKey, point).BusinessBinding);
     }
+    [Fact]
+    public void WorkbenchObservationUsesItsReadSourceAlongsideBothRealNavigationButtons()
+    {
+        var compiled = new CanonicalModulePlanCompiler().Compile("workbench-independent-read",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
+        var plan = compiled.Plan!;
+        var http = new FeatureHttpTestRequests(plan.FeatureCatalog, plan.ActionDataAccessCatalog);
+        var point = http.Workbench("authorization.workbench.read");
+        // 正式Role list/detail导航按钮共用该功能位置，不能被当作工作台读取声明。
+        Assert.Equal(2, plan.ActionDataAccessCatalog.Count(item => item.BusinessBinding == point.BehaviorKey
+            && item.FeaturePositions.Contains(point.Position)));
+        Assert.Throws<InvalidOperationException>(() => http.Declaration("authorization.workbench.read", point));
+        var read = http.ReadDeclaration("authorization.workbench.read", point);
+        Assert.Equal("authorization.workbench", read.ViewKey);
+        Assert.Equal("read", read.Surface);
+        Assert.Equal("authorization.backend", read.Provider);
+        Assert.Null(read.BusinessBinding);
+        Assert.Equal(new[] { "catalog", "detail" }, read.Requirements!.Select(item => item.Branch));
+    }
+
 }

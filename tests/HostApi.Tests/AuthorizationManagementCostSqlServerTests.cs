@@ -73,13 +73,13 @@ public sealed partial class DataScopePermissionCostSqlServerTests
                 http.Declaration("authorization.role.list", read), body =>
                 { Assert.Equal(100, body.GetProperty("items").GetArrayLength()); return 100; });
             await MeasureAsync("paired-workbench-page-100", workbench, "/api/authorization/workbench/roles?query=COST311-R&pageIndex=1&pageSize=100",
-                http.Declaration("authorization.workbench.read", workbench), body =>
+                http.ReadDeclaration("authorization.workbench.read", workbench), body =>
                 { Assert.Equal(100, body.GetProperty("items").GetArrayLength()); return 100; });
             await MeasureAsync("paired-role-detail", read, "/api/authorization/roles/" + prototypeId,
                 http.Declaration("authorization.role.read", read), body =>
                 { Assert.Equal(prototypeId, body.GetProperty("id").GetString()); return 1; });
             await MeasureAsync("paired-workbench-detail", workbench, "/api/authorization/workbench/roles/" + prototypeId,
-                http.Declaration("authorization.workbench.read", workbench), body =>
+                http.ReadDeclaration("authorization.workbench.read", workbench), body =>
                 { Assert.Equal(prototypeId, body.GetProperty("role").GetProperty("id").GetString()); return 1; });
         }
 

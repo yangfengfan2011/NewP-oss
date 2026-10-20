@@ -26,6 +26,9 @@ public abstract record ButtonBusinessTarget;
 /// <summary>一项正式对象目标的共同寻址；集合容器不冒充任何对象。</summary>
 public abstract record ButtonObjectTarget(string ResourceKey, string ObjectName) : ButtonBusinessTarget;
 
+/// <summary>同一业务状态中的实际对象集合；每项目标都通过当前按钮要求后才执行业务。</summary>
+public sealed record ButtonTargetSet(IReadOnlyList<ButtonObjectTarget> Targets) : ButtonBusinessTarget;
+
 /// <summary>完整服务端新建候选；只有业务字段、默认值、可信审计及正式身份，不包含允许凭证。</summary>
 public sealed record ButtonCreationTarget(string ResourceKey, string ObjectName,
     IReadOnlyDictionary<string, object?> Values) : ButtonObjectTarget(ResourceKey, ObjectName);

@@ -113,6 +113,41 @@ public sealed class DataScopeReadConstraintRegistrationTests
         else Assert.Equal(2, PrepareStructured().Resources.Count);
     }
 
+    [Theory, Trait("Category", "ModuleMetadataConsumer")]
+    [InlineData("valid")]
+    [InlineData("model")]
+    [InlineData("action")]
+    public void Preparation_ArrayEntriesUseTheirOwnRegisteredObjectAndApplicableActions(string problem)
+    {
+        using var services = new ServiceCollection().BuildServiceProvider();
+        string[] resources = ["workspace.folder", "workspace.space"];
+        var module = new CanonicalModulePlanModule("Workspace", "1.1.0", "工作空间", null, "", null, null,
+            null, null, "", [], [], [], [], [], new("test", "test", "/"))
+        {
+            DataActions = [new("Workspace", "read", "读取", "data.read"), new("Workspace", "edit", "编辑", "data.edit"), new("Workspace", "delete", "删除", "data.delete")],
+            Features = [new("Workspace", "manage", "navigation", "管理", null, "workspace.manage")
+            {
+                DataResources = resources,
+                DataAccess = [new("Workspace", "mixed", "rowActions", "manage", "", resources, [])
+                {
+                    BusinessBinding = "workspace.manage",
+                    ObjectRequirements = [new("WorkspaceFolder", ["read", "edit"], resources[0]),
+                        new(problem == "model" ? "UnknownSpace" : "WorkspaceSpace", [problem == "action" ? "edit" : "delete"], resources[1])]
+                }]
+            }]
+        };
+        var plan = new CanonicalModulePlan("candidate", "1.1.0", "", "", [], [module]);
+        var persistence = new CompiledPersistencePlan("candidate", "snapshot", "hash", PersistenceProvider.SqlServer,
+            "digest", [], new WorkspaceModelMetadataProvider().GetDefinitions(), []);
+        DataScopeResourceCatalog PrepareArray() => new(new StandardCrudResourceRegistry([]), plan, persistence,
+            [new(resources[0], "Workspace", "WorkspaceFolder", "EID"), new(resources[1], "Workspace", "WorkspaceSpace", "EID")],
+            [], services.GetRequiredService<IServiceProviderIsKeyedService>(),
+            [new(resources[0], "Workspace", ["read", "edit"]), new(resources[1], "Workspace", ["read", "delete"])]);
+        if (problem == "valid") Assert.Equal(2, PrepareArray().Resources.Count);
+        else Assert.Equal(problem == "model" ? "BUTTON_DATA_ACCESS_OBJECT_MISMATCH" : "ACTION_DATA_ACCESS_RESOURCE_ACTION_INVALID",
+            Assert.Throws<InvalidOperationException>(PrepareArray).Message);
+    }
+
     private static ServiceProvider Services(string invalid)
     {
         var services = new ServiceCollection();

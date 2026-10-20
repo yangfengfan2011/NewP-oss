@@ -40,9 +40,9 @@ public static class StandardCrudDataExecutions
                     button.ModuleId == owners[0].ModuleId && button.BusinessBinding == features[0].BehaviorKey))
                 throw new InvalidOperationException("BUTTON_BUSINESS_HANDLER_INVALID");
         }
-        foreach (var button in plan.ActionDataAccessCatalog.Where(item => item.BusinessBinding is not null && item.Object is not null))
+        foreach (var button in plan.ActionDataAccessCatalog.Where(item => item.BusinessBinding is not null && item.GetObjectRequirements().Count > 0))
             if (!buttonBindings.Any(binding => binding!.BusinessBinding == button.BusinessBinding
-                && binding.ObjectName == button.Object && button.Resources.SequenceEqual([binding.ResourceKey]))
+                && button.GetObjectRequirements().Any(item => item.Object == binding.ObjectName && item.ResourceKey == binding.ResourceKey))
                 && !handlers.Any(endpoint => endpoint.Metadata.GetMetadata<EndpointModuleAttribute>()!.ModuleId == button.ModuleId
                     && endpoint.Metadata.GetMetadata<RequireFeatureAttribute>()!.BehaviorKey == button.BusinessBinding))
                 throw new InvalidOperationException("BUTTON_EXECUTION_ENDPOINT_MISSING");
@@ -81,7 +81,8 @@ public static class StandardCrudDataExecutions
             var buttons = services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog
                 .Where(item => item.BusinessBinding == descriptor.ResourceKey + "." + operation).ToArray();
             if (operation is not ("create" or "update" or "delete") || buttons.Length == 0 || buttons.Any(item => item.ModuleId != descriptor.ModuleId
-                || item.Object is not null && item.Object != descriptor.ModelName))
+                || item.GetObjectRequirements().Count > 0 && !item.GetObjectRequirements().Any(requirement =>
+                    requirement.Object == descriptor.ModelName && requirement.ResourceKey == descriptor.ResourceKey)))
                 throw new InvalidOperationException("STANDARD_CRUD_BUTTON_BINDING_INVALID");
             endpoint.WithMetadata(new ButtonExecutionEndpoint(descriptor.ResourceKey + "." + operation, descriptor.ResourceKey, descriptor.ModelName));
             endpoint.AddEndpointFilter(async (context, next) =>

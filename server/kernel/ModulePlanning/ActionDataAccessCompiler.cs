@@ -155,8 +155,9 @@ public static class ActionDataAccessCompiler
             || !contract.FeatureBehaviors.Contains(declaration.BusinessBinding, StringComparer.Ordinal)) return null;
         var objects = declaration.ObjectRequirements ?? (declaration.Object is null ? [] : new[] { new ButtonObjectRequirement(declaration.Object, declaration.Actions, declaration.Resources.Single()) });
         var query = contract.Requirements[0];
-        return objects.Count == 1 && objects[0].Actions.SequenceEqual(["read"]) && query.Role == "query" && query.Stage == "read"
-            && query.Shape == "query" && query.Resources.SequenceEqual([objects[0].ResourceKey]) && query.AnyOf.Count == 1
+        var required = objects.SingleOrDefault(item => query.Resources.SequenceEqual([item.ResourceKey]));
+        return required is not null && required.Actions.SequenceEqual(["read"]) && query.Role == "query" && query.Stage == "read"
+            && query.Shape == "query" && query.AnyOf.Count == 1
             && query.AnyOf[0].SequenceEqual(["read"]) && query.MinimumCount == 0 && query.MaximumCount is null
             && query.Branch is null && query.ReadResolverKey is null && query.ResourceAnyOf is null ? contract : null;
     }

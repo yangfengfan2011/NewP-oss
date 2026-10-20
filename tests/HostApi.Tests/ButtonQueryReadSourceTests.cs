@@ -13,6 +13,7 @@ public sealed class ButtonQueryReadSourceTests
 {
     [Theory]
     [InlineData("valid")]
+    [InlineData("unused-requirement")]
     [InlineData("outside")]
     [InlineData("binding")]
     [InlineData("role")]
@@ -22,7 +23,7 @@ public sealed class ButtonQueryReadSourceTests
     [InlineData("failure")]
     public async Task ActualExportQuery_RequiresItsCurrentButtonScopeAndPropagatesTheSqlReadPlan(string problem)
     {
-        var plan = Plan();
+        var plan = Plan(problem == "unused-requirement");
         var button = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "organization.person.export");
         var context = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "actor")], "query-test")) };
         context.SetEndpoint(new Endpoint(_ => Task.CompletedTask, new EndpointMetadataCollection(new EndpointModuleAttribute("Organization"),
@@ -49,7 +50,7 @@ public sealed class ButtonQueryReadSourceTests
         });
         if (problem == "outside")
             await Assert.ThrowsAsync<ActionDataAccessException>(() => access.GetQueryReadPlanAsync(source, "organization.person"));
-        else if (problem == "valid") Assert.Equal(1, await new ButtonBusinessExecutor(buttons).ExecuteAsync(handler, 0));
+        else if (problem is "valid" or "unused-requirement") Assert.Equal(1, await new ButtonBusinessExecutor(buttons).ExecuteAsync(handler, 0));
         else
         {
             var failure = await Record.ExceptionAsync(() => new ButtonBusinessExecutor(buttons).ExecuteAsync(handler, 0));
@@ -57,7 +58,7 @@ public sealed class ButtonQueryReadSourceTests
             else Assert.IsType<ActionDataAccessException>(failure);
         }
         Assert.Null(scope.Current);
-        Assert.Equal(problem is "valid" or "failure" ? 1 : 0, reader.Calls);
+        Assert.Equal(problem is "valid" or "unused-requirement" or "failure" ? 1 : 0, reader.Calls);
     }
 
     [Fact]
@@ -79,14 +80,17 @@ public sealed class ButtonQueryReadSourceTests
     }
 
     private static DataExecutionQueryContext Source() => new(new("organization.person.export", "standardCrud.export", "read"), "query");
-    private static CanonicalModulePlan Plan()
+    private static CanonicalModulePlan Plan(bool array = false)
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
         var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Organization");
         candidates[owner] = candidates[owner] with { Features = candidates[owner].Features.Select(feature => feature with
         {
             DataAccess = feature.DataAccess.Select(declaration => declaration.Execution != "organization.person.export" ? declaration
-                : declaration with { Execution = "", Object = "Person", Actions = ["read"], BusinessBinding = "organization.person.export" }).ToArray()
+                : declaration with { Execution = "", Object = array ? null : "Person", Actions = array ? [] : ["read"],
+                    Resources = array ? ["organization.person", "organization.company"] : declaration.Resources,
+                    ObjectRequirements = array ? [new("Person", ["read"], "organization.person"), new("Company", ["edit"], "organization.company")] : null,
+                    BusinessBinding = "organization.person.export" }).ToArray()
         }).ToArray() };
         var result = new CanonicalModulePlanCompiler().Compile("query-read-source", candidates);
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));

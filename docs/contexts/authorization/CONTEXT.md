@@ -74,7 +74,7 @@ Kernel 从按钮结构派生身份、业务绑定和合法功能位置，运行�
 
 `IObjectActionAccess.CheckAsync(objectName, objectId, actions)` 是 Authorization 拥有的通用接口，不要求执行合同；逐动作复用完整读取约束、动作启停和原对象裁决，全部允许才成功，依赖故障传播。岗位编辑在原事务内保护读取旧值，以路由目标与旧值 EID 核验后进入该管线；写后读取仍只决定详情或成功回执。下文执行合同说明适用于尚未迁移的入口与独立读取来源。
 
-`IObjectActionAccess.CheckCandidateAsync(objectName, candidate, actions)` 直接消费业务补齐的正式新建候选，复用同一候选规则引擎，不依附 CRUD、按钮或执行合同。标准 CRUD 用独立 `ButtonCreationTarget` 在默认值、可信审计、归属及真实新 EID 补齐后自动检查，再在原事务内持久化同一候选；不伪造已有对象或添加创建后 read 门槛。已有对象仍由 `ButtonExecutionTarget` 表达原事实；两者属于 `ButtonObjectTarget`，业务总目标类型为 `ButtonBusinessTarget`。
+`IObjectActionAccess.CheckCandidateAsync(objectName, candidate, actions)` 直接消费业务补齐的正式新建候选，复用同一候选规则引擎，不依附 CRUD、按钮或执行合同。标准 CRUD 用独立 `ButtonCreationTarget` 在默认值、可信审计、归属及真实新 EID 补齐后自动检查，再在原事务内持久化同一候选；不伪造已有对象或添加创建后 read 门槛。已有对象仍由 `ButtonExecutionTarget` 表达原事实；两者属于 `ButtonObjectTarget`，业务总目标类型为 `ButtonBusinessTarget`。同一业务状态中的实际对象集合使用 `ButtonTargetSet`，每个目标按实际对象与派生资源匹配唯一 `ObjectRequirements` 条目，全部通过后才调用一次业务；声明中未出现于本次输入的对象类型不额外生成目标。数组投影的标量 `Object` 为空仍必须执行全部实际目标检查。
 
 自定义业务通过 `IButtonBusinessHandler<TInput,TState,TResult>` 提供正式输入规范化、原保护边界、同一规范目标及实际业务；`IButtonBusinessExecutor` 在边界内自动检查后才执行业务。真实端点以处理器类型绑定，业务身份复用 RequireFeature，启动时核对注册与活动按钮，不增加权限合同或逐调用者许可清单。无 dataAccess 的生效按钮仍须有真实身份，但不自动追加对象动作；有要求却无目标则拒绝。
 

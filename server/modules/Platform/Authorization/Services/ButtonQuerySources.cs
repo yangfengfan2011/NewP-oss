@@ -11,11 +11,11 @@ internal static class ButtonQuerySources
         ButtonQueryTarget target, IDataScopeResourceCatalog resources)
     {
         var objects = declaration.GetObjectRequirements();
+        var required = objects.SingleOrDefault(item => item.Object == target.ObjectName && item.ResourceKey == target.ResourceKey);
         var resource = resources.Resources.SingleOrDefault(item => item.ResourceKey == target.ResourceKey);
         var binding = target.Source.Binding;
         var contract = plan.Modules.SelectMany(module => module.DataExecutions).SingleOrDefault(item => item.Key == binding.Execution);
-        if (declaration.Surface != "export" || objects.Count != 1 || objects[0].Object != target.ObjectName
-            || objects[0].ResourceKey != target.ResourceKey || !objects[0].Actions.SequenceEqual(["read"])
+        if (declaration.Surface != "export" || required is null || !required.Actions.SequenceEqual(["read"])
             || resource?.ModelName != target.ObjectName || resource.ModuleId != declaration.ModuleId
             || declaration.BusinessBinding != binding.Execution || binding.Provider != "standardCrud.export" || binding.Stage != "read" || binding.Branch is not null
             || target.Source.Role != "query" || target.Source.TargetSets.Count != 0 || contract is null

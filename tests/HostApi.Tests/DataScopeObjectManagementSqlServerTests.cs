@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Testing;
@@ -34,6 +35,7 @@ public sealed class DataScopeObjectManagementSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "WriteEligibility", "授权写入资格", "writeeligibility", "授权写入资格", read, manage);
         using var ordinary = actor.Client;
         var path = "/api/authorization/data-scope/objects/part.part/" + part.Id;
+        var source = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part");
         DataScopeObjectDto Configuration(string readOpinion, string authorizeOpinion) => new("part.part", part.Id,
             [new("write-eligibility", "user", actor.AccountId, 1, new Dictionary<string, string>
                 { ["read"] = readOpinion, ["authorize"] = authorizeOpinion })]);
@@ -43,20 +45,20 @@ public sealed class DataScopeObjectManagementSqlServerTests
         foreach (var denial in new[] { "read", "authorize" })
         {
             using var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path,
-                Configuration(denial == "read" ? "deny" : "allow", denial == "authorize" ? "deny" : "allow"));
+                Configuration(denial == "read" ? "deny" : "allow", denial == "authorize" ? "deny" : "allow"), dataAccess: source);
             Assert.Equal(HttpStatusCode.NoContent, initialized.StatusCode);
             foreach (var input in invalid)
             {
-                using var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, input);
+                using var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, input, dataAccess: source);
                 Assert.Equal(denial == "read" ? HttpStatusCode.NotFound : HttpStatusCode.Forbidden, response.StatusCode);
             }
         }
-        using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, allowed))
+        using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, allowed, dataAccess: source))
             Assert.Equal(HttpStatusCode.NoContent, initialized.StatusCode);
-        var before = await FeatureHttpTestRequests.ReadAsync(admin, manage, path);
+        var before = await FeatureHttpTestRequests.ReadAsync(admin, manage, path, source);
         foreach (var input in invalid)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, input);
+            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, input, dataAccess: source);
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
             var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
             Assert.Equal("DataScope.InvalidConfiguration", problem.GetProperty("code").GetString());
@@ -66,13 +68,13 @@ public sealed class DataScopeObjectManagementSqlServerTests
         }
         var oversizedId = new string('x', 129);
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put,
-            "/api/authorization/data-scope/objects/part.part/" + oversizedId, allowed with { ObjectId = oversizedId }))
+            "/api/authorization/data-scope/objects/part.part/" + oversizedId, allowed with { ObjectId = oversizedId }, dataAccess: source))
             Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         faults.ObjectId = part.Id;
         faults.Failure = new RolePermissionValidationException("decision source failed");
         try
         {
-            using var failed = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, allowed);
+            using var failed = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, allowed, dataAccess: source);
             Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
         }
         finally { faults.Failure = null; }
@@ -86,6 +88,11 @@ public sealed class DataScopeObjectManagementSqlServerTests
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "test"))
             };
+            // 此低层取消控制保留真实generic端点身份及正式来源；HTTP资格矩阵已由上面的真实请求覆盖。
+            context.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(
+                new EndpointModuleAttribute("Authorization"), new ResourceFeatureBindingAttribute("authorize"),
+                new DataExecutionEndpointAttribute("authorization.object.manage", "submit")), "generic-permission-cancellation"));
+            context.HttpContext.Request.Headers["X-NewP-Data-Declaration"] = source.Id;
             context.HttpContext.Request.Headers["X-NewP-Feature"] = manage.Position;
             var failure = new OperationCanceledException(cancellation.Token);
             faults.Failure = failure;
@@ -96,7 +103,7 @@ public sealed class DataScopeObjectManagementSqlServerTests
             }
             finally { faults.Failure = null; context.HttpContext = previous; }
         }
-        Assert.Equal(before.GetRawText(), (await FeatureHttpTestRequests.ReadAsync(admin, manage, path)).GetRawText());
+        Assert.Equal(before.GetRawText(), (await FeatureHttpTestRequests.ReadAsync(admin, manage, path, source)).GetRawText());
     }
 
     private sealed class DecisionFaults

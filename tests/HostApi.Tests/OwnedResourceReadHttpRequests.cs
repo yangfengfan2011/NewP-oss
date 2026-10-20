@@ -15,6 +15,14 @@ internal static class OwnedResourceReadHttpRequests
             item.Execution == resource + "." + operation && item.Provider == "standardCrud." + operation
             && item.Resources.SequenceEqual([resource]) && item.FeaturePositions.Contains(point.Position, StringComparer.Ordinal));
 
+    // 专属消费者显式给出完整执行身份及资源集；辅助读取与写入可复用同一真实声明。
+    internal static ActionDataAccessRequirement ForExecution(BusinessAuditHostFixture fixture, FeaturePoint point,
+        string execution, string provider, params string[] resources) =>
+        Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog, item =>
+            item.ModuleId == point.ModuleId && item.Execution == execution && item.Provider == provider
+            && item.Resources.Order(StringComparer.Ordinal).SequenceEqual(resources.Order(StringComparer.Ordinal))
+            && item.FeaturePositions.Contains(point.Position, StringComparer.Ordinal));
+
     /// <summary>真实进程准备从当前manifest选择已知操作；不缓存旧发行声明或按URL推断绑定。</summary>
     internal static async Task<ActionDataAccessRequirement> DeclarationAsync(HttpClient client, FeaturePoint point, string resource, string operation)
     {

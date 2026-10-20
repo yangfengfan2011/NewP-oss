@@ -38,4 +38,22 @@ public interface IDataScopeObjectAuthorization
     /// <summary>最小配置主体目录由当前真实目标管理资格保护，不授予业务档案读取。</summary>
     Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> SubjectsAsync(string resourceKey, string objectId, string type,
         string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token = default);
+
+    /// <summary>真实owner选择正式管理来源，在原目标资格点执行完整read与authorize。</summary>
+    Task<DataScopeAuthorizationStatus> CheckAsync(string resourceKey, string objectId, DataExecutionBindingReference execution,
+        CancellationToken token = default) => throw new NotSupportedException();
+    /// <summary>按正式来源重验目标后读取完整直接配置，不裁剪为调用者已有业务动作。</summary>
+    Task<DataScopeAuthorizationResult<DataScopeObjectConfiguration>> ReadAsync(string resourceKey, string objectId,
+        DataExecutionBindingReference execution, CancellationToken token = default) => throw new NotSupportedException();
+    /// <summary>正式提交来源传入原锁内替换；成功自身失权后不增加回读。</summary>
+    Task<DataScopeAuthorizationResult> ReplaceAsync(string resourceKey, string objectId, DataScopeObjectConfiguration configuration,
+        DataExecutionBindingReference execution, CancellationToken token = default) => throw new NotSupportedException();
+    /// <summary>配置主体候选沿真实管理来源判权，保留原最小目录及分页。</summary>
+    Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> SubjectsAsync(string resourceKey, string objectId, string type,
+        string? query, int page, IReadOnlyList<string> currentIds, DataExecutionBindingReference execution,
+        CancellationToken token = default) => throw new NotSupportedException();
+    /// <summary>共享主体端点明确接受单对象管理和批量编辑的有限来源，资格仍消费同一target下限。</summary>
+    Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> SubjectsAsync(string resourceKey, string objectId, string type,
+        string? query, int page, IReadOnlyList<string> currentIds, IReadOnlyList<DataExecutionBindingReference> executions,
+        CancellationToken token = default) => throw new NotSupportedException();
 }

@@ -55,12 +55,16 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
         using var operation = evaluation?.BeginOperation();
         var resource = catalog.Resolve(resourceKey);
         if (execution is not null)
-            return await executions!.EvaluateObjectAsync(execution, resourceKey, "target", objectId, token) switch
+        {
+            await foreach (var decision in executions!.EvaluateObjectsAsync(execution, "target", [new(resourceKey, objectId)], token))
+                return decision.Decision switch
             {
                 DataExecutionDecision.Allowed => DataScopeObjectEligibility.Allowed,
                 DataExecutionDecision.NotFound => DataScopeObjectEligibility.NotFound,
                 _ => DataScopeObjectEligibility.Forbidden
             };
+            throw new InvalidOperationException("DATA_EXECUTION_TARGET_RESULT_MISSING");
+        }
         // 手工构造的旧无约束消费者保留原构造方式；显式声明约束绝不能退回纯数据read。
         if (access is null && resource.ReadConstraintKey is not null)
             throw new InvalidOperationException("DATA_SCOPE_OBJECT_ACCESS_MISSING");
@@ -127,13 +131,13 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
 
     /// <inheritdoc/>
     async Task<DataScopeAuthorizationStatus> IDataScopeObjectAuthorization.CheckAsync(string resourceKey, string objectId, CancellationToken token) =>
-        AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token));
+        AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token, LegacyOwnerExecution()));
 
     /// <inheritdoc/>
     async Task<DataScopeAuthorizationResult<DataScopeObjectConfiguration>> IDataScopeObjectAuthorization.ReadAsync(string resourceKey, string objectId, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
-        var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token));
+        var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token, LegacyOwnerExecution()));
         return status == DataScopeAuthorizationStatus.Succeeded
             ? new(status, await grants.GetAsync(resourceKey, objectId, token)) : new(status);
     }
@@ -141,7 +145,7 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
     /// <inheritdoc/>
     async Task<DataScopeAuthorizationResult> IDataScopeObjectAuthorization.ReplaceAsync(string resourceKey, string objectId, DataScopeObjectConfiguration input, CancellationToken token)
     {
-        var result = await SaveConfigurationAsync(resourceKey, objectId, input, token);
+        var result = await SaveConfigurationAsync(resourceKey, objectId, input, token, LegacyOwnerExecution());
         return new(AuthorizationStatus(result.Status), result.ValidationError is null ? null : Error(result.ValidationError));
     }
 
@@ -150,11 +154,15 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
         string type, string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
-        var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token));
+        var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token, LegacyOwnerExecution()));
         if (status != DataScopeAuthorizationStatus.Succeeded) return new(status);
         try { return new(status, await identities.SearchAsync(type, query, page, currentIds, token)); }
         catch (RolePermissionValidationException error) { return new(DataScopeAuthorizationStatus.InvalidInput, Error: Error(error)); }
     }
+
+    // 旧无来源ABI仅保留给明确手工低层构造；正式DI已经要求执行器，不能借该ABI绕开来源。
+    private DataExecutionBindingReference? LegacyOwnerExecution() => executions is null ? null
+        : throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
 
     // 稳定契约只携带原错误事实，不跨模块传出Authorization私有异常类型。
     private static DataScopeConfigurationError Error(AuthorizationValidationException error) =>

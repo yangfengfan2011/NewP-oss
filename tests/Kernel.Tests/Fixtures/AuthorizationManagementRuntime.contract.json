@@ -291,6 +291,21 @@
           ],
           "minimumCount": 1,
           "maximumCount": 1
+        },
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "authorization.role"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
         }
       ],
       "provider": "authorization.object.manage",
@@ -867,6 +882,21 @@
             [
               "read",
               "authorize"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "identity.account"
+          ],
+          "anyOf": [
+            [
+              "read"
             ]
           ],
           "minimumCount": 1,

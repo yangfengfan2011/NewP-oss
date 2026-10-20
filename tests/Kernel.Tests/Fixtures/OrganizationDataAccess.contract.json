@@ -158,6 +158,21 @@
         ],
         "minimumCount": 1,
         "maximumCount": 1
+      },
+      {
+        "role": "view",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "organization.company"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
       }
     ],
     "provider": "authorization.object.manage",
@@ -589,6 +604,21 @@
         ],
         "minimumCount": 1,
         "maximumCount": 1
+      },
+      {
+        "role": "view",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "organization.department"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
       }
     ],
     "provider": "authorization.object.manage",
@@ -888,6 +918,21 @@
           [
             "read",
             "authorize"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      },
+      {
+        "role": "view",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "organization.person"
+        ],
+        "anyOf": [
+          [
+            "read"
           ]
         ],
         "minimumCount": 1,
@@ -1497,6 +1542,21 @@
           [
             "read",
             "authorize"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      },
+      {
+        "role": "view",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "organization.position"
+        ],
+        "anyOf": [
+          [
+            "read"
           ]
         ],
         "minimumCount": 1,

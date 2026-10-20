@@ -460,7 +460,7 @@ public sealed class CanonicalModulePlanCompiler
                     || !DataExecutionContracts.IsBuiltInProvider(execution.Provider) && execution.Provider != candidate.BackendBehaviorKey && !candidates.SelectMany(owner => owner.DataExecutionProviders).Any(provider => provider.Key == execution.Provider)))
                     throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_OWNER_INVALID");
                 if (candidate.DataExecutionProviders.Any(provider => provider.ModuleId != candidate.ModuleId || provider.BackendBehaviorKey != candidate.BackendBehaviorKey
-                    || provider.ConsumerBinding != "resource-owner" || string.IsNullOrWhiteSpace(provider.Key) || DataExecutionContracts.IsBuiltInProvider(provider.Key)
+                    || provider.ConsumerBinding is not ("resource-owner" or "execution-owner") || string.IsNullOrWhiteSpace(provider.Key) || DataExecutionContracts.IsBuiltInProvider(provider.Key)
                     || provider.Requirements is not { Count: > 0 }))
                     throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_OWNER_INVALID");
                 DataActionCatalogCompiler.Compile(candidate.DataActions);

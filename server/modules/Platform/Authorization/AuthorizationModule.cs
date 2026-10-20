@@ -23,7 +23,8 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IActionDataAccess, ActionDataAccess>();
         services.AddScoped<IDataExecutionAccess, DataExecutionAccess>();
         services.AddScoped<DataExecutionExceptionFilter>();
-        services.AddScoped<IDataScopeObjectPermissionQueries, DataScopeObjectPermissionQueries>();
+        services.AddScoped<IDataScopeObjectPermissionQueries>(provider =>
+            ActivatorUtilities.CreateInstance<DataScopeObjectPermissionQueries>(provider, provider.GetRequiredService<IDataExecutionAccess>()));
         services.AddScoped<IDataScopeIdentityProvider, AllAuthenticatedDataScopeIdentities>();
         services.AddScoped<IDataScopeIdentityProvider, AuthorizationDataScopeIdentities>();
         services.AddScoped<DataScopeCatalog>();
@@ -31,7 +32,8 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<DataScopeObjectGrants>();
         services.AddScoped<IDataScopeObjectInitializer, DataScopeObjectInitializer>();
         services.AddScoped<DataScopeObjectInitializationSources>();
-        services.AddScoped<DataScopeObjectManagement>();
+        services.AddScoped<DataScopeObjectManagement>(provider =>
+            ActivatorUtilities.CreateInstance<DataScopeObjectManagement>(provider, provider.GetRequiredService<IDataExecutionAccess>()));
         services.AddScoped<IDataScopeBatchAuthorization>(provider => provider.GetRequiredService<DataScopeObjectManagement>());
         services.AddScoped<IDataScopeObjectAuthorization>(provider => provider.GetRequiredService<DataScopeObjectManagement>());
         services.AddScoped<IDataScopeReadPlanProvider, DataScopeReadPlans>();

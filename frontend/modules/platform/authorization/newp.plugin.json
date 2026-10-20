@@ -46,15 +46,32 @@
   },
   "dataExecutionProviders": [
     {
+      "key": "authorization.collection.manage", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "execution-owner",
+      "requirements": [
+        { "role": "target", "stage": "prepare", "shape": "objects", "resources": ["$resource"], "anyOf": [["read", "authorize"]], "minimumCount": 0, "maximumCount": null },
+        { "role": "target", "stage": "submit", "shape": "objects", "resources": ["$resource"], "anyOf": [["read", "authorize"]], "minimumCount": 1, "maximumCount": null },
+        { "role": "view", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read"]] }
+      ]
+    },
+    {
+      "key": "authorization.collection.view", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "execution-owner",
+      "requirements": [
+        { "role": "view", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read"]] }
+      ]
+    },
+    {
       "key": "authorization.object.manage", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "resource-owner",
       "requirements": [
         { "role": "target", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "authorize"]] },
-        { "role": "target", "stage": "submit", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "authorize"]] }
+        { "role": "target", "stage": "submit", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "authorize"]] },
+        { "role": "view", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read"]] }
       ],
-      "legacyConsumers": [
-        { "moduleId": "Part", "resourceKey": "part.part" },
-        { "moduleId": "Document", "resourceKey": "document.document" },
-        { "moduleId": "Workspace", "resourceKey": "workspace.folder" }
+      "legacyConsumers": []
+    },
+    {
+      "key": "authorization.object.view", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "resource-owner",
+      "requirements": [
+        { "role": "view", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read"]] }
       ]
     },
     {

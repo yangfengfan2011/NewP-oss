@@ -7,13 +7,21 @@ public sealed partial class DataScopeObjectManagement
 {
     /// <inheritdoc/>
     async Task<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>> IDataScopeBatchAuthorization.ReadCurrentAsync(
-        IReadOnlyList<DataScopeAuthorizationTarget> targets, CancellationToken token)
+        IReadOnlyList<DataScopeAuthorizationTarget> targets, CancellationToken token) => await ReadCurrentBatchAsync(targets, LegacyOwnerExecution(), token);
+
+    /// <inheritdoc/>
+    public Task<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>> ReadCurrentAsync(
+        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataExecutionBindingReference execution, CancellationToken token = default) =>
+        ReadCurrentBatchAsync(targets, RequiredOwnerExecution(execution), token);
+
+    private async Task<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>> ReadCurrentBatchAsync(
+        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataExecutionBindingReference? execution, CancellationToken token)
     {
         using var observation = evaluation?.BeginOperation();
         return await transactions.ExecuteAsync<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>>(async cancellation =>
         {
             var ordered = OrderTargets(targets);
-            var status = await LockAndCheckTargetsAsync(ordered, cancellation);
+            var status = await LockAndCheckTargetsAsync(ordered, cancellation, execution);
             if (status != DataScopeObjectStatus.Succeeded) return new(AuthorizationStatus(status));
             var configurations = new List<DataScopeObjectConfiguration>();
             foreach (var target in ordered) configurations.Add(await grants.GetAsync(target.ResourceKey, target.ObjectId, cancellation));
@@ -23,9 +31,18 @@ public sealed partial class DataScopeObjectManagement
 
     /// <inheritdoc/>
     async Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> IDataScopeBatchAuthorization.ReplaceAsync(
-        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, CancellationToken token)
+        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, CancellationToken token) =>
+        await ReplaceBatchAsync(targets, input, LegacyOwnerExecution(), token);
+
+    /// <inheritdoc/>
+    public Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> ReplaceAsync(
+        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, DataExecutionBindingReference execution,
+        CancellationToken token = default) => ReplaceBatchAsync(targets, input, RequiredOwnerExecution(execution), token);
+
+    private async Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> ReplaceBatchAsync(
+        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, DataExecutionBindingReference? execution, CancellationToken token)
     {
-        var result = await WriteAsync(targets, (ordered, cancellation) => PrepareBatchAsync(ordered, input, cancellation), token);
+        var result = await WriteAsync(targets, (ordered, cancellation) => PrepareBatchAsync(ordered, input, cancellation), token, execution);
         return new(AuthorizationStatus(result.Status), result.Value,
             result.ValidationError is null ? null : Error(result.ValidationError));
     }

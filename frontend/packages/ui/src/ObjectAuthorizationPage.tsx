@@ -9,5 +9,5 @@ export default function ObjectAuthorizationPage({ input, reportState, target }: 
   useEffect(() => reportState({ dirty: false, submitting: false }), [reportState]);
   return <ObjectAuthorizationInput target={target} action={{ key: 'viewAuthorization', labelKey: 'DataScope.ObjectAuthorization', inputKey: 'objectAuthorizationDetails' }}
     featurePosition={typeof input.parameters.sourceFeaturePosition === 'string' ? input.parameters.sourceFeaturePosition : undefined}
-    value={undefined} queryScope={input.queryScope} onChange={unchanged} />;
+    value={undefined} queryScope={input.queryScope} dataAccess={input.dataAccess} onChange={unchanged} />;
 }

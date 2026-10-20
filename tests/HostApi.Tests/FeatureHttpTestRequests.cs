@@ -89,9 +89,9 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
-    internal static async Task<string> ReadTextAsync(HttpClient client, FeaturePoint point, string path)
+    internal static async Task<string> ReadTextAsync(HttpClient client, FeaturePoint point, string path, ActionDataAccessRequirement? dataAccess = null)
     {
-        using var response = await SendAsync(client, point, HttpMethod.Get, path);
+        using var response = await SendAsync(client, point, HttpMethod.Get, path, dataAccess: dataAccess);
         if (response.StatusCode != HttpStatusCode.OK)
         {
             var failure = await response.Content.ReadAsStringAsync();
@@ -101,8 +101,8 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
         return await response.Content.ReadAsStringAsync();
     }
 
-    internal static async Task<JsonElement> ReadAsync(HttpClient client, FeaturePoint point, string path) =>
-        JsonSerializer.Deserialize<JsonElement>(await ReadTextAsync(client, point, path));
+    internal static async Task<JsonElement> ReadAsync(HttpClient client, FeaturePoint point, string path, ActionDataAccessRequirement? dataAccess = null) =>
+        JsonSerializer.Deserialize<JsonElement>(await ReadTextAsync(client, point, path, dataAccess));
 
     internal async Task GrantAsync(HttpClient admin, string roleId, params FeaturePoint[] points)
     {

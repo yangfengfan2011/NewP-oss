@@ -43,6 +43,16 @@ public interface IDataScopeObjectPermissionQueries
     /// <summary>返回指定真实账号的数据动作及受控依据；目标或账号不可查询时返回null，依赖故障传播。</summary>
     Task<DataScopeObjectInspection?> InspectAsync(string resourceKey, string objectId, string? accountId,
         CancellationToken token = default);
+    /// <summary>只读目录消费端点明确允许的查看或管理辅助read来源，不增加authorize。</summary>
+    Task<DataScopePermissionCatalog?> CatalogAsync(string resourceKey, string objectId,
+        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default) => throw new NotSupportedException();
+    /// <summary>最小用户目录保留原完整读取资格，与其他管理主体候选分离。</summary>
+    Task<DataScopeAuthorizationResult<DataScopeSubjectPage>> UsersAsync(string resourceKey, string objectId, string? query,
+        int page, IReadOnlyList<string> currentIds, IReadOnlyList<DataExecutionBindingReference> bindings,
+        CancellationToken token = default) => throw new NotSupportedException();
+    /// <summary>解释只按原read角色查询真实目标，管理来源的辅助读取也不升级authorize。</summary>
+    Task<DataScopeObjectInspection?> InspectAsync(string resourceKey, string objectId, string? accountId,
+        IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token = default) => throw new NotSupportedException();
 }
 
 /// <summary>权限结果是数据动作裁决，不代替功能位置、业务状态或资源拥有者边界。</summary>

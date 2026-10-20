@@ -28,6 +28,9 @@ public sealed record DataExecutionContract(string Key, string ModuleId, string P
     public IReadOnlyList<DataExecutionFixedBinding> FixedBindings { get; init; } = [];
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? TargetResource { get; init; }
+    /// <summary>执行owner声明的有限异构资源集；与单资源消费者互斥，要求仍由能力owner唯一提供。</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? TargetResources { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? ProviderModuleId { get; init; }
 }
@@ -43,6 +46,9 @@ public static class DataExecutionContracts
         { UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow };
         return executions.EnumerateArray().Select(item =>
         {
+            // 资源集合只有authoring的短引用入口，不接受内部投影字段作为第二种声明写法。
+            if (item.TryGetProperty("targetResources", out _))
+                throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
             if (item.GetProperty("provider").GetString() is "entityOwnership.transfer" or "entityOwnership.initialize")
             {
                 var ownershipProvider = item.GetProperty("provider").GetString()!;
@@ -53,13 +59,19 @@ public static class DataExecutionContracts
                     item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!,
                     OwnershipRequirements(ownershipProvider, item.GetProperty("resources").Deserialize<string[]>()!));
             }
-            if (item.TryGetProperty("resourceKey", out var resource) && !item.GetProperty("provider").GetString()!.StartsWith("standardCrud.", StringComparison.Ordinal))
+            if (!item.GetProperty("provider").GetString()!.StartsWith("standardCrud.", StringComparison.Ordinal)
+                && (item.TryGetProperty("resourceKey", out _) || item.TryGetProperty("resources", out _)))
             {
-                if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey" or "fixedBindings"))
+                var scalar = item.TryGetProperty("resourceKey", out var resource);
+                var collection = item.TryGetProperty("resources", out var resources);
+                var targets = collection ? resources.Deserialize<string[]>(options) : null;
+                if (scalar == collection || targets is not null && (targets.Length == 0 || targets.Any(string.IsNullOrWhiteSpace)
+                        || targets.Distinct(StringComparer.Ordinal).Count() != targets.Length)
+                    || item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey" or "resources" or "fixedBindings"))
                     || item.GetProperty("moduleId").GetString() != moduleId)
                     throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
                 return new DataExecutionContract(item.GetProperty("key").GetString()!, moduleId, item.GetProperty("provider").GetString()!,
-                    item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!, []) { TargetResource = resource.GetString(), FixedBindings = item.TryGetProperty("fixedBindings", out var bindings)
+                    item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!, []) { TargetResource = scalar ? resource.GetString() : null, TargetResources = targets, FixedBindings = item.TryGetProperty("fixedBindings", out var bindings)
                         ? bindings.Deserialize<DataExecutionFixedBinding[]>(options)! : [] };
             }
             if (item.GetProperty("provider").GetString() is { } provider && provider.StartsWith("standardCrud.", StringComparison.Ordinal))
@@ -127,7 +139,7 @@ public static class DataExecutionContracts
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
             if ((contract.Provider is "entityOwnership.transfer" or "entityOwnership.initialize")
                 && (contract.LegacyActions || contract.AllowedAdditionalActions.Count != 0 || contract.Branches.Count != 0
-                    || contract.TargetResource is not null || contract.ProviderModuleId is not null
+                    || contract.TargetResource is not null || contract.TargetResources is not null || contract.ProviderModuleId is not null
                     || JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(OwnershipRequirements(contract.Provider, contract.Requirements[0].Resources))
                     || !actions.Any(action => action.Key == "edit" && action.RequiresRead)))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");

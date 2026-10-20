@@ -26,8 +26,9 @@ public sealed partial class WorkspaceContents
     public async Task<DataScopeObjectInspection?> ReadPermissionsAsync(string actor, WorkspacePosition position, string linkId,
         string? accountId, IDataScopeObjectPermissionQueries queries, CancellationToken token)
     {
+        ValidatePermissionSources(WorkspacePermissionExecutions.ViewSources);
         var target = await ResolvePermissionTargetAsync(actor, position, linkId, token);
-        return await queries.InspectAsync(target.ResourceKey, target.ObjectId, accountId, token);
+        return await queries.InspectAsync(target.ResourceKey, target.ObjectId, accountId, WorkspacePermissionExecutions.ViewSources, token);
     }
 
     /// <summary>真实来源与授权替换共用图事务；先锁图，再解析当前LID及取得对象ACL锁，避免移除来源交错提交。</summary>
@@ -35,9 +36,10 @@ public sealed partial class WorkspaceContents
         DataScopeObjectConfiguration configuration, IDataScopeObjectAuthorization authorization, CancellationToken token) =>
         transactions.ExecuteAsync<DataScopeAuthorizationResult>(async cancellation =>
         {
+            ValidatePermissionSources([WorkspacePermissionExecutions.Management("submit")]);
             await LockGraphAsync(cancellation);
             var target = await ResolvePermissionTargetAsync(actor, position, linkId, cancellation);
-            return await authorization.ReplaceAsync(target.ResourceKey, target.ObjectId, configuration, cancellation);
+            return await authorization.ReplaceAsync(target.ResourceKey, target.ObjectId, configuration, WorkspacePermissionExecutions.Management("submit"), cancellation);
         }, token);
 
     // 所有权限操作每次重解完整位置和当前LID，不把首次加载后的裸EID当来源证明。

@@ -17,6 +17,7 @@ import { FeaturePlacementContext } from '../authorization/FeaturePlacementContex
 import { platformTestCatalogs } from './localizationTestCatalogs';
 import { PageComposition } from '../composition/PageCompositionContext';
 import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
@@ -31,9 +32,15 @@ const modules = Object.fromEntries(await Promise.all(owners.map(async owner => [
   (await loadComponentSource<{ default: FrontendBehaviorBindings }>(owner, 'index.ts')).default])));
 const fixture = (name: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', name + '.contract.json'), 'utf8'));
 const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+await import('../composition/StandardTabPage');
+await import('../../../ui/src/ObjectAuthorizationPage');
 
 async function mount(settings: { save?: () => Response | Promise<Response>; read?: () => Response | Promise<Response>;
-  inherited?: ActionInstanceScope; sourceScope?: boolean; strict?: boolean } = {}) {
+  inherited?: ActionInstanceScope; sourceScope?: boolean; strict?: boolean; readOnly?: boolean; owner?: 'Part' | 'Document' } = {}) {
+  const activeOwner = settings.owner ?? 'Part';
+  const resource = activeOwner === 'Part' ? 'part.part' : 'document.document';
+  const route = activeOwner === 'Part' ? '/parts' : '/documents';
+  const endpoint = activeOwner === 'Part' ? '/api/part/parts' : '/api/document/documents';
   const observed = new Map<StandardCrudActionInstance, { disposed: boolean }>();
   const marker = Symbol('test-module-action-state');
   const snapshotId = 'independent-authorization-' + crypto.randomUUID();
@@ -56,12 +63,12 @@ async function mount(settings: { save?: () => Response | Promise<Response>; read
     nav.find(item => item.key === historyKey)!.featurePosition = history.historyPosition;
     const features = [{ key: readKey, position: history.readPosition, kind: 'navigation' },
       { key: historyKey, position: history.historyPosition, kind: 'navigation', parentPosition: history.readPosition }];
-    return { moduleId: owner, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: owner === 'Part' ? [...features,
-      { key: 'authorize', position: fixture('PartPermissionFeatures').managePosition, kind: 'action', parentPosition: history.readPosition, actionScope: 'list.rowActions' }] : features };
+    return { moduleId: owner, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: owner === activeOwner ? [...features,
+      { key: 'authorize', position: fixture(activeOwner + 'PermissionFeatures').managePosition, kind: 'action', parentPosition: history.readPosition, actionScope: 'list.rowActions' }] : features };
   });
   const entries = buildPageEntriesFromNavDocuments(metadata.navDocuments);
-  const permissions = fixture('PartPermissionFeatures');
-  const grants = [permissions.readPosition, permissions.managePosition];
+  const permissions = fixture(activeOwner + 'PermissionFeatures');
+  const grants = settings.readOnly ? [permissions.readPosition] : [permissions.readPosition, permissions.managePosition];
   const user = { id: 'manager', ecode: 'manager', ename: 'Manager', revision: 1, mustChangePassword: false, featurePositions: grants, timeZoneId: 'UTC' };
   let currentUser = user;
   const requests: Request[] = [];
@@ -70,11 +77,23 @@ async function mount(settings: { save?: () => Response | Promise<Response>; read
     requests.push(request); const url = new URL(request.url);
     if (url.pathname.endsWith('/current-user')) return json(currentUser);
     if (url.pathname.endsWith('/antiforgery-token')) return json({ requestToken: 'token' });
-    if (url.pathname === '/api/part/parts') return json({ items: [{ EID: 'part-object', ECODE: 'P-1', ENAME: '独立零组件' }], total: 1, page: 1, pageSize: 20 });
+    if (url.pathname === endpoint) return json({ items: [{ EID: 'part-object', ECODE: 'P-1', ENAME: '独立零组件' }], total: 1, page: 1, pageSize: 20 });
+    if (url.pathname === endpoint + '/part-object') return json({ fields: { EID: 'part-object', ECODE: 'P-1', ENAME: '独立零组件' }, summaries: {} });
+    if (settings.readOnly && url.pathname.includes('/permissions')) {
+      const expected = router.state.location.pathname === route
+        ? formalDataAccessFor(resource + '.list', 'rowActions', 'viewAuthorization') : formalDataAccessFor(resource + '.permissions', 'read');
+      if (request.headers.get('X-NewP-Data-Declaration') !== expected.id)
+        return new Response(JSON.stringify({ code: 'ActionDataAccess.DeclarationInvalid', actualDeclaration: request.headers.get('X-NewP-Data-Declaration') }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
     if (url.pathname.endsWith('/permissions/eligibility')) return json({ allowed: true });
     if (url.pathname.endsWith('/permissions/catalog')) return json({ actions: [{ key: 'read', title: '读取', enabled: true }], subjectTypes: [{ key: 'all', title: '所有人', requiresId: false }] });
-    if (url.pathname === '/api/part/parts/part-object/permissions') return request.method === 'PUT' ? settings.save?.() ?? new Response(null, { status: 204 })
-      : settings.read?.() ?? json({ resourceKey: 'part.part', objectId: 'part-object', subjects: [] });
+    if (url.pathname.endsWith('/permissions/subjects/user')) return json({ items: [{ id: user.id, name: user.ename }], total: 1,
+      page: 1, pageSize: 20, currentValues: [{ id: user.id, name: user.ename }] });
+    if (url.pathname.endsWith('/permissions/explanation')) return json({ resourceKey: resource, objectId: 'part-object',
+      accountId: user.id, accountName: user.ename, actions: [{ key: 'read', title: '读取', enabled: true, requiresRead: false, allowed: true, sources: [] }] });
+    if (url.pathname === endpoint + '/part-object/permissions') return request.method === 'PUT' ? settings.save?.() ?? new Response(null, { status: 204 })
+      : settings.read?.() ?? json({ resourceKey: resource, objectId: 'part-object', subjects: [] });
     throw new Error(`Unexpected independent authorization request ${request.method} ${url.pathname}`);
   }));
   const capsules = owners.map(owner => readComponentJson(owner, 'newp.plugin.json'));
@@ -115,16 +134,17 @@ async function mount(settings: { save?: () => Response | Promise<Response>; read
       <EntryNavigationProvider><PageComposition><Controls>{content}</Controls></PageComposition></EntryNavigationProvider>
     </RuntimeMetadataProvider></CurrentPermissionScope></AuthorizationProvider></AuthProvider>
   </LocalizationProvider>;
-  const entry = entries.find(item => item.path === '/parts')!;
+  const entry = entries.find(item => item.path === route)!;
   expect(entry.entryType).toBe('standard-list');
   const router = createMemoryRouter([{ path: entry.path, element: wrap(
-    <FeaturePlacementContext.Provider value={{ entryPosition: entry.featurePosition! }}>{renderPageEntry(entry)}</FeaturePlacementContext.Provider>) }], { initialEntries: ['/parts'] });
+    <FeaturePlacementContext.Provider value={{ entryPosition: entry.featurePosition! }}>{renderPageEntry(entry)}</FeaturePlacementContext.Provider>) },
+    ...entries.filter(item => item.path === route + '/permissions').map(item => ({ path: item.path, element: wrap(renderPageEntry(item)) }))], { initialEntries: [route] });
   let mounted = true;
   const unmount = async () => { if (mounted) { await act(async () => root.unmount()); mounted = false; } };
   onTestFinished(async () => { await unmount(); router.dispose(); container.remove(); ModuleRegistry.replaceAll([], 'independent-authorization-cleanup'); vi.unstubAllGlobals(); });
   await act(async () => root.render(settings.strict ? <StrictMode><RouterProvider router={router} /></StrictMode> : <RouterProvider router={router} />));
   await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="part-object"]')).not.toBeNull());
-  return { container, requests, observed, unmount, changeBoundary: async (boundary: 'account' | 'source' | 'unmount') => {
+  return { container, requests, observed, unmount, router, changeBoundary: async (boundary: 'account' | 'source' | 'unmount') => {
     if (boundary === 'unmount') await unmount();
     else if (boundary === 'source') changeSource();
     else { currentUser = { ...user, id: 'other-manager', ecode: 'other-manager' }; await refreshIdentity(); }
@@ -142,6 +162,40 @@ async function openAuthorization(container: HTMLElement) {
 const confirm = () => document.querySelector<HTMLButtonElement>('[role="dialog"] .ant-modal-footer button.ant-btn-primary');
 const button = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(value => value.textContent?.replace(/\s/g, '') === name);
 
+it.each(['Part', 'Document'] as const)('passes the actual readonly %s tab source through PageEntry without an authorize grant', async owner => {
+  const { container, requests, router } = await mount({ readOnly: true, owner });
+  await act(async () => container.querySelector<HTMLButtonElement>('tr[data-row-key="part-object"] button[aria-label="更多"]')!.click());
+  const permissions = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent?.replace(/\s/g, '') === '权限');
+  await vi.waitFor(() => expect(permissions(), JSON.stringify({
+    menus: [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(item => item.textContent),
+    reads: requests.filter(request => new URL(request.url).pathname.includes('/permissions/')).map(request => ({
+      path: new URL(request.url).pathname, declaration: request.headers.get('X-NewP-Data-Declaration') })),
+  })).toBeDefined());
+  await act(async () => permissions()!.click());
+  const resource = owner === 'Part' ? 'part.part' : 'document.document';
+  const expected = formalDataAccessFor(resource + '.permissions', 'read');
+  const actionSource = formalDataAccessFor(resource + '.list', 'rowActions', 'viewAuthorization');
+  const earlyReads = requests.filter(request => new URL(request.url).pathname.includes('/permissions/'));
+  for (const request of earlyReads) expect(request.headers.get('X-NewP-Data-Declaration'), new URL(request.url).pathname).toBe(actionSource.id);
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe(owner === 'Part' ? '/parts/permissions' : '/documents/permissions'));
+  const tab = () => [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(item => item.textContent === '权限');
+  await vi.waitFor(() => expect(tab()).toBeDefined());
+  await act(async () => tab()!.click());
+  await vi.waitFor(() => expect(requests.some(request => new URL(request.url).pathname.endsWith('/permissions/explanation'))).toBe(true));
+  await vi.waitFor(() => expect(requests.some(request => new URL(request.url).pathname.endsWith('/permissions/subjects/user'))).toBe(true));
+  const reads = requests.filter(request => new URL(request.url).pathname.includes('/permissions/'));
+  expect(reads.length).toBeGreaterThanOrEqual(2);
+  for (const request of reads) {
+    expect([actionSource.id, expected.id]).toContain(request.headers.get('X-NewP-Data-Declaration'));
+    expect(request.headers.get('X-NewP-Feature')).toBe(fixture(owner + 'PermissionFeatures').readPosition);
+  }
+  expect(reads.find(request => new URL(request.url).pathname.endsWith('/permissions/explanation'))!.headers.get('X-NewP-Data-Declaration')).toBe(expected.id);
+  const catalogs = reads.filter(request => new URL(request.url).pathname.endsWith('/permissions/catalog'));
+  expect(catalogs[0].headers.get('X-NewP-Data-Declaration')).toBe(actionSource.id);
+  expect(catalogs[catalogs.length - 1].headers.get('X-NewP-Data-Declaration')).toBe(expected.id);
+  expect(requests.some(request => request.method === 'PUT')).toBe(false);
+});
+
 it('saves owner authorization through the real standalone Part route without an injected action instance', async () => {
   const { container, requests } = await mount();
   await openAuthorization(container);
@@ -149,6 +203,19 @@ it('saves owner authorization through the real standalone Part route without an 
   await act(async () => confirm()!.click());
   await vi.waitFor(() => expect(requests.filter(request => request.method === 'PUT')).toHaveLength(1));
   await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  const source = formalDataAccessFor('part.part.list', 'rowActions', 'authorize');
+  const rowView = formalDataAccessFor('part.part.list', 'rowActions', 'viewAuthorization');
+  for (const request of requests.filter(request => new URL(request.url).pathname.includes('/permissions'))) {
+    // 当前行还会独立检查既有查看入口；它保留自己的read来源，不冒充打开的管理输入。
+    if (request.headers.get('X-NewP-Data-Declaration') === rowView.id) {
+      expect(new URL(request.url).pathname).toBe('/api/part/parts/part-object/permissions/catalog');
+      expect(request.method).toBe('GET');
+      expect(request.headers.get('X-NewP-Feature')).toBe(fixture('PartPermissionFeatures').readPosition);
+      continue;
+    }
+    expect(request.headers.get('X-NewP-Data-Declaration')).toBe(source.id);
+    expect(request.headers.get('X-NewP-Feature')).toBe(fixture('PartPermissionFeatures').managePosition);
+  }
 });
 
 it('keeps the same standalone owner and unknown outcome across Review close and reopen without replay', async () => {

@@ -12,14 +12,14 @@ public sealed class DataScopeObjectsController(DataScopeObjectManagement managem
 {
     /// <summary>完整解释操作保留操作者身份，HTTP 层只翻译操作结果。</summary>
     [HttpGet("explanation")]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare")]
+    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
     public async Task<IActionResult> Explanation(string resourceKey, string objectId, [FromQuery] string? accountId,
         CancellationToken cancellationToken) =>
         ReadResult(await management.ExplainAsync(resourceKey, objectId, accountId, cancellationToken));
 
     /// <summary>按钮在发起编辑前取得真实服务端资格；响应不公开整份配置。</summary>
     [HttpGet("eligibility")]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare")]
+    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
     public async Task<IActionResult> Eligibility(string resourceKey, string objectId, CancellationToken cancellationToken) =>
         await management.CheckAsync(resourceKey, objectId, cancellationToken) switch
         {
@@ -30,13 +30,13 @@ public sealed class DataScopeObjectsController(DataScopeObjectManagement managem
 
     /// <summary>读取完整操作自行检查目标资格；拒绝保持原有 404/403 响应。</summary>
     [HttpGet]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare")]
+    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
     public async Task<IActionResult> Get(string resourceKey, string objectId, CancellationToken cancellationToken) =>
         ReadResult(await management.GetAsync(resourceKey, objectId, cancellationToken));
 
     /// <summary>完整保存成功返回 204，不在 HTTP 层刷新配置或复判保存后的资格。</summary>
     [HttpPut]
-    [DataExecutionEndpoint("authorization.object.manage", "submit")]
+    [DataExecutionEndpoint("authorization.object.manage", "submit"), DataExecutionEndpoint("authorization.collection.manage", "submit")]
     public async Task<IActionResult> Save(string resourceKey, string objectId, DataScopeObjectDto input, CancellationToken cancellationToken)
     {
         var result = await management.SaveAsync(resourceKey, objectId, input, cancellationToken);
@@ -45,13 +45,13 @@ public sealed class DataScopeObjectsController(DataScopeObjectManagement managem
 
     /// <summary>对象入口提供已通过目标管理资格检查的完整配置目录。</summary>
     [HttpGet("catalog")]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare")]
+    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
     public async Task<IActionResult> Catalog(string resourceKey, string objectId, CancellationToken cancellationToken) =>
         ReadResult(await management.CatalogAsync(resourceKey, objectId, cancellationToken));
 
     /// <summary>最小主体候选与已有项名称由完整操作保护，HTTP 参数仅作输入适配。</summary>
     [HttpGet("subjects/{type}")]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare")]
+    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
     public async Task<IActionResult> Subjects(string resourceKey, string objectId, string type, [FromQuery] string? query,
         [FromQuery] int page = 1, [FromQuery] string[]? currentIds = null, CancellationToken cancellationToken = default) =>
         ReadResult(await management.SubjectsAsync(resourceKey, objectId, type, query, page, currentIds ?? [], cancellationToken));

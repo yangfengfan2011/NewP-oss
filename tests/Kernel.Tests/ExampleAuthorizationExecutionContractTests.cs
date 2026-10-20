@@ -19,7 +19,14 @@ public sealed class ExampleAuthorizationExecutionContractTests
         Assert.All(management, requirement =>
         {
             Assert.Equal("Authorization", requirement.ProviderModuleId);
-            Assert.All(requirement.Requirements!, role => Assert.Equal(new[] { "read", "authorize" }, Assert.Single(role.AnyOf)));
+            Assert.All(requirement.Requirements!.Where(role => role.Role == "target"),
+                role => Assert.Equal(new[] { "read", "authorize" }, Assert.Single(role.AnyOf)));
+            if (requirement.Provider == "authorization.object.manage")
+            {
+                var view = Assert.Single(requirement.Requirements!, role => role.Role == "view");
+                Assert.Equal(("prepare", "object"), (view.Stage, view.Shape));
+                Assert.Equal(new[] { "read" }, Assert.Single(view.AnyOf));
+            }
         });
         var root = Root();
         var json = JsonSerializer.Serialize(requirements, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });

@@ -73,8 +73,12 @@ public sealed class AuthorizationManagementReadContractTests
             var feature = Assert.Single(result.Plan.FeatureCatalog, item => item.ModuleId == owner && item.BehaviorKey == resource + ".authorize");
             Assert.Equal("detail.custom", feature.ActionScope);
             Assert.Equal(feature.Position, Assert.Single(source.FeaturePositions));
-            Assert.Equal(new[] { "prepare", "submit" }, source.Requirements!.Select(item => item.Stage));
-            Assert.All(source.Requirements!, role => Assert.Equal(new[] { "read", "authorize" }, Assert.Single(role.AnyOf)));
+            var targets = source.Requirements!.Where(role => role.Role == "target").ToArray();
+            Assert.Equal(new[] { "prepare", "submit" }, targets.Select(item => item.Stage));
+            Assert.All(targets, role => Assert.Equal(new[] { "read", "authorize" }, Assert.Single(role.AnyOf)));
+            var viewRole = Assert.Single(source.Requirements!, role => role.Role == "view");
+            Assert.Equal(("prepare", "object"), (viewRole.Stage, viewRole.Shape));
+            Assert.Equal(new[] { "read" }, Assert.Single(viewRole.AnyOf));
         }
     }
 }

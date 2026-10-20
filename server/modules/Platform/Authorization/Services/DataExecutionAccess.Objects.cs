@@ -7,6 +7,19 @@ namespace ICP.Platform.Modules.Authorization.Services;
 public sealed partial class DataExecutionAccess
 {
     /// <inheritdoc/>
+    public async Task<DataExecutionDecision> EvaluateObjectFromBindingsAsync(IReadOnlyList<DataExecutionBindingReference> bindings,
+        string resourceKey, string role, string objectId, CancellationToken cancellationToken = default)
+    {
+        var effective = Resolve(bindings, resourceKey);
+        var matches = bindings.Where(binding => binding.Execution == effective.Execution && binding.Provider == effective.Provider
+            && effective.Requirements!.Any(item => item.Role == role && item.Stage == binding.Stage)).ToArray();
+        if (matches.Length != 1) throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
+        await foreach (var decision in EvaluateResolvedObjectsAsync(effective.ModuleId, effective.Resources, effective.Requirements!,
+            matches[0], role, [new(resourceKey, objectId)], cancellationToken)) return decision.Decision;
+        throw new InvalidOperationException("DATA_EXECUTION_TARGET_RESULT_MISSING");
+    }
+
+    /// <inheritdoc/>
     public async IAsyncEnumerable<DataExecutionTargetDecision> EvaluateObjectsAsync(DataExecutionBindingReference binding, string role,
         IReadOnlyList<DataExecutionTargetInput> targets, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {

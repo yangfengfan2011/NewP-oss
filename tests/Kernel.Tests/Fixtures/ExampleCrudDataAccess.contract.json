@@ -242,6 +242,21 @@
         ],
         "minimumCount": 1,
         "maximumCount": 1
+      },
+      {
+        "role": "view",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
       }
     ],
     "provider": "authorization.object.manage",

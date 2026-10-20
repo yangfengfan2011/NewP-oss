@@ -193,7 +193,8 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
             using var configured = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Put,
                 $"/api/{slug}/{(target.Model == "Part" ? "parts" : "documents")}/{target.Id}/permissions", new DataScopeObjectDto(resource, target.Id,
                     [new("ownership319-ws-owner-" + target.Id, "user", owner.AccountId, 0, new Dictionary<string, string> { ["read"] = read, ["edit"] = edit }),
-                     new("ownership319-ws-recipient-" + target.Id, "user", recipient.AccountId, 0, new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" })]));
+                     new("ownership319-ws-recipient-" + target.Id, "user", recipient.AccountId, 0, new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" })]),
+                OwnedResourceReadHttpRequests.ForExecution(fixture, feature, resource + ".authorization.manage", "authorization.object.manage", resource));
             Assert.True(configured.StatusCode == HttpStatusCode.NoContent, await configured.Content.ReadAsStringAsync());
         }
     }
@@ -362,7 +363,8 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
             using var configured = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
                 $"/api/{slug}/{plural}/{target.Id}/permissions", new DataScopeObjectDto(resource, target.Id,
                     [new("ownership319-owner", "user", owner.AccountId, 0, new Dictionary<string, string> { ["read"] = read, ["edit"] = edit }),
-                     new("ownership319-recipient", "user", recipient.AccountId, 0, new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" })]));
+                     new("ownership319-recipient", "user", recipient.AccountId, 0, new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" })]),
+                OwnedResourceReadHttpRequests.ForExecution(fixture, manage, resource + ".authorization.manage", "authorization.object.manage", resource));
             Assert.Equal(HttpStatusCode.NoContent, configured.StatusCode);
         }
     }

@@ -378,7 +378,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         if (selected.Length != 2) throw new InvalidOperationException("批量授权没有两个真实混合资源前置对象。");
         var prepared = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/permissions/batch/prepare",
             new { sources = new[] { new { position = position.CommandPosition, linkIds = selected.Select(item => item.GetProperty("linkId").GetString()!).ToArray() } },
-                includeDescendants = false }, batch.Position, token);
+                includeDescendants = false }, batch.Position, token,
+            features.Declaration(batch, "workspace.content.authorization.batch", "authorization.collection.manage", "workspace.folder"));
         if (prepared.GetProperty("items").GetArrayLength() != 2 || prepared.GetProperty("items").EnumerateArray().Any(item => !item.GetProperty("manageable").GetBoolean()))
             throw new InvalidOperationException("普通管理账号无法经正式批量来源准备对象。");
         await WriteAsync("batch-actor-preparation.json", new { actorId = manager.AccountId, browse = browse.Position, batch = batch.Position,
@@ -472,7 +473,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         var configuration = new ICP.Platform.Modules.Authorization.DTOs.DataScopeObjectDto("part.part", _oldPartId!,
             [new("history-browser-denied", "user", reader.AccountId, 1, new Dictionary<string, string> { ["read"] = "deny" })]);
         await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Put, "/api/part/parts/" + Uri.EscapeDataString(_oldPartId!) + "/permissions",
-            configuration, authorize.Position, token);
+            configuration, authorize.Position, token,
+            features.Declaration(authorize, "part.part.authorization.manage", "authorization.object.manage", "part.part"));
     }
 
     // 两种准备方式共用同一有限页面授权集合；当前模式不为历史角色升级再创建第二个账号。

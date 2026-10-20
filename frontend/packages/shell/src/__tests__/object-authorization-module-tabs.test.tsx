@@ -20,6 +20,7 @@ import { EntryNavigationProvider } from '../navigation/EntryNavigationContext';
 import { PageEntry, PageOutlet } from '../composition/PageOutlet';
 import { PageComposition } from '../composition/PageCompositionContext';
 import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { AuthProvider } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
@@ -53,6 +54,7 @@ it.each(['Part', 'WorkspaceFolder', 'Document'] as const)('saves a Workspace %s 
   const list = metadata.viewDocuments.find(document => document.view.key === 'workspace.folder.list')!.view;
   const definition = (list.rowActions as StandardCrudActionDefinition[]).find(action => action.key === 'authorizeContent');
   expect(definition).toBeDefined();
+  definition!.dataAccess = formalDataAccessFor('workspace.folder.list', 'rowActions', 'authorizeContent');
   const binding = workspace.standardCrudCapabilities!.find(item => item.targetKey === 'workspace.folder.list')!;
   const { default: registration } = await binding.load();
   const requests: Request[] = [];
@@ -229,6 +231,13 @@ it.each([
   for (const request of sourceReads) {
     expect(JSON.parse(new URL(request.url).searchParams.get('queryScope')!)).toEqual(position);
     expect(request.headers.get('X-NewP-Feature')).toBe(positions.readPosition);
+    if (new URL(request.url).pathname.includes('/permissions/')) {
+      const viewer = formalDataAccessFor('workspace.content.permissions', 'read');
+      const row = formalDataAccessFor('workspace.folder.list', 'rowActions', 'viewAuthorization');
+      expect([row.id, viewer.id]).toContain(request.headers.get('X-NewP-Data-Declaration'));
+      if (new URL(request.url).pathname.endsWith('/permissions/explanation'))
+        expect(request.headers.get('X-NewP-Data-Declaration')).toBe(viewer.id);
+    }
   }
   expect(requests.some(request => new URL(request.url).pathname.match(/^\/api\/(part\/parts|document\/documents|workspace\/folders)\//) !== null)).toBe(false);
   expect(requests.some(request => new URL(request.url).pathname.endsWith('/permissions/eligibility'))).toBe(false);

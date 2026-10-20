@@ -16,8 +16,9 @@ public sealed partial class WorkspaceContents
         IDataScopeBatchAuthorization authorization, CancellationToken token) =>
         transactions.ExecuteAsync<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>>(async cancellation =>
         {
+            ValidatePermissionSources([WorkspacePermissionExecutions.Batch("submit")]);
             var targets = await ResolveBatchPermissionTargetsAsync(actor, sources, cancellation);
-            return await authorization.ReplaceAsync(targets, input, cancellation);
+            return await authorization.ReplaceAsync(targets, input, WorkspacePermissionExecutions.Batch("submit"), cancellation);
         }, token);
 
     /// <summary>核对使用与保存相同的真实来源，不把失效来源解释为原保存未提交。</summary>
@@ -25,8 +26,9 @@ public sealed partial class WorkspaceContents
         IReadOnlyList<WorkspaceBatchPermissionSource> sources, IDataScopeBatchAuthorization authorization, CancellationToken token) =>
         transactions.ExecuteAsync<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>>(async cancellation =>
         {
+            ValidatePermissionSources([WorkspacePermissionExecutions.Batch("prepare")]);
             var targets = await ResolveBatchPermissionTargetsAsync(actor, sources, cancellation);
-            return await authorization.ReadCurrentAsync(targets, cancellation);
+            return await authorization.ReadCurrentAsync(targets, WorkspacePermissionExecutions.Batch("prepare"), cancellation);
         }, token);
 
     // 来源只产出真实对象身份；图锁先于公共批服务的全部ACL锁，核对和保存保持同一顺序。

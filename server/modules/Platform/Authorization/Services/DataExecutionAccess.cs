@@ -171,13 +171,16 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
     // 执行提供者由真实执行端限定；即使引用同一模块其他合法声明也不能串用。
     private ActionDataAccessRequirement Resolve(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey)
     {
+        if (bindings is not { Count: > 0 } || bindings.Any(binding => binding is null))
+            throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
         var context = http.HttpContext ?? throw new ActionDataAccessException(400, "ActionDataAccess.ContextRequired");
         if (context.User.Identity?.IsAuthenticated != true) throw new ActionDataAccessException(401, "ActionDataAccess.SubjectRequired");
         var ids = context.Request.Headers["X-NewP-Data-Declaration"];
         var position = context.Request.Headers["X-NewP-Feature"];
         var requirement = ids.Count == 1 ? plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Id == ids[0]) : null;
         var owners = context.GetEndpoint()?.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
-        if (requirement?.Requirements is null || owners?.Count != 1 || owners[0].ModuleId != (requirement.ProviderModuleId ?? requirement.ModuleId)
+        if (requirement?.Requirements is null || owners?.Count != 1
+            || owners[0].ModuleId != (requirement.ProviderModuleId ?? requirement.ModuleId) && owners[0].ModuleId != requirement.ModuleId
             || !requirement.Resources.Contains(resourceKey, StringComparer.Ordinal)
             || !bindings.Any(binding => binding.Execution == requirement.Execution && binding.Provider == requirement.Provider
                 && requirement.Requirements.Any(item => item.Stage == binding.Stage)))
@@ -190,20 +193,32 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
             throw new ActionDataAccessException(400, "ActionDataAccess.BranchInvalid");
         if (requirement.ProviderModuleId is not null)
         {
-            var resource = resources?.Resources.SingleOrDefault(resource => resource.ResourceKey == resourceKey) ?? throw new InvalidOperationException("DATA_EXECUTION_RESOURCE_CATALOG_REQUIRED");
+            var resourceCatalog = resources?.Resources ?? throw new InvalidOperationException("DATA_EXECUTION_RESOURCE_CATALOG_REQUIRED");
+            var resource = resourceCatalog.SingleOrDefault(resource => resource.ResourceKey == resourceKey)
+                ?? throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
+            var provider = plan.Modules.SelectMany(module => module.DataExecutionProviders).SingleOrDefault(provider => provider.Key == requirement.Provider
+                && provider.ModuleId == requirement.ProviderModuleId);
             var feature = context.GetEndpoint()?.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>();
             var endpointBehaviors = context.GetEndpoint()?.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()
                 .Select(binding => binding.BehaviorKey).Distinct(StringComparer.Ordinal).ToArray() ?? [];
-            var generic = feature?.Count == 1 && plan.FeatureCatalog.Any(point => point.Position == position[0]
+            var generic = owners[0].ModuleId == requirement.ProviderModuleId && feature?.Count == 1
+                && plan.FeatureCatalog.Any(point => point.Position == position[0]
                 && point.ModuleId == resource.ModuleId && point.BehaviorKey == resourceKey + "." + feature[0].ActionKey);
-            var ownEndpoint = feature?.Count == 0 && requirement.ProviderModuleId == requirement.ModuleId
-                && owners[0].ModuleId == requirement.ModuleId && endpointBehaviors.Length == 1
+            var ownEndpoint = feature?.Count == 0 && owners[0].ModuleId == requirement.ModuleId && endpointBehaviors.Length == 1
                 && contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)
                 && plan.FeatureCatalog.Any(point => point.Position == position[0] && point.ModuleId == resource.ModuleId
                     && (point.BehaviorKey == endpointBehaviors[0] || point.ReadBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)));
-            if (resource.ModuleId != requirement.ModuleId || !generic && !ownEndpoint
-                || !plan.Modules.SelectMany(module => module.DataExecutionProviders).Any(provider => provider.Key == requirement.Provider
-                    && provider.ModuleId == requirement.ProviderModuleId && provider.ConsumerBinding == "resource-owner"))
+            var ownerEntry = feature?.Count == 0 && owners[0].ModuleId == requirement.ModuleId && endpointBehaviors.Length == 1
+                && contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)
+                && plan.FeatureCatalog.Any(point => point.Position == position[0] && point.ModuleId == requirement.ModuleId
+                    && (point.BehaviorKey == endpointBehaviors[0] || point.ReadBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)));
+            var providerEntry = generic && resource.ModuleId == requirement.ModuleId && feature![0].ActionKey == "authorize"
+                && context.GetEndpoint()!.Metadata.GetOrderedMetadata<DataExecutionEndpointAttribute>().Any(endpoint => endpoint.Provider == requirement.Provider
+                    && bindings.Any(binding => binding.Provider == endpoint.Provider && binding.Stage == endpoint.Stage));
+            var executionOwner = provider?.ConsumerBinding == "execution-owner" && (ownerEntry || providerEntry)
+                && requirement.Resources.All(key => resourceCatalog.SingleOrDefault(candidate => candidate.ResourceKey == key) is { } target
+                    && ModuleDependencyPolicy.Allows(plan, requirement.ModuleId, target.ModuleId));
+            if (!executionOwner && (provider?.ConsumerBinding != "resource-owner" || resource.ModuleId != requirement.ModuleId || !generic && !ownEndpoint))
                 throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
         }
         return requirement;

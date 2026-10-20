@@ -7,6 +7,8 @@
   "features": [{ "key": "part.history", "kind": "navigation", "parentKey": "navigation:part.parts", "title": "对象履历", "titleKey": "Part.History", "behaviorKey": "part.part.history" }],
   "dataActions": [{ "key": "partCopy", "title": "复制零组件引用", "behaviorKey": "data.part.copy", "requiresRead": true }, { "key": "partObjectCopy", "title": "创建零组件真副本", "behaviorKey": "data.part.objectCopy", "requiresRead": true }],
   "dataExecutions": [
+    {"key": "part.part.authorization.manage", "moduleId": "Part", "provider": "authorization.object.manage", "boundary": "entry", "featureBehaviors": ["part.part.authorize", "part.part.read"], "resourceKey": "part.part"},
+    {"key": "part.part.authorization.view", "moduleId": "Part", "provider": "authorization.object.view", "boundary": "entry", "featureBehaviors": ["part.part.read"], "resourceKey": "part.part"},
     {"key": "part.part.initializeOwnership", "moduleId": "Part", "provider": "entityOwnership.initialize", "boundary": "entry", "featureBehaviors": ["part.part.initializeOwnership"], "resources": ["part.part"]},
     {"key": "part.part.transfer", "moduleId": "Part", "provider": "entityOwnership.transfer", "boundary": "entry", "featureBehaviors": ["part.part.transfer"], "resources": ["part.part"]},
     {"key": "part.part.create", "moduleId": "Part", "provider": "standardCrud.create", "boundary": "entry", "featureBehaviors": ["part.part.create"], "resourceKey": "part.part"},

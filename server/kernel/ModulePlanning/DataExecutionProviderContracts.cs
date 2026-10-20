@@ -36,7 +36,7 @@ public static class DataExecutionProviders
         return executions.Select(execution =>
         {
             var provider = providers.SingleOrDefault(provider => provider.Key == execution.Provider);
-            if (execution.TargetResource is null)
+            if (execution.TargetResource is null && execution.TargetResources is null)
             {
                 if (provider is not null || execution.ProviderModuleId is not null)
                     throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
@@ -45,12 +45,20 @@ public static class DataExecutionProviders
             if (provider is null) throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_UNKNOWN");
             if (execution.Requirements.Count != 0 || execution.LegacyActions || execution.AllowedAdditionalActions.Count != 0
                 || execution.ProviderModuleId is not null || execution.Branches.Count != 0
-                || provider.ConsumerBinding != "resource-owner"
+                || provider.ConsumerBinding switch
+                {
+                    "resource-owner" => execution.TargetResource is null || execution.TargetResources is not null,
+                    "execution-owner" => execution.TargetResource is not null || execution.TargetResources is not { Count: > 0 }
+                        || execution.TargetResources.Any(string.IsNullOrWhiteSpace)
+                        || execution.TargetResources.Distinct(StringComparer.Ordinal).Count() != execution.TargetResources.Count,
+                    _ => true
+                }
                 || provider.LegacyConsumers.Any(consumer => consumer.ModuleId == execution.ModuleId && consumer.ResourceKey == execution.TargetResource)
                 || provider.Requirements.Count == 0 || provider.Requirements.Any(requirement => !requirement.Resources.SequenceEqual(["$resource"])))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
             return execution with { ProviderModuleId = provider.ModuleId,
-                Requirements = provider.Requirements.Select(requirement => requirement with { Resources = [execution.TargetResource] }).ToArray() };
+                Requirements = provider.Requirements.Select(requirement => requirement with
+                { Resources = execution.TargetResources ?? [execution.TargetResource!] }).ToArray() };
         }).ToArray();
     }
 }

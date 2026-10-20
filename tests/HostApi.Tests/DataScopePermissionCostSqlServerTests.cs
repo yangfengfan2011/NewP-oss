@@ -8,12 +8,15 @@ using System.Text.Json;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Authorization.Http;
+using ICP.Platform.Kernel.ModulePlanning;
 using Microsoft.AspNetCore.Http;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Data.SqlClient;
 using Xunit;
 using Xunit.Abstractions;
 using static ICP.Platform.HostApi.Tests.EntityOwnershipBackfillSqlServerHttpApiTests;
@@ -40,9 +43,14 @@ public sealed partial class DataScopePermissionCostSqlServerTests(ITestOutputHel
             "permission295-cost", "权限成本账号", read);
         using var ordinary = actor.Client;
         var path = "/api/document/documents/" + document.Id + "/permissions";
+        var managerSource = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "document.document.authorization.manage", "authorization.object.manage", "document.document");
+        var viewerSource = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
+            source => source.Execution == "document.document.authorization.view" && source.Provider == "authorization.object.view"
+                && source.ViewKey == "document.document.permissions" && source.Surface == "read"
+                && source.FeaturePositions.Contains(read.Position));
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path,
             new DataScopeObjectDto("document.document", document.Id,
-                [new("Permission295CostAll", "all", null, 0, new Dictionary<string, string> { ["download"] = "deny" })])))
+                [new("Permission295CostAll", "all", null, 0, new Dictionary<string, string> { ["download"] = "deny" })]), managerSource))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         // 准备不计入请求成本；首次指本fixture首次解释，不称Host冷启动或全进程JIT冷态。
         JsonElement? first = null;
@@ -53,7 +61,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests(ITestOutputHel
             var allocated = GC.GetTotalAllocatedBytes(false);
             var watch = Stopwatch.StartNew();
             JsonElement result;
-            try { result = await FeatureHttpTestRequests.ReadAsync(ordinary, read, path + "/explanation"); }
+            try { result = await FeatureHttpTestRequests.ReadAsync(ordinary, read, path + "/explanation", viewerSource); }
             finally { commands.End(); connections.End(); }
             watch.Stop();
             Assert.NotEmpty(commands.Items);
@@ -88,31 +96,36 @@ public sealed partial class DataScopePermissionCostSqlServerTests(ITestOutputHel
         var previous = accessor.HttpContext;
         accessor.HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "test-trusted-account")) };
+        accessor.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(
+            new EndpointModuleAttribute("Document"), new RequireFeatureAttribute("document.document.read")), "document-explanation-connection-ownership"));
+        accessor.HttpContext.Request.Headers["X-NewP-Feature"] = read.Position;
+        accessor.HttpContext.Request.Headers["X-NewP-Data-Declaration"] = viewerSource.Id;
+        DataExecutionBindingReference[] readSources = [new("document.document.authorization.view", "authorization.object.view", "prepare")];
         try
         {
             var queries = provider.GetRequiredService<IDataScopeObjectPermissionQueries>();
             Assert.Equal(ConnectionState.Closed, db.Database.GetDbConnection().State);
             connections.Begin();
-            try { Assert.NotNull(await queries.InspectAsync("document.document", document.Id, null)); }
+            try { Assert.NotNull(await queries.InspectAsync("document.document", document.Id, null, readSources)); }
             finally { connections.End(); }
             AssertOwnedRead();
             await db.Database.OpenConnectionAsync();
             try
             {
                 connections.Begin();
-                try { Assert.NotNull(await queries.InspectAsync("document.document", document.Id, null)); }
+                try { Assert.NotNull(await queries.InspectAsync("document.document", document.Id, null, readSources)); }
                 finally { connections.End(); }
                 Assert.Empty(connections.Items);
                 Assert.Equal(ConnectionState.Open, db.Database.GetDbConnection().State);
             }
             finally { await db.Database.CloseConnectionAsync(); }
             connections.Begin();
-            try { await Assert.ThrowsAsync<RolePermissionValidationException>(() => queries.InspectAsync("document.document", document.Id, new string('x', 129))); }
+            try { await Assert.ThrowsAsync<RolePermissionValidationException>(() => queries.InspectAsync("document.document", document.Id, new string('x', 129), readSources)); }
             finally { connections.End(); }
             AssertOwnedRead();
             using var cancellation = new CancellationTokenSource();
             commands.Begin(); connections.Begin(); commands.CancelOnCommand = cancellation;
-            try { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queries.InspectAsync("document.document", document.Id, null, cancellation.Token)); }
+            try { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queries.InspectAsync("document.document", document.Id, null, readSources, cancellation.Token)); }
             finally { commands.CancelOnCommand = null; commands.End(); connections.End(); }
             AssertOwnedRead();
             output.WriteLine("inspectionConnectionOwnership: success/exception/cancel self-opened=1/closed=1; caller-opened preserved");
@@ -155,6 +168,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests(ITestOutputHel
         public int Parameters { get; } = parameters;
         public double ExecuteMilliseconds { get; set; }
         public long CompletedTimestamp { get; set; }
+        internal ExampleExecutionSqlPlanTests.Sample? ReadSample { get; init; }
     }
 
     private sealed class CostCommands : DbCommandInterceptor
@@ -163,15 +177,23 @@ public sealed partial class DataScopePermissionCostSqlServerTests(ITestOutputHel
         private volatile bool active;
         internal ConcurrentQueue<CostCommand> Items { get; } = new();
         internal CancellationTokenSource? CancelOnCommand { get; set; }
+        internal bool CaptureReadSamples { get; init; }
         internal void Begin() { pending.Clear(); Items.Clear(); active = true; }
         internal void End() => active = false;
         private void Record(DbCommand command, CommandEventData data)
         {
             if (!active) return;
-            var item = new CostCommand(command.CommandText, command.Parameters.Count, data.ConnectionId);
+            var item = new CostCommand(command.CommandText, command.Parameters.Count, data.ConnectionId)
+            { ReadSample = CaptureReadSamples ? SnapshotRead(command) : null };
             pending[data.CommandId] = item; Items.Enqueue(item);
             CancelOnCommand?.Cancel();
         }
+        // Before同步克隆参数；命令归还EF后清空/复用参数不能改变独立只读诊断的输入。
+        internal static ExampleExecutionSqlPlanTests.Sample? SnapshotRead(DbCommand command) =>
+            command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("[DataScope", StringComparison.Ordinal)
+                ? new(command.CommandText, command.Parameters.Cast<SqlParameter>()
+                    .Select(parameter => (SqlParameter)((ICloneable)parameter).Clone()).ToArray()) : null;
         private void Complete(CommandExecutedEventData data)
         {
             if (pending.TryRemove(data.CommandId, out var item))

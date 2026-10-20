@@ -45,7 +45,7 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         {
             using var initialized = await FeatureHttpTestRequests.SendAsync(admin, Manage(fixture), HttpMethod.Put, Path(target.LinkId, position),
                 new DataScopeObjectDto(resource, target.Id, [new(target.Id + "-race", "all", null, 0,
-                    new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow" })]));
+                    new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow" })]), dataAccess: PermissionSource(fixture, Manage(fixture), "workspace.content.authorization.manage"));
             Assert.Equal(HttpStatusCode.NoContent, initialized.StatusCode);
         }
         object Input(int priority, bool reverse) => new { mode = "U", sources = new[] { new { position,
@@ -65,12 +65,12 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         gate.FirstActor = firstActor.AccountId;
         gate.SecondActor = secondActor.AccountId;
         gate.Active = true;
-        var firstSave = FeatureHttpTestRequests.SendAsync(first, batch, HttpMethod.Post, "/api/workspace/content/permissions/batch", Input(11, false));
+        var firstSave = FeatureHttpTestRequests.SendAsync(first, Batch(fixture), HttpMethod.Post, "/api/workspace/content/permissions/batch", Input(11, false), dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch"));
         Task<HttpResponseMessage>? secondSave = null;
         try
         {
             await gate.FirstGraphLocked.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            secondSave = FeatureHttpTestRequests.SendAsync(second, batch, HttpMethod.Post, "/api/workspace/content/permissions/batch", Input(22, true));
+            secondSave = FeatureHttpTestRequests.SendAsync(second, Batch(fixture), HttpMethod.Post, "/api/workspace/content/permissions/batch", Input(22, true), dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch"));
             await gate.SecondGraphAttempt.Task.WaitAsync(TimeSpan.FromSeconds(30));
             gate.Release.TrySetResult();
             using var firstResponse = await firstSave.WaitAsync(TimeSpan.FromSeconds(30));
@@ -86,7 +86,7 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
                 Assert.Equal(expectedLocks, gate.AclLocks.Where(value => value.Actor == actor).Select(value => value.Target));
             foreach (var target in new[] { part, document })
             {
-                var stored = await FeatureHttpTestRequests.ReadAsync(admin, Manage(fixture), Path(target.LinkId, position));
+                var stored = await FeatureHttpTestRequests.ReadAsync(admin, Manage(fixture), Path(target.LinkId, position), PermissionSource(fixture, Manage(fixture), "workspace.content.authorization.manage"));
                 var subject = Assert.Single(stored.GetProperty("subjects").EnumerateArray());
                 Assert.Equal(22, subject.GetProperty("priority").GetInt64());
                 Assert.Equal("allow", subject.GetProperty("actions").GetProperty("authorize").GetString());
@@ -140,7 +140,7 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         var input = new { mode = "U", sources = new[] { new { position, linkIds = new[] { document.LinkId, part.LinkId } } },
             resources = new[] { "part.part", "document.document" }.Select(resourceKey => new { resourceKey, subjects = new[] {
                 new { type = "all", subjectId = (string?)null, priority = 4, actions = new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow" } } } }).ToArray() };
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post, "/api/workspace/content/permissions/batch", input))
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, Batch(fixture), HttpMethod.Post, "/api/workspace/content/permissions/batch", input, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
             Assert.Equal(2, (await ReadOkAsync(response)).GetProperty("changed").GetInt32());
         var recordIds = new Dictionary<string, string>();
         using (var scope = fixture.Services.CreateScope())
@@ -163,7 +163,7 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
             Assert.All(subjects.Concat(actions), row => { Assert.Equal(stamp, row["CreatedAt"]); Assert.Equal(actor.AccountId, row["CreatedBy"]); });
         }
         var before = await SnapshotAsync(fixture, part.Id, document.Id);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post, "/api/workspace/content/permissions/batch", input))
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, Batch(fixture), HttpMethod.Post, "/api/workspace/content/permissions/batch", input, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
             Assert.Equal(0, (await ReadOkAsync(response)).GetProperty("changed").GetInt32());
         Assert.Equal(before, await SnapshotAsync(fixture, part.Id, document.Id));
         foreach (var (target, resourceKey) in new[] { (part, "part.part"), (document, "document.document") })
@@ -200,13 +200,13 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         {
             using var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, Path(target.LinkId, position),
                 new DataScopeObjectDto(resource, target.Id, [new(target.Id + "-current", "all", null, 1,
-                    new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow" }, ExpiresAt: "2099-01-01T00:00:00Z")]));
+                    new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "allow" }, ExpiresAt: "2099-01-01T00:00:00Z")]), dataAccess: PermissionSource(fixture, manage, "workspace.content.authorization.manage"));
             Assert.Equal(HttpStatusCode.NoContent, initialized.StatusCode);
         }
         var input = new { sources = new[] { new { position, linkIds = new[] { document.LinkId, part.LinkId, part.LinkId } } } };
         var before = await SnapshotAsync(fixture, part.Id, document.Id);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post,
-            "/api/workspace/content/permissions/batch/current", input))
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, Batch(fixture), HttpMethod.Post,
+            "/api/workspace/content/permissions/batch/current", input, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
         {
             var current = await ReadOkAsync(response);
             Assert.Equal(2, current.GetArrayLength());
@@ -224,21 +224,21 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         Assert.Equal(before, await SnapshotAsync(fixture, part.Id, document.Id));
         using (var revoked = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, Path(part.LinkId, position),
             new DataScopeObjectDto("part.part", part.Id, [new(part.Id + "-deny-current", "user", actor.AccountId, 1,
-                new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "deny" })])))
+                new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "deny" })]), dataAccess: PermissionSource(fixture, manage, "workspace.content.authorization.manage")))
             Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
         before = await SnapshotAsync(fixture, part.Id, document.Id);
-        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post,
-            "/api/workspace/content/permissions/batch/current", input))
+        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, Batch(fixture), HttpMethod.Post,
+            "/api/workspace/content/permissions/batch/current", input, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
         {
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
             var text = await denied.Content.ReadAsStringAsync();
             Assert.DoesNotContain(part.Id, text);
             Assert.DoesNotContain(document.Id, text);
         }
-        using (var rejected = await FeatureHttpTestRequests.SendAsync(ordinary, batch, HttpMethod.Post,
+        using (var rejected = await FeatureHttpTestRequests.SendAsync(ordinary, Batch(fixture), HttpMethod.Post,
             "/api/workspace/content/permissions/batch", new { input.sources, mode = "R", resources = new[] { "part.part", "document.document" }
                 .Select(resourceKey => new { resourceKey, subjects = new[] { new { type = "all", subjectId = (string?)null,
-                    priority = 1, actions = new Dictionary<string, string> { ["read"] = "allow" } } } }).ToArray() }))
+                    priority = 1, actions = new Dictionary<string, string> { ["read"] = "allow" } } } }).ToArray() }, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
             Assert.Equal(HttpStatusCode.Forbidden, rejected.StatusCode);
         Assert.Equal(before, await SnapshotAsync(fixture, part.Id, document.Id));
     }
@@ -270,7 +270,7 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
             var input = new DataScopeObjectDto(resource, target.Id,
                 [new(target.Id + "-all", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow" }),
                  new(target.Id + "-creator", "creator", null, 2, new Dictionary<string, string> { ["read"] = "allow" })]);
-            using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, Path(target.LinkId, position), input);
+            using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, Path(target.LinkId, position), input, dataAccess: PermissionSource(fixture, manage, "workspace.content.authorization.manage"));
             Assert.True(saved.StatusCode == HttpStatusCode.NoContent, await saved.Content.ReadAsStringAsync());
         }
         var beforeEvents = await EventsAsync(fixture, part.Id, document.Id);
@@ -279,8 +279,8 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         object Group(string resource, string action = "read") => new { resourceKey = resource, subjects = new[] {
             new { type = "all", subjectId = (string?)null, priority = 8, actions = new Dictionary<string, string> {
                 [action] = "deny", ["edit"] = "unset" }, matchOptions = (object?)null, expiresAt = "2099-01-01T00:00:00Z" } } };
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Post,
-            "/api/workspace/content/permissions/batch", new { sources, mode = "U", resources = new[] { Group("part.part"), Group("document.document") } }))
+        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Batch(fixture), HttpMethod.Post,
+            "/api/workspace/content/permissions/batch", new { sources, mode = "U", resources = new[] { Group("part.part"), Group("document.document") } }, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
         {
             Assert.True(saved.StatusCode == HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
             var receipt = await saved.Content.ReadFromJsonAsync<JsonElement>();
@@ -290,7 +290,7 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         }
         foreach (var target in new[] { part, document })
         {
-            var config = await FeatureHttpTestRequests.ReadAsync(admin, manage, Path(target.LinkId, position));
+            var config = await FeatureHttpTestRequests.ReadAsync(admin, manage, Path(target.LinkId, position), PermissionSource(fixture, manage, "workspace.content.authorization.manage"));
             var subjects = config.GetProperty("subjects").EnumerateArray().ToArray();
             Assert.Equal(2, subjects.Length);
             var selected = subjects.Single(subject => subject.GetProperty("type").GetString() == "all");
@@ -303,14 +303,14 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
             Assert.Equal("allow", retained.GetProperty("actions").GetProperty("read").GetString());
         }
         Assert.Equal(beforeEvents + 2, await EventsAsync(fixture, part.Id, document.Id));
-        var previousPart = await FeatureHttpTestRequests.ReadTextAsync(admin, manage, Path(part.LinkId, position));
-        var previousDocument = await FeatureHttpTestRequests.ReadTextAsync(admin, manage, Path(document.LinkId, position));
-        using (var rejected = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Post,
+        var previousPart = await FeatureHttpTestRequests.ReadTextAsync(admin, manage, Path(part.LinkId, position), PermissionSource(fixture, manage, "workspace.content.authorization.manage"));
+        var previousDocument = await FeatureHttpTestRequests.ReadTextAsync(admin, manage, Path(document.LinkId, position), PermissionSource(fixture, manage, "workspace.content.authorization.manage"));
+        using (var rejected = await FeatureHttpTestRequests.SendAsync(admin, Batch(fixture), HttpMethod.Post,
             "/api/workspace/content/permissions/batch", new { sources, mode = "R", resources = new[] {
-                Group("part.part", "download"), Group("document.document", "download") } }))
+                Group("part.part", "download"), Group("document.document", "download") } }, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
-        Assert.Equal(previousPart, await FeatureHttpTestRequests.ReadTextAsync(admin, manage, Path(part.LinkId, position)));
-        Assert.Equal(previousDocument, await FeatureHttpTestRequests.ReadTextAsync(admin, manage, Path(document.LinkId, position)));
+        Assert.Equal(previousPart, await FeatureHttpTestRequests.ReadTextAsync(admin, manage, Path(part.LinkId, position), PermissionSource(fixture, manage, "workspace.content.authorization.manage")));
+        Assert.Equal(previousDocument, await FeatureHttpTestRequests.ReadTextAsync(admin, manage, Path(document.LinkId, position), PermissionSource(fixture, manage, "workspace.content.authorization.manage")));
         Assert.Equal(beforeEvents + 2, await EventsAsync(fixture, part.Id, document.Id));
     }
 
@@ -325,13 +325,13 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         var document = await CreateAsync(fixture, admin, position, "Document", "documents", "createDocument", "BatchReplaceDoc297");
         var manage = Manage(fixture);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Batch297", "Batch manager", "batch297", "Batch manager",
-            Point(fixture, "workspace.spaces.access"), manage);
+            Point(fixture, "workspace.spaces.access"), manage, Batch(fixture));
         using var ordinary = actor.Client;
         foreach (var (target, resource) in new[] { (part, "part.part"), (document, "document.document") })
         {
             using var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, Path(target.LinkId, position),
                 new DataScopeObjectDto(resource, target.Id, [new(target.Id + "-old", "creator", null, 1,
-                    new Dictionary<string, string> { ["read"] = "allow" })]));
+                    new Dictionary<string, string> { ["read"] = "allow" })]), dataAccess: PermissionSource(fixture, manage, "workspace.content.authorization.manage"));
             Assert.Equal(HttpStatusCode.NoContent, initialized.StatusCode);
         }
         object Resource(string key, bool clear = false) => new { resourceKey = key, subjects = clear ? Array.Empty<object>() : new object[] {
@@ -340,8 +340,8 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         object Input(bool clear = false, bool confirm = false) => new { mode = "R", confirmClear = confirm,
             sources = new[] { new { position, linkIds = new[] { part.LinkId, document.LinkId } } },
             resources = new[] { Resource("part.part", clear), Resource("document.document", clear) } };
-        using (var saved = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Post,
-            "/api/workspace/content/permissions/batch", Input()))
+        using (var saved = await FeatureHttpTestRequests.SendAsync(ordinary, Batch(fixture), HttpMethod.Post,
+            "/api/workspace/content/permissions/batch", Input(), dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
         {
             var receipt = await ReadOkAsync(saved);
             Assert.Equal(2, receipt.GetProperty("changed").GetInt32());
@@ -349,24 +349,24 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         }
         foreach (var target in new[] { part, document })
         {
-            using var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, Path(target.LinkId, position));
+            using var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, Path(target.LinkId, position), dataAccess: PermissionSource(fixture, manage, "workspace.content.authorization.manage"));
             Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
-            var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, Path(target.LinkId, position));
+            var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, Path(target.LinkId, position), PermissionSource(fixture, manage, "workspace.content.authorization.manage"));
             var subject = Assert.Single(stored.GetProperty("subjects").EnumerateArray());
             Assert.Equal("user", subject.GetProperty("type").GetString());
             Assert.Equal(actor.AccountId, subject.GetProperty("subjectId").GetString());
         }
         var before = await SnapshotAsync(fixture, part.Id, document.Id);
-        using (var unconfirmed = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Post,
-            "/api/workspace/content/permissions/batch", Input(clear: true)))
+        using (var unconfirmed = await FeatureHttpTestRequests.SendAsync(admin, Batch(fixture), HttpMethod.Post,
+            "/api/workspace/content/permissions/batch", Input(clear: true), dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
             Assert.Equal(HttpStatusCode.BadRequest, unconfirmed.StatusCode);
         Assert.Equal(before, await SnapshotAsync(fixture, part.Id, document.Id));
-        using (var cleared = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Post,
-            "/api/workspace/content/permissions/batch", Input(clear: true, confirm: true)))
+        using (var cleared = await FeatureHttpTestRequests.SendAsync(admin, Batch(fixture), HttpMethod.Post,
+            "/api/workspace/content/permissions/batch", Input(clear: true, confirm: true), dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
             Assert.Equal(2, (await ReadOkAsync(cleared)).GetProperty("changed").GetInt32());
         before = await SnapshotAsync(fixture, part.Id, document.Id);
-        using (var unchanged = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Post,
-            "/api/workspace/content/permissions/batch", Input(clear: true, confirm: true)))
+        using (var unchanged = await FeatureHttpTestRequests.SendAsync(admin, Batch(fixture), HttpMethod.Post,
+            "/api/workspace/content/permissions/batch", Input(clear: true, confirm: true), dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch")))
             Assert.Equal(0, (await ReadOkAsync(unchanged)).GetProperty("changed").GetInt32());
         Assert.Equal(before, await SnapshotAsync(fixture, part.Id, document.Id));
     }
@@ -406,14 +406,15 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
             {
                 if (!cancel)
                 {
-                    using var failed = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Post,
-                        "/api/workspace/content/permissions/batch", input);
+                    using var failed = await FeatureHttpTestRequests.SendAsync(admin, Batch(fixture), HttpMethod.Post,
+                        "/api/workspace/content/permissions/batch", input, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch"));
                     Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
                 }
                 else
                 {
                     using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/permissions/batch");
-                    request.Headers.Add("X-NewP-Feature", manage.Position);
+                    request.Headers.Add("X-NewP-Feature", Batch(fixture).Position);
+                    request.Headers.Add("X-NewP-Data-Declaration", PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch").Id);
                     request.Content = JsonContent.Create(input, options: new JsonSerializerOptions());
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
                     {
@@ -429,11 +430,18 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         }
         using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
             "/api/workspace/content/references/" + document.LinkId, new { position }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.remove")))) await ReadOkAsync(removed);
-        using var stale = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Post,
-            "/api/workspace/content/permissions/batch", input);
+        using var stale = await FeatureHttpTestRequests.SendAsync(admin, Batch(fixture), HttpMethod.Post,
+            "/api/workspace/content/permissions/batch", input, dataAccess: PermissionSource(fixture, Batch(fixture), "workspace.content.authorization.batch"));
         Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);
         Assert.Equal(before, await SnapshotAsync(fixture, part.Id, document.Id));
     }
+
+    private static FeaturePoint Batch(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, point =>
+        point.Key == "batchAuthorize" && point.ActionScope == "list.pageActions");
+
+    private static ActionDataAccessRequirement PermissionSource(BusinessAuditHostFixture fixture, FeaturePoint point, string execution) =>
+        OwnedResourceReadHttpRequests.ForExecution(fixture, point, execution, "authorization.collection.manage",
+            "workspace.folder", "part.part", "document.document");
 
     private static FeaturePoint Manage(BusinessAuditHostFixture fixture) => fixture.FeatureCatalog.First(point =>
         point.BehaviorKey == "workspace.folder.authorize" && point.Key == "authorizeContent" && point.ActionScope == "list.rowActions");

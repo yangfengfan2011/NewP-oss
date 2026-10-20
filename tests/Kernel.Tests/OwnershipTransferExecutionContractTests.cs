@@ -56,6 +56,16 @@ public sealed class OwnershipTransferExecutionContractTests
         Assert.Throws<InvalidOperationException>(() => Read(extra));
     }
 
+    [Theory]
+    [InlineData("transfer")]
+    [InlineData("initialize")]
+    public void CentralOwnershipFloor_RejectsTheOtherProviderModesProjectedResourceSet(string operation)
+    {
+        var contract = Assert.Single(Read(operation: operation));
+        Assert.Throws<InvalidOperationException>(() => DataExecutionContracts.Compile(
+            [contract with { TargetResources = ["part.part"] }], Actions(readRequired: true)));
+    }
+
     [Fact]
     public void ActualOwnershipBindingsUseTheSameCanonicalOutputAsThePageConsumers()
     {

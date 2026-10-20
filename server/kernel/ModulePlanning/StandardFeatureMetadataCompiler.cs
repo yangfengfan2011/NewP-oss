@@ -207,7 +207,8 @@ public static class StandardFeatureMetadataCompiler
                     if (!readPresentation && !authorizedNavigation)
                         throw new InvalidOperationException("动作快捷跳转缺少有效功能导航目标。");
                     var targetOwner = Optional(targetEntry, "featureKey") ?? "navigation:" + target;
-                    DataAccess(view, action, property, Text(action, "key"), targetOwner);
+                    DataAccess(view, action, property, Text(action, "key"), readPresentation ? owner : targetOwner);
+                    if (readPresentation) BindReadPresentation(targetEntry.GetProperty("page"), owner, new HashSet<string>(StringComparer.Ordinal));
                     continue;
                 }
                 var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey");
@@ -224,6 +225,16 @@ public static class StandardFeatureMetadataCompiler
                 if (operation is "create" or "edit") BindLookupDataAccess(view, true, result[^1].ReferenceKey!);
                 if (operation == "edit") BindDetailRead(view, result[^1].ReferenceKey!);
             }
+        }
+
+        // 只读导航沿已有PageRef组合投影显式read，不调用View生成新tab功能或改变原读取身份。
+        void BindReadPresentation(JsonElement page, string owner, HashSet<string> visited)
+        {
+            DataAccess(page, page, "read", "", owner, Text(page, "pageKey"));
+            if (!page.TryGetProperty("parameters", out var parameters) || Optional(parameters, "viewKey") is not { } key
+                || !visited.Add(key) || !views.TryGetValue(key, out var target) || Optional(target, "mode") != "tab"
+                || !target.TryGetProperty("tabs", out var tabs)) return;
+            foreach (var tab in tabs.EnumerateArray()) BindReadPresentation(tab.GetProperty("pageRef"), owner, visited);
         }
 
         // 编辑预取使用真实详情读取声明；位置仍是原编辑资格，不借列表导航或新造入口。

@@ -84,10 +84,15 @@ export function decodeBatchCollection(value: unknown): BatchCollection {
 }
 export const batchItemKey = (item: Pick<BatchItem, 'resourceKey' | 'objectId'>) => JSON.stringify([item.resourceKey, item.objectId]);
 
+/** 准备、主体候选、提交和显式核对均沿本次实际动作来源，不按URL推断声明。 */
+export function batchAuthorizationHeaders(featurePosition: string, declarationId?: string) {
+  return { 'X-NewP-Feature': featurePosition, ...(declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) };
+}
+
 export async function prepareBatch(sources: BatchSource[], featurePosition: string, signal: AbortSignal,
-  includeDescendants = false, filters?: BatchFilters): Promise<BatchCollection> {
+  includeDescendants = false, filters?: BatchFilters, declarationId?: string): Promise<BatchCollection> {
   const response = await platformFetch('/api/workspace/content/permissions/batch/prepare', { method: 'POST', signal,
-    headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': featurePosition }, body: JSON.stringify({ sources, includeDescendants, filters }) });
+    headers: { 'Content-Type': 'application/json', ...batchAuthorizationHeaders(featurePosition, declarationId) }, body: JSON.stringify({ sources, includeDescendants, filters }) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   const value: unknown = await response.json();
   signal.throwIfAborted();
@@ -102,9 +107,9 @@ export function batchOutcomeUnknown(failure: unknown): boolean {
 }
 
 /** 核对只读当前整组配置；精确目标匹配，不把任何返回值解释成原请求的提交结论。 */
-export async function readBatchCurrent(draft: BatchDraft, featurePosition: string, signal: AbortSignal): Promise<BatchCurrentConfiguration[]> {
+export async function readBatchCurrent(draft: BatchDraft, featurePosition: string, signal: AbortSignal, declarationId?: string): Promise<BatchCurrentConfiguration[]> {
   const response = await platformFetch('/api/workspace/content/permissions/batch/current', { method: 'POST', signal,
-    headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': featurePosition },
+    headers: { 'Content-Type': 'application/json', ...batchAuthorizationHeaders(featurePosition, declarationId) },
     body: JSON.stringify({ sources: draft.items.map(item => item.source) }) });
   signal.throwIfAborted();
   if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -147,7 +152,7 @@ export async function saveBatch(context: StandardCrudActionContext): Promise<Sta
   const controller = submission.begin();
   try {
     const response = await platformFetch('/api/workspace/content/permissions/batch', { method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': context.featurePosition }, body: JSON.stringify({ mode: draft.mode,
+      headers: { 'Content-Type': 'application/json', ...batchAuthorizationHeaders(context.featurePosition, context.action?.dataAccess?.id) }, body: JSON.stringify({ mode: draft.mode,
         confirmClear: draft.confirmClear, sources: draft.items.map(item => item.source), resources: draft.resources.map(resource => ({
           resourceKey: resource.resourceKey, subjects: resource.subjects.map(subject => ({ type: subject.type, subjectId: subject.subjectId, priority: subject.priority,
             actions: subject.actions, matchOptions: subject.matchOptions, expiresAt: subject.expiresAt })) })) }) });

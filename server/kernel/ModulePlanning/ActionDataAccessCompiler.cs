@@ -48,6 +48,7 @@ public static class ActionDataAccessCompiler
             if (!contracts.TryGetValue(declaration.Execution, out var contract))
                 throw new InvalidOperationException("DATA_EXECUTION_UNKNOWN");
             if (contract.ModuleId != declaration.ModuleId || contract.Boundary != "entry"
+                || contract.TargetResources is { } targets && !targets.Order(StringComparer.Ordinal).SequenceEqual(declaration.Resources.Order(StringComparer.Ordinal))
                 || declaration.Resources.Any(resource => !contract.Requirements.Any(requirement => requirement.Resources.Contains(resource)))
                 || contract.Requirements.Any(requirement => !requirement.Resources.Any(resource => declaration.Resources.Contains(resource))))
                 throw new InvalidOperationException("DATA_EXECUTION_BINDING_INVALID");

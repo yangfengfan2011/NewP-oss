@@ -42,6 +42,7 @@ public sealed partial class WorkspaceContentsController
                 linkId, accountId, queries, token);
             return result is null ? Results.NotFound() : Results.Ok(result);
         }
+        catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
@@ -51,9 +52,9 @@ public sealed partial class WorkspaceContentsController
         [FromServices] IDataScopeObjectPermissionQueries queries, CancellationToken token) =>
         WithPermissionTarget(linkId, queryScope, async target =>
         {
-            var result = await queries.CatalogAsync(target.ResourceKey, target.ObjectId, token);
+            var result = await queries.CatalogAsync(target.ResourceKey, target.ObjectId, WorkspacePermissionExecutions.ViewSources, token);
             return result is null ? Results.NotFound() : Results.Ok(result);
-        }, token);
+        }, WorkspacePermissionExecutions.ViewSources, token);
 
     /// <summary>分析账号选择仅开放用户最小目录，所有来源与对象读取范围每次重新核对。</summary>
     [HttpGet("content/{linkId}/permissions/subjects/user"), RequireFeature("workspace.folder.read")]
@@ -63,10 +64,12 @@ public sealed partial class WorkspaceContentsController
     {
         try
         {
+            contents.ValidatePermissionSources(WorkspacePermissionExecutions.ViewSources);
             var target = await contents.ResolvePermissionTargetAsync(Actor(), ReadPermissionSubjectsPosition(queryScope), linkId, token);
-            var result = await queries.UsersAsync(target.ResourceKey, target.ObjectId, query, page ?? 1, currentIds ?? [], token);
+            var result = await queries.UsersAsync(target.ResourceKey, target.ObjectId, query, page ?? 1, currentIds ?? [], WorkspacePermissionExecutions.ViewSources, token);
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.Ok(result.Value) : PermissionFailure(result.Status, result.Error);
         }
+        catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
@@ -79,10 +82,12 @@ public sealed partial class WorkspaceContentsController
     {
         try
         {
+            contents.ValidatePermissionSources(WorkspacePermissionExecutions.ManagementSources);
             var target = await contents.ResolvePermissionTargetAsync(Actor(), ReadPermissionSubjectsPosition(queryScope), linkId, token);
-            var result = await authorization.SubjectsAsync(target.ResourceKey, target.ObjectId, type, query, page ?? 1, currentIds ?? [], token);
+            var result = await authorization.SubjectsAsync(target.ResourceKey, target.ObjectId, type, query, page ?? 1, currentIds ?? [], WorkspacePermissionExecutions.ManagementSources, token);
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.Ok(result.Value) : PermissionFailure(result.Status, result.Error);
         }
+        catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
@@ -101,7 +106,7 @@ public sealed partial class WorkspaceContentsController
     [HttpGet("content/{linkId}/permissions/eligibility"), RequireFeature("workspace.folder.authorize")]
     public Task<IResult> PermissionEligibility(string linkId, [FromQuery] string? queryScope,
         [FromServices] IDataScopeObjectAuthorization authorization, CancellationToken token) =>
-        WithPermissionTarget(linkId, queryScope, async target => PermissionFailure(await authorization.CheckAsync(target.ResourceKey, target.ObjectId, token)), token);
+        WithPermissionTarget(linkId, queryScope, async target => PermissionFailure(await authorization.CheckAsync(target.ResourceKey, target.ObjectId, WorkspacePermissionExecutions.Management("prepare"), token)), [WorkspacePermissionExecutions.Management("prepare")], token);
 
     /// <summary>配置读取先重验完整真实位置，再交同一对象管理服务。</summary>
     [HttpGet("content/{linkId}/permissions"), RequireFeature("workspace.folder.authorize")]
@@ -109,9 +114,9 @@ public sealed partial class WorkspaceContentsController
         [FromServices] IDataScopeObjectAuthorization authorization, CancellationToken token) =>
         WithPermissionTarget(linkId, queryScope, async target =>
         {
-            var result = await authorization.ReadAsync(target.ResourceKey, target.ObjectId, token);
+            var result = await authorization.ReadAsync(target.ResourceKey, target.ObjectId, WorkspacePermissionExecutions.Management("prepare"), token);
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.Ok(result.Value) : PermissionFailure(result.Status, result.Error);
-        }, token);
+        }, [WorkspacePermissionExecutions.Management("prepare")], token);
 
     /// <summary>完整配置目标由当前LID解析决定；保存成功不回读，避免自身失权后的泄漏或重放。</summary>
     [HttpPut("content/{linkId}/permissions"), RequireFeature("workspace.folder.authorize")]
@@ -123,19 +128,22 @@ public sealed partial class WorkspaceContentsController
             var result = await contents.ReplacePermissionsAsync(Actor(), ReadOwnershipPosition(queryScope), linkId, input, authorization, token);
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.NoContent() : PermissionFailure(result.Status, result.Error);
         }
+        catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
 
     // 请求格式与来源失败沿Workspace既有Problem语义；不捕获真实授权、持久化或取消故障。
     private async Task<IResult> WithPermissionTarget(string linkId, string? queryScope,
-        Func<(string ResourceKey, string ObjectId), Task<IResult>> action, CancellationToken token)
+        Func<(string ResourceKey, string ObjectId), Task<IResult>> action, IReadOnlyList<DataExecutionBindingReference> sources, CancellationToken token)
     {
         try
         {
+            contents.ValidatePermissionSources(sources);
             var target = await contents.ResolvePermissionTargetAsync(Actor(), ReadOwnershipPosition(queryScope), linkId, token);
             return await action(target);
         }
+        catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }

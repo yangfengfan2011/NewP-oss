@@ -14,6 +14,7 @@ import type { StandardCrudActionDefinition } from '@icp-platform/sdk';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import { StandardCrudHostEnvironmentContext } from '../standard-crud/standardCrudHostEnvironment';
 import { ActionInstanceContext } from '../composition/pageCompositionRuntime';
 import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTestSupport';
@@ -87,7 +88,12 @@ async function mount(prepare?: (body: Record<string, unknown>) => unknown, save?
     </StandardCrudHostEnvironmentContext.Provider>;
   }
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: 'Workspace', version: '1' }, ...workspace }], 'batch-header');
-  onTestFinished(async () => { await act(async () => root.unmount()); deactivate(); element.remove(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'batch-clean'); });
+  onTestFinished(async () => {
+    const declaration = formalDataAccessFor('workspace.folder.list', 'pageActions', 'batchAuthorize');
+    for (const request of requests.filter(value => new URL(value.url).pathname.includes('/permissions/batch')
+      || new URL(value.url).pathname.includes('/permissions/subjects/')))
+      expect(request.headers.get('X-NewP-Data-Declaration'), new URL(request.url).pathname).toBe(declaration.id);
+    await act(async () => root.unmount()); deactivate(); element.remove(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'batch-clean'); });
   await act(async () => root.render(<MemoryRouter><LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: 'Chinese' }]} catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...catalog } }}>
     <AuthProvider initialUser={{ id: 'manager', ecode: 'manager', ename: 'Manager', revision: 1, mustChangePassword: false, featurePositions: [positions.readPosition, positions.batchPosition, positions.copyPosition] }}>
       <CurrentPermissionScope><AuthorizationProvider featurePositions={[positions.readPosition, positions.batchPosition, positions.copyPosition]}><PlatformQueryProvider scopeKey="batch-manager">
@@ -131,6 +137,9 @@ it('opens the actual Workspace batch header with canonical targets and submits o
   expect(saves).toHaveLength(1);
   expect(saves[0].method).toBe('POST');
   expect(saves[0].headers.get('X-NewP-Feature')).toBe(positions.batchPosition);
+  const declaration = formalDataAccessFor('workspace.folder.list', 'pageActions', 'batchAuthorize');
+  for (const request of requests.filter(value => new URL(value.url).pathname.includes('/permissions/batch')))
+    expect(request.headers.get('X-NewP-Data-Declaration'), new URL(request.url).pathname).toBe(declaration.id);
   const payload = await saves[0].clone().json();
   expect(payload.mode).toBe('U');
   expect(payload.sources).toHaveLength(2);

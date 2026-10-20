@@ -32,6 +32,7 @@ public sealed partial class WorkspaceContentsController
         using var observation = evaluation?.BeginOperation();
         try { return Results.Ok(await contents.PrepareBatchPermissionsAsync(Actor(), input.Sources, input.IncludeDescendants, input.Filters,
             authorization, queries, token)); }
+        catch (ActionDataAccessException error) { return Results.Problem(statusCode: error.Status, title: error.Code, extensions: new Dictionary<string, object?> { ["code"] = error.Code }); }
         catch (LinkQueryException error) { return LinkQueryEndpointExtensions.Problem(error); }
     }
 
@@ -47,6 +48,7 @@ public sealed partial class WorkspaceContentsController
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.Ok(result.Value)
                 : PermissionFailure(result.Status, result.Error);
         }
+        catch (ActionDataAccessException error) { return Results.Problem(statusCode: error.Status, title: error.Code, extensions: new Dictionary<string, object?> { ["code"] = error.Code }); }
         catch (LinkQueryException error) { return LinkQueryEndpointExtensions.Problem(error); }
     }
     /// <summary>显式核对当前直接项；全组资格不成立时不返回任何部分配置。</summary>
@@ -61,6 +63,7 @@ public sealed partial class WorkspaceContentsController
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.Ok(result.Value)
                 : PermissionFailure(result.Status, result.Error);
         }
+        catch (ActionDataAccessException error) { return Results.Problem(statusCode: error.Status, title: error.Code, extensions: new Dictionary<string, object?> { ["code"] = error.Code }); }
         catch (LinkQueryException error) { return LinkQueryEndpointExtensions.Problem(error); }
     }
 

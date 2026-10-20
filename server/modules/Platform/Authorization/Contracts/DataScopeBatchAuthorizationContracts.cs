@@ -32,4 +32,12 @@ public interface IDataScopeBatchAuthorization
     /// <summary>任一目标/配置失败整批拒绝；取消和基础设施异常传播，不跳过目标或产生部分成功。</summary>
     Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> ReplaceAsync(
         IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, CancellationToken token = default);
+    /// <summary>真实owner明确提交整批来源；锁定及全组现时资格仍由同一手工授权流程拥有。</summary>
+    Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> ReplaceAsync(
+        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, DataExecutionBindingReference execution,
+        CancellationToken token = default) => throw new NotSupportedException();
+    /// <summary>当前配置核对使用同一正式批来源，不复用之前的允许结果。</summary>
+    Task<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>> ReadCurrentAsync(
+        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataExecutionBindingReference execution,
+        CancellationToken token = default) => throw new NotSupportedException();
 }

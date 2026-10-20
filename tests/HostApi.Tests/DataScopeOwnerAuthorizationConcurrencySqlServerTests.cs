@@ -38,9 +38,10 @@ public sealed class DataScopeOwnerAuthorizationConcurrencySqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "OwnerRace297", "Owner race manager", "ownerrace297", "Owner race manager", read, manage);
         using var ordinary = actor.Client;
         var path = generic ? "/api/authorization/data-scope/objects/part.part/" + part.Id : "/api/part/parts/" + part.Id + "/permissions";
+        var source = OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part");
         DataScopeObjectDto Configuration(string opinion) => new("part.part", part.Id, [new("owner-race-entry", "user", actor.AccountId, 1,
             new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = opinion })]);
-        using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, Configuration("allow")))
+        using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, Configuration("allow"), dataAccess: source))
             Assert.Equal(HttpStatusCode.NoContent, initialized.StatusCode);
         var previousEvents = await EventsAsync(fixture, part.Id);
         var administrator = await admin.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
@@ -49,18 +50,18 @@ public sealed class DataScopeOwnerAuthorizationConcurrencySqlServerTests
         gate.Actor = actor.AccountId;
         gate.Target = "Authorization.DataScopeObject:part.part:" + part.Id;
         gate.Active = true;
-        var revocation = FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, Configuration("deny"));
+        var revocation = FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, Configuration("deny"), dataAccess: source);
         Task<HttpResponseMessage>? replacement = null;
         try
         {
             await gate.BlockerLocked.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            replacement = FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, Configuration("allow"));
+            replacement = FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, path, Configuration("allow"), dataAccess: source);
             await gate.OrdinaryAttempt.Task.WaitAsync(TimeSpan.FromSeconds(30));
             gate.Release.TrySetResult();
             using var revoked = await revocation;
             Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
             using var response = await replacement;
-            var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, path);
+            var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, path, source);
             var eventDelta = await EventsAsync(fixture, part.Id) - previousEvents;
             Assert.True(response.StatusCode == HttpStatusCode.Forbidden,
                 $"Expected PUT 403 after committed revocation, got {(int)response.StatusCode}; current={stored.GetRawText()}; eventDelta={eventDelta}");

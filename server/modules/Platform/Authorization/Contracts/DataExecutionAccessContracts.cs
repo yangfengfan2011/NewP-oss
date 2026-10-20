@@ -76,6 +76,9 @@ public partial interface IDataExecutionAccess
     /// <summary>正式阶段按当前事实执行单对象角色要求，不复用点击预检允许结果。</summary>
     Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey,
         string role, string objectId, CancellationToken cancellationToken = default);
+    /// <summary>真实端点限定有限来源，单目标在原阶段消费匹配来源的角色；不接受客户端角色或允许结果。</summary>
+    Task<DataExecutionDecision> EvaluateObjectFromBindingsAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey,
+        string role, string objectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     /// <summary>对服务端归一化后的真实候选执行候选角色要求，不读取不存在的对象。</summary>
     Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey,
         string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken cancellationToken = default);

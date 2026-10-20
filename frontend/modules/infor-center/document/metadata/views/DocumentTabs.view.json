@@ -3,6 +3,6 @@
   "view": { "key": "document.document.tabs", "mode": "tab", "dicKey": "Document", "titleKey": "Title", "defaultTabKey": "information",
     "tabs": [
       { "key": "information", "titleKey": "Information", "pageRef": { "pageKey": "platform.detail", "parameters": { "viewKey": "document.document.detail" }, "inputResolverKey": "document.document.record" } },
-      { "key": "permissions", "titleKey": "Permissions", "pageRef": { "pageKey": "document.document.permissions", "inputResolverKey": "document.document.record" } }
+      { "key": "permissions", "titleKey": "Permissions", "pageRef": { "pageKey": "document.document.permissions", "inputResolverKey": "document.document.record", "dataAccess": { "execution": "document.document.authorization.view", "resources": ["document.document"] } } }
     ] }
 }

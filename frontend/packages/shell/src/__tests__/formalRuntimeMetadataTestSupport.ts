@@ -12,13 +12,14 @@ import documentFiles from '../../../../../tests/Kernel.Tests/Fixtures/DocumentFi
 import clipboard from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 import authorizationManagement from '../../../../../tests/Kernel.Tests/Fixtures/AuthorizationManagementRuntime.contract.json';
 import ownership from '../../../../../tests/Kernel.Tests/Fixtures/OwnershipDataAccess.contract.json';
+import objectAuthorization from '../../../../../tests/Kernel.Tests/Fixtures/ObjectAuthorizationDataAccess.contract.json';
 
 const declarations = uniqueDeclarations([...(standardRead as ActionDataAccessRequirement[]), ...(organization as ActionDataAccessRequirement[]), ...(example as ActionDataAccessRequirement[]),
   ...(partWrite as ActionDataAccessRequirement[]), ...(partHistory as ActionDataAccessRequirement[]), ...(documentHistory as ActionDataAccessRequirement[]),
   ...(documentFiles.dataAccess as ActionDataAccessRequirement[]),
   ...(workspaceHistory as ActionDataAccessRequirement[]), ...(clipboard.declarations as ActionDataAccessRequirement[]),
   ...(authorizationManagement.dataAccess as ActionDataAccessRequirement[]), ...(authorizationManagement.identityDataAccess as ActionDataAccessRequirement[]),
-  ...(ownership as ActionDataAccessRequirement[])]);
+  ...(ownership as ActionDataAccessRequirement[]), ...(objectAuthorization as ActionDataAccessRequirement[])]);
 
 function uniqueDeclarations(items: readonly ActionDataAccessRequirement[]) {
   const byId = new Map<string, ActionDataAccessRequirement>();
@@ -48,6 +49,8 @@ function hasAuthoringReference(value: unknown): boolean {
 // 正常旧资产沿生产 binder 消费正式编译目录；已绑定快照及故意删声明的反例保持原样，不补单次请求上下文。
 export function bindFormalRuntimeMetadata(value: RuntimeMetadataState): RuntimeMetadataState {
   const viewKeys = new Set(value.viewDocuments.map(document => String(document.view.key)));
+  for (const document of value.viewDocuments) if (Array.isArray(document.view.tabs))
+    for (const tab of document.view.tabs) if (typeof tab.pageRef?.pageKey === 'string') viewKeys.add(tab.pageRef.pageKey);
   for (const item of value.navDocuments.flatMap(document => document.navigation.items)) if (item.page) viewKeys.add(item.page.pageKey);
   const relevant = declarations.filter(item => viewKeys.has(item.viewKey));
   const modules = value.manifest.modules.map(module => ({ ...module,

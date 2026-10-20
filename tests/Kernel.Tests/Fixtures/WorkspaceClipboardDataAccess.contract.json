@@ -1,6 +1,46 @@
 {
   "declarations": [
     {
+      "id": "Workspace/view:workspace.content.permissions/read",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.content.permissions",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "workspace.content.authorization.view",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace"
+      ],
+      "requirements": [
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.collection.view",
+      "providerModuleId": "Authorization"
+    },
+    {
       "id": "Workspace/view:workspace.folder.detail/read",
       "moduleId": "Workspace",
       "viewKey": "workspace.folder.detail",
@@ -40,6 +80,83 @@
         }
       ],
       "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/featureActions/action:authorize",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "featureActions",
+      "actionKey": "authorize",
+      "execution": "workspace.content.authorization.manage",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "authorize"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:authorize"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "prepare",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 0,
+          "maximumCount": null
+        },
+        {
+          "role": "target",
+          "stage": "submit",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": null
+        },
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.collection.manage",
+      "providerModuleId": "Authorization"
     },
     {
       "id": "Workspace/view:workspace.folder.list/featureActions/action:initializeOwnership",
@@ -192,6 +309,83 @@
         }
       ],
       "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/pageActions/action:batchAuthorize",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "pageActions",
+      "actionKey": "batchAuthorize",
+      "execution": "workspace.content.authorization.batch",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "authorize"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:batchAuthorize"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "prepare",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 0,
+          "maximumCount": null
+        },
+        {
+          "role": "target",
+          "stage": "submit",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": null
+        },
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.collection.manage",
+      "providerModuleId": "Authorization"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:copySelected",
@@ -884,6 +1078,83 @@
       "provider": "workspace.backend"
     },
     {
+      "id": "Workspace/view:workspace.folder.list/rowActions/action:authorizeContent",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "rowActions",
+      "actionKey": "authorizeContent",
+      "execution": "workspace.content.authorization.manage",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "authorize"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:authorizeContent"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "prepare",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 0,
+          "maximumCount": null
+        },
+        {
+          "role": "target",
+          "stage": "submit",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": null
+        },
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.collection.manage",
+      "providerModuleId": "Authorization"
+    },
+    {
       "id": "Workspace/view:workspace.folder.list/rowActions/action:copy",
       "moduleId": "Workspace",
       "viewKey": "workspace.folder.list",
@@ -1349,6 +1620,46 @@
         }
       ],
       "provider": "entityOwnership.transfer"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/rowActions/action:viewAuthorization",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "rowActions",
+      "actionKey": "viewAuthorization",
+      "execution": "workspace.content.authorization.view",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace"
+      ],
+      "requirements": [
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.collection.view",
+      "providerModuleId": "Authorization"
     },
     {
       "id": "Workspace/view:workspace.history.list/outputActions/action:exportAll",

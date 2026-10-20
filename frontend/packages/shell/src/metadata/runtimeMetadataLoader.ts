@@ -149,6 +149,8 @@ export function bindActionDataAccess(document: RuntimeViewDocument, requirements
     view.lookupBindings = Object.fromEntries(Object.entries(view.lookupBindings).map(([key, value]) => [key,
       typeof value === 'object' && value !== null && !Array.isArray(value)
         ? bind(value as Record<string, unknown>, 'lookupBindings', key) : value]));
+  if (Array.isArray(view.tabs)) view.tabs = view.tabs.map(tab => ({ ...tab,
+    pageRef: bindPageReadDataAccess(tab.pageRef as { pageKey: string; dataAccess?: unknown }, requirements) }));
   return { ...document, view: bind(view, 'read', '') };
 }
 
@@ -156,11 +158,17 @@ export function bindActionDataAccess(document: RuntimeViewDocument, requirements
 export function bindNavigationDataAccess(document: RuntimeNavItemDocument, requirements: NonNullable<RuntimeMetadataManifest['modules'][number]['dataAccess']>): RuntimeNavItemDocument {
   return { ...document, navigation: { ...document.navigation, items: document.navigation.items.map(item => {
     if (!item.page) return item;
-    const matches = requirements.filter(requirement => requirement.viewKey === item.page!.pageKey && requirement.surface === 'read' && requirement.actionKey === '');
-    if (item.page.dataAccess === undefined && matches.length === 0) return item;
-    if (item.page.dataAccess === undefined || matches.length !== 1) throw new Error(`页面数据声明缺失或冲突：${item.page.pageKey}`);
-    return { ...item, page: { ...item.page, dataAccess: matches[0] } };
+    return { ...item, page: bindPageReadDataAccess(item.page, requirements) };
   }) } };
+}
+
+/** 导航与已有页签PageRef消费同一次正式read投影，不从页面类型或首个声明猜来源。 */
+function bindPageReadDataAccess<T extends { pageKey: string; dataAccess?: unknown }>(page: T,
+  requirements: NonNullable<RuntimeMetadataManifest['modules'][number]['dataAccess']>): T {
+  const matches = requirements.filter(requirement => requirement.viewKey === page.pageKey && requirement.surface === 'read' && requirement.actionKey === '');
+  if (page.dataAccess === undefined && matches.length === 0) return page;
+  if (page.dataAccess === undefined || matches.length !== 1) throw new Error(`页面数据声明缺失或冲突：${page.pageKey}`);
+  return { ...page, dataAccess: matches[0] };
 }
 
 async function mapWithConcurrency<T, TResult>(

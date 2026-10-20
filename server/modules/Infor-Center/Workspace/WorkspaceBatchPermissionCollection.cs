@@ -37,6 +37,9 @@ public sealed partial class WorkspaceContents
                 || filters?.CreatedBy is { } creator && (string.IsNullOrWhiteSpace(creator) || creator.Length > 128)
                 || filters?.OwnerId is { } owner && (string.IsNullOrWhiteSpace(owner) || owner.Length > 128))
                 throw new LinkQueryException(400, "Workspace.InvalidSelection");
+            ValidatePermissionSources([WorkspacePermissionExecutions.Batch("prepare")]);
+            // 可空筛选结果也消费真实prepare角色的0基数；不把空结果变成缺声明的回退。
+            await foreach (var _ in executionAccess.EvaluateObjectsAsync(WorkspacePermissionExecutions.Batch("prepare"), "target", [], cancellation)) { }
             await LockGraphAsync(cancellation);
             var items = new Dictionary<DataScopeAuthorizationTarget, WorkspaceBatchPermissionItem>();
             var visited = new HashSet<string>(StringComparer.Ordinal);
@@ -63,7 +66,7 @@ public sealed partial class WorkspaceContents
             var catalogs = new List<WorkspaceBatchPermissionCatalog>();
             foreach (var group in ordered.GroupBy(item => item.ResourceKey))
             {
-                var value = await queries.CatalogAsync(group.Key, group.First().ObjectId, cancellation)
+                var value = await queries.CatalogAsync(group.Key, group.First().ObjectId, [WorkspacePermissionExecutions.Batch("prepare")], cancellation)
                     ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
                 catalogs.Add(new(group.Key, value.Actions, value.SubjectTypes));
             }
@@ -76,7 +79,7 @@ public sealed partial class WorkspaceContents
                 {
                     var key = new DataScopeAuthorizationTarget(Resource(row.AssociatedObject.ModelKey), row.AssociatedObject.Id);
                     if (items.ContainsKey(key)) continue;
-                    var status = await authorization.CheckAsync(key.ResourceKey, key.ObjectId, cancellation);
+                    var status = await authorization.CheckAsync(key.ResourceKey, key.ObjectId, WorkspacePermissionExecutions.Batch("prepare"), cancellation);
                     if (status == DataScopeAuthorizationStatus.NotFound) continue;
                     items.Add(key, new(key.ResourceKey, key.ObjectId, row.Fields["Name"] as string ?? "", row.Fields["Code"] as string,
                         status == DataScopeAuthorizationStatus.Succeeded, new(position, [row.LinkId])));

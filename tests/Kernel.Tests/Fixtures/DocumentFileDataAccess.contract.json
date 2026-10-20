@@ -327,6 +327,75 @@
       "provider": "standardCrud.read"
     },
     {
+      "id": "Document/view:document.document.list/featureActions/action:authorize",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "featureActions",
+      "actionKey": "authorize",
+      "execution": "document.document.authorization.manage",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "authorize"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:authorize"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "target",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.object.manage",
+      "providerModuleId": "Authorization"
+    },
+    {
       "id": "Document/view:document.document.list/featureActions/action:initializeOwnership",
       "moduleId": "Document",
       "viewKey": "document.document.list",
@@ -589,6 +658,75 @@
       "provider": "standardCrud.list"
     },
     {
+      "id": "Document/view:document.document.list/rowActions/action:authorize",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "rowActions",
+      "actionKey": "authorize",
+      "execution": "document.document.authorization.manage",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "authorize"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "target",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "authorize"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.object.manage",
+      "providerModuleId": "Authorization"
+    },
+    {
       "id": "Document/view:document.document.list/rowActions/action:history",
       "moduleId": "Document",
       "viewKey": "document.document.list",
@@ -768,6 +906,78 @@
         }
       ],
       "provider": "entityOwnership.transfer"
+    },
+    {
+      "id": "Document/view:document.document.list/rowActions/action:viewAuthorization",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "rowActions",
+      "actionKey": "viewAuthorization",
+      "execution": "document.document.authorization.view",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "requirements": [
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.object.view",
+      "providerModuleId": "Authorization"
+    },
+    {
+      "id": "Document/view:document.document.permissions/read",
+      "moduleId": "Document",
+      "viewKey": "document.document.permissions",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "document.document.authorization.view",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "requirements": [
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.object.view",
+      "providerModuleId": "Authorization"
     },
     {
       "id": "Document/view:document.history.list/detailContributions/action:document.object.history",

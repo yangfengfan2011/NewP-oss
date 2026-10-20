@@ -1,4 +1,5 @@
 using ICP.Platform.Crud.LinkQueries;
+using ICP.Platform.Authorization.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Workspace;
@@ -16,14 +17,16 @@ public sealed partial class WorkspaceContents
     {
         if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0])) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
         if (string.IsNullOrWhiteSpace(name) || name.Length > 256) throw new LinkQueryException(400, "Workspace.InvalidName", "ENAME");
+        var binding = WorkspaceFolderCopyExecutions.StructureBinding("submit");
+        executionAccess.Validate([binding], "workspace.folder");
         return transactions.ExecuteAsync<WorkspacePasteResult>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var sourceParent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
-            var source = (await ResolveDeferredClipboardTargetsAsync(sourceParent.FolderId, linkIds, DeferredClipboardExecution.FolderStructure, cancellation))[0];
+            var sourceParent = await ResolveClipboardPositionAsync(binding, "sourceParent", sourcePosition, cancellation);
+            var source = (await ResolveDeclaredClipboardTargetsAsync(sourceParent.FolderId, linkIds, binding, cancellation))[0];
             if (source.ModelKey != WorkspacePositions.FolderModel) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
-            var target = await WritablePositionAsync(actor, targetPosition, cancellation);
+            var target = await ResolveClipboardPositionAsync(binding, "parent", targetPosition, cancellation);
             if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == WorkspacePositions.FolderModel))
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
             var nodes = new Dictionary<string, WorkspaceStructureFolder>(StringComparer.OrdinalIgnoreCase);
@@ -36,8 +39,11 @@ public sealed partial class WorkspaceContents
                 var folder = await Folders.AsNoTracking().Where(row => EF.Property<string>(row, "EID") == id)
                     .Select(row => new WorkspaceStructureFolder(EF.Property<string>(row, "EID"), EF.Property<string>(row, "ENAME"), EF.Property<string?>(row, "Description"))).SingleOrDefaultAsync(cancellation);
                 if (folder is null) throw new LinkQueryException(409, "Workspace.FolderCopyUnavailable");
-                if (!await reader.IsEndpointReadableAsync("workspace.content", new(WorkspacePositions.FolderModel, id), cancellation)
-                    || !await decisions.IsAllowedAsync("workspace.folder", id, "workspaceCopy", cancellation)) throw new LinkQueryException(403, "Workspace.FolderCopyUnavailable");
+                var decision = await executionAccess.EvaluateInternalObjectAsync(WorkspaceFolderCopyExecutions.StructureNodeCaller(), "target",
+                    new("workspace.folder", id, new LinkObjectReference(WorkspacePositions.FolderModel, id)), cancellation);
+                if (decision.Decision != DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.FolderCopyUnavailable");
+                if (decision.Target?.ResourceKey != "workspace.folder" || decision.Target.ObjectId != id)
+                    throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
                 if (await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AnyAsync(row => EF.Property<string>(row, "RootFolderId") == id, cancellation))
                     throw new LinkQueryException(409, "Workspace.FolderCopyUnavailable");
                 nodes.Add(id, folder);
@@ -62,13 +68,16 @@ public sealed partial class WorkspaceContents
                 && Folders.Any(folder => EF.Property<string>(folder, "EID") == EF.Property<string>(link, "CEID") && EF.Property<string>(folder, "ENAME") == name), cancellation))
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
             var candidates = new Dictionary<string, Dictionary<string, object?>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var folder in plan.Folders) candidates.Add(folder.Id, await PrepareFolderCandidateAsync(StringComparer.OrdinalIgnoreCase.Equals(folder.Id, source.Id) ? name : folder.Name, folder.Description, targetPosition.SpaceId, new FolderCreationSource.Legacy(true), cancellation));
+            foreach (var folder in plan.Folders) candidates.Add(folder.Id, await PrepareFolderCandidateAsync(StringComparer.OrdinalIgnoreCase.Equals(folder.Id, source.Id) ? name : folder.Name, folder.Description, targetPosition.SpaceId, new FolderCreationSource.Declared(binding, WorkspaceFolderCopyExecutions.StructureCaller()), cancellation));
             // 全部候选及最终图先成立，之后才产生任何持久写入；新图只指向全新EID，目标为源后代也不会成环。
-            foreach (var candidate in candidates.Values)
+            var entries = new Dictionary<string, Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<Dictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (oldId, candidate) in candidates)
             {
-                Folders.Add(candidate);
+                entries.Add(oldId, Folders.Add(candidate));
                 await ownershipAudit.RegisterAsync("workspace.folder", (string)candidate["EID"]!, candidate, false, cancellation);
             }
+            var creation = new FolderStructureCreationFacts(source.Id, candidates, entries,
+                db.Database.CurrentTransaction ?? throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid"));
             await transactions.FlushAsync(cancellation);
             if (copyParentAuthorization)
             {
@@ -81,14 +90,14 @@ public sealed partial class WorkspaceContents
                     if (parents.Length == 0) continue;
                     var candidate = candidates[folder.Id];
                     var initialized = await parentAuthorizations.InitializeFromParentsAsync("workspace.folder", parents, (string)candidate["EID"]!,
-                        FolderInitializationSource(new FolderCreationSource.Legacy(true), parents, candidate), cancellation);
+                        StructureInitializationSource(binding, folder.Id, parents, incoming[folder.Id].ToArray(), creation), cancellation);
                     if (!initialized.Initialized) continue;
                     await referenceAudit.ParentAuthorizationInitializedAsync(initialized.ParentObjectId, candidate, cancellation);
                     // 后继必须从真实已保存新父读取；Flush不提交，整个结构仍由外层事务统一回滚。
                     await transactions.FlushAsync(cancellation);
                 }
                 // 外部目标父ACL锁仍在本事务内；新内部父不增加read/edit要求。
-                await WritablePositionAsync(actor, targetPosition, cancellation);
+                await ResolveClipboardPositionAsync(binding, "parent", targetPosition, cancellation);
             }
             var createdRoot = (string)candidates[source.Id]["EID"]!;
             var rootLink = await RegisterCreatedReferenceAsync(target.FolderId, WorkspacePositions.FolderModel, createdRoot, cancellation);

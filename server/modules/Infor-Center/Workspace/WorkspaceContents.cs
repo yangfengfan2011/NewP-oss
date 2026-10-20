@@ -31,7 +31,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values,
         bool copyParentAuthorization, CancellationToken token) =>
-        CreateFolderCoreAsync(actorId, position, values, copyParentAuthorization, new FolderCreationSource.Declared(WorkspaceFolderExecutions.CreateBinding()), token);
+        CreateFolderCoreAsync(actorId, position, values, copyParentAuthorization, new FolderCreationSource.Declared(WorkspaceFolderExecutions.CreateBinding(), WorkspaceFolderExecutions.CreateCaller()), token);
 
     // 正式创建与明确旧复制共享原事务；来源由实际调用分支选择，缺声明不能触发旧路径。
     private ValueTask<string> CreateFolderCoreAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values,
@@ -93,7 +93,6 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         var allowed = source switch
         {
             FolderCreationSource.Declared declared => await executionAccess.EvaluateCandidateAsync(declared.Binding, "workspace.folder", "candidate", candidate, token) == DataExecutionDecision.Allowed,
-            FolderCreationSource.Legacy => await decisions.IsCandidateAllowedAsync("workspace.folder", candidate, "create", token),
             _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
         };
         if (!allowed) throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
@@ -102,16 +101,14 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
 
     private abstract record FolderCreationSource
     {
-        public sealed record Declared(DataExecutionBindingReference Binding) : FolderCreationSource;
-        public sealed record Legacy(bool Structure) : FolderCreationSource;
+        public sealed record Declared(DataExecutionBindingReference Binding, DataExecutionInternalBinding Caller) : FolderCreationSource;
     }
 
-    // 正式parent角色复用原位置解析事实，旧复制仍明确保留原入口权限，后续复制票替换该分支。
+    // 正式parent角色复用原位置解析事实；普通创建和两种复制各自携带实际entry来源。
     private Task<WorkspacePositionPath> ResolveFolderCreationPositionAsync(FolderCreationSource source, string actor,
         WorkspacePosition position, CancellationToken token) => source switch
     {
         FolderCreationSource.Declared declared => ResolveClipboardPositionAsync(declared.Binding, "parent", position, token),
-        FolderCreationSource.Legacy => WritablePositionAsync(actor, position, token),
         _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
     };
 
@@ -122,8 +119,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         var target = new DataExecutionWriteFacts("workspace.folder", (string)candidate["EID"]!, candidate);
         return source switch
         {
-            FolderCreationSource.Declared declared => new DataScopeObjectInitializationSource.Declared(WorkspaceFolderExecutions.CreateCaller(), declared.Binding, parents, target),
-            FolderCreationSource.Legacy legacy => new DataScopeObjectInitializationSource.Legacy(WorkspaceFolderExecutions.CopyCaller(legacy.Structure), parents, target),
+            FolderCreationSource.Declared declared => new DataScopeObjectInitializationSource.Declared(declared.Caller, declared.Binding, parents, target),
             _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
         };
     }

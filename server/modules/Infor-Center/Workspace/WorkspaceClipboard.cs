@@ -106,25 +106,18 @@ public sealed partial class WorkspaceContents
         return targets;
     }
 
-    private enum DeferredClipboardExecution { FolderPreparation, FolderCopy, FolderStructure, DocumentPreparation, DocumentSources }
+    private enum DeferredClipboardExecution { DocumentPreparation, DocumentSources }
 
     // 后续副本提交显式隔离；共用真实解析器，不根据声明缺失猜测旧路由。
     private async Task<LinkObjectReference[]> ResolveDeferredClipboardTargetsAsync(string parentId, string[] linkIds,
         DeferredClipboardExecution execution, CancellationToken token)
     {
-        var requireCopy = execution switch
-        {
-            DeferredClipboardExecution.FolderPreparation or DeferredClipboardExecution.FolderCopy or DeferredClipboardExecution.FolderStructure => true,
-            DeferredClipboardExecution.DocumentPreparation or DeferredClipboardExecution.DocumentSources => false,
-            _ => throw new ArgumentOutOfRangeException(nameof(execution))
-        };
+        if (execution is not (DeferredClipboardExecution.DocumentPreparation or DeferredClipboardExecution.DocumentSources))
+            throw new ArgumentOutOfRangeException(nameof(execution));
         var targets = await ReadClipboardTargetsAsync(parentId, linkIds, token);
         foreach (var target in targets)
         {
-            var resource = Resource(target.ModelKey);
             if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            if (requireCopy && !await decisions.IsAllowedAsync(resource, target.Id, CopyAction(target.ModelKey), token))
-                throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
             await RequireNonRootClipboardTargetAsync(target, token);
         }
         return targets;
@@ -137,13 +130,6 @@ public sealed partial class WorkspaceContents
             .AnyAsync(row => EF.Property<string>(row, "RootFolderId") == target.Id, token))
             throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");
     }
-
-    // 数据动作身份由各真实对象owner独立声明，遵循正式目录全局唯一性，不借用edit/delete。
-    private static string CopyAction(string model) => model switch
-    {
-        WorkspacePositions.FolderModel => "workspaceCopy", "Part" => "partCopy", "Document" => "documentCopy",
-        _ => throw new LinkQueryException(400, "Workspace.InvalidEndpoint")
-    };
 
     // 根接收规则只限制新落入，不改变已有关系读取、编辑、删除与移出。
     private static void RequireContainer(WorkspacePosition position, WorkspacePositionPath path, string model)

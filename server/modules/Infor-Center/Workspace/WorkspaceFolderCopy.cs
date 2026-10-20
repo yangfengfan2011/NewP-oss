@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ICP.Platform.Crud.LinkQueries;
+using ICP.Platform.Authorization.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Workspace;
@@ -9,19 +10,34 @@ public sealed record WorkspaceFolderCopyPreparation(string SourceName, IReadOnly
 public sealed partial class WorkspaceContents
 {
     /// <summary>弹层只读核证完整位置及当前源名；不预取子内容，不缓存资格，也不替代图锁内提交重验。</summary>
-    public async Task<WorkspaceFolderCopyPreparation> PrepareFolderCopyAsync(string actor, string mode, WorkspacePosition sourcePosition,
-        string[] linkIds, WorkspacePosition targetPosition, CancellationToken token)
+    public Task<WorkspaceFolderCopyPreparation> PrepareFolderCopyAsync(string actor, string mode, WorkspacePosition sourcePosition,
+        string[] linkIds, WorkspacePosition targetPosition, CancellationToken token) =>
+        PrepareFolderCopyCoreAsync(actor, mode, sourcePosition, linkIds, targetPosition, FolderPreparationExecution.Shallow, token);
+
+    /// <summary>结构名称准备使用自己的真实声明，不与浅副本来源串用。</summary>
+    public Task<WorkspaceFolderCopyPreparation> PrepareFolderStructureAsync(string actor, string mode, WorkspacePosition sourcePosition,
+        string[] linkIds, WorkspacePosition targetPosition, CancellationToken token) =>
+        PrepareFolderCopyCoreAsync(actor, mode, sourcePosition, linkIds, targetPosition, FolderPreparationExecution.Structure, token);
+
+    private enum FolderPreparationExecution { Shallow, Structure }
+
+    // 两个真实服务器入口显式选择来源；名称与路径读取保持原顺序及一次连接范围。
+    private async Task<WorkspaceFolderCopyPreparation> PrepareFolderCopyCoreAsync(string actor, string mode, WorkspacePosition sourcePosition,
+        string[] linkIds, WorkspacePosition targetPosition, FolderPreparationExecution execution, CancellationToken token)
     {
         if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0]))
             throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
+        var binding = execution == FolderPreparationExecution.Shallow ? WorkspaceFolderCopyExecutions.Binding("prepare")
+            : WorkspaceFolderCopyExecutions.StructureBinding("prepare");
+        executionAccess.Validate([binding], "workspace.folder");
         var openedHere = db.Database.GetDbConnection().State != System.Data.ConnectionState.Open;
         try
         {
             if (openedHere) await db.Database.OpenConnectionAsync(token);
-            var parent = await positions.ResolveAsync(actor, sourcePosition, token);
-            var source = (await ResolveDeferredClipboardTargetsAsync(parent.FolderId, linkIds, DeferredClipboardExecution.FolderPreparation, token))[0];
+            var parent = await ResolveClipboardPositionAsync(binding, "sourceParent", sourcePosition, token);
+            var source = (await ResolveDeclaredClipboardTargetsAsync(parent.FolderId, linkIds, binding, token))[0];
             if (source.ModelKey != WorkspacePositions.FolderModel) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
-            var target = await WritablePositionAsync(actor, targetPosition, token);
+            var target = await ResolveClipboardPositionAsync(binding, "parent", targetPosition, token);
             var name = await Folders.AsNoTracking().Where(row => EF.Property<string>(row, "EID") == source.Id)
                 .Select(row => EF.Property<string>(row, "ENAME")).SingleAsync(token);
             return new(name, [.. parent.Names, name], target.Names);
@@ -41,14 +57,16 @@ public sealed partial class WorkspaceContents
         if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0]))
             throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
         if (string.IsNullOrWhiteSpace(name) || name.Length > 256) throw new LinkQueryException(400, "Workspace.InvalidName", "ENAME");
+        var binding = WorkspaceFolderCopyExecutions.Binding("submit");
+        executionAccess.Validate([binding], "workspace.folder");
         return transactions.ExecuteAsync<WorkspacePasteResult>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var sourceParent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
-            var source = (await ResolveDeferredClipboardTargetsAsync(sourceParent.FolderId, linkIds, DeferredClipboardExecution.FolderCopy, cancellation))[0];
+            var sourceParent = await ResolveClipboardPositionAsync(binding, "sourceParent", sourcePosition, cancellation);
+            var source = (await ResolveDeclaredClipboardTargetsAsync(sourceParent.FolderId, linkIds, binding, cancellation))[0];
             if (source.ModelKey != WorkspacePositions.FolderModel) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
-            var target = await WritablePositionAsync(actor, targetPosition, cancellation);
+            var target = await ResolveClipboardPositionAsync(binding, "parent", targetPosition, cancellation);
             var sourceFields = await Folders.AsNoTracking().Where(row => EF.Property<string>(row, "EID") == source.Id)
                 .Select(row => new { Description = EF.Property<string?>(row, "Description") }).SingleAsync(cancellation);
             var children = await ReadCopyChildrenAsync(source.Id, cancellation);
@@ -60,9 +78,12 @@ public sealed partial class WorkspaceContents
             foreach (var child in children)
             {
                 var endpoint = new LinkObjectReference(child.Model, child.Id);
-                if (!await reader.IsEndpointReadableAsync("workspace.content", endpoint, cancellation)
-                    || !await decisions.IsAllowedAsync(Resource(child.Model), child.Id, CopyAction(child.Model), cancellation))
+                var decision = await executionAccess.EvaluateInternalObjectAsync(WorkspaceFolderCopyExecutions.DirectTargetCaller(),
+                    "target", new(Resource(child.Model), child.Id, endpoint), cancellation);
+                if (decision.Decision != DataExecutionDecision.Allowed)
                     throw new LinkQueryException(403, "Workspace.FolderCopyUnavailable");
+                if (decision.Target?.ResourceKey != Resource(child.Model) || decision.Target.ObjectId != child.Id)
+                    throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
                 if (child.Model == WorkspacePositions.FolderModel && (await WouldCycleAsync(source.Id, child.Id, cancellation)
                     || await WouldCycleAsync(target.FolderId, child.Id, cancellation)
                     || await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AnyAsync(row => EF.Property<string>(row, "RootFolderId") == child.Id, cancellation)))
@@ -71,7 +92,7 @@ public sealed partial class WorkspaceContents
             // 普通创建拥有名称、Description、目标归属和候选create规则；嵌套执行共享当前事务及图锁。
             var createdId = await CreateFolderCoreAsync(actor, targetPosition, new Dictionary<string, JsonElement> {
                 ["ENAME"] = JsonSerializer.SerializeToElement(name), ["Description"] = JsonSerializer.SerializeToElement(sourceFields.Description) },
-                copyParentAuthorization, new FolderCreationSource.Legacy(false), cancellation);
+                copyParentAuthorization, new FolderCreationSource.Declared(binding, WorkspaceFolderCopyExecutions.Caller()), cancellation);
             var rootLinkId = (string)db.ChangeTracker.Entries<Dictionary<string, object?>>()
                 .Single(entry => entry.Metadata.Name == WorkspacePositions.ContentModel
                     && Equals(entry.Entity["PEID"], target.FolderId) && Equals(entry.Entity["CEID"], createdId)).Entity["LID"]!;

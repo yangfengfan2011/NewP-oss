@@ -177,7 +177,10 @@ public sealed class ObjectHistoryLegacyEventsSqlServerTests
     private static Occurrence ParentOccurrence(Position position) => new(position with { LinkIds = position.LinkIds[..^1] }, position.LinkIds[^1]);
     private static async Task<JsonElement> CommandAsync(BusinessAuditHostFixture fixture, HttpClient client, string action, string suffix, object body)
     {
-        using var response = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder." + action), HttpMethod.Post, "/api/workspace/content/" + suffix, body);
+        var point = Point(fixture, "workspace.folder." + action);
+        var execution = action switch { "pasteFolderCopy" => "workspace.folder.shallowCopy", "pasteFolderStructure" => "workspace.folder.structureCopy", _ => null };
+        var declaration = execution is null ? null : new FeatureHttpTestRequests(fixture).Declaration(execution, point);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, "/api/workspace/content/" + suffix, body, declaration);
         return await ReadOkAsync(response);
     }
     private static string HistoryPath(Occurrence occurrence) => "/api/workspace/content/" + occurrence.LinkId + "/history?queryScope="
@@ -198,7 +201,7 @@ public sealed class ObjectHistoryLegacyEventsSqlServerTests
         // 每项Fact只选一个源对象验证fresh详情；其余出现位置用列表保留完整关联断言。
         if (includeDetail)
         {
-            using var detail = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.history"), HttpMethod.Get,
+            using var detail = await new ObjectHistoryHttpTestRequests(fixture).SendAsync(client, Point(fixture, "workspace.folder.history"), HttpMethod.Get,
                 HistoryPath(occurrence).Replace("/history?", "/history/" + eventId + "?", StringComparison.Ordinal) + "&eventType=" + Uri.EscapeDataString(eventType));
             Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
             var detailItem = JsonSerializer.Deserialize<JsonElement>(await detail.Content.ReadAsStringAsync());

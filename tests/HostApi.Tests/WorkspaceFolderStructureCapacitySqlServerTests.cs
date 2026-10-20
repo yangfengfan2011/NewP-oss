@@ -17,7 +17,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "普通有限功能账号的深链128及高共享DAG成功成本，与管理员样本分开记录")]
     public async Task StructureCopy_MeasuresOrdinaryActorSuccessfulDeepAndSharedGraphs()
     {
-        foreach (var shape in new[] { "deep", "dag" })
+        var minimumSlice = Environment.GetEnvironmentVariable("NEWP_WORKSPACE_FOLDER_COST_SLICE") == "320";
+        foreach (var shape in minimumSlice ? new[] { "dag" } : new[] { "deep", "dag" })
         {
             var size = shape == "deep" ? 128 : 16;
             var statistics = new FolderCopyStatistics(); var graph = new FolderCopyLockClock();
@@ -26,14 +27,35 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             var dimensions = await SeedStructureCapacityAsync(fixture, source, shape, size);
             var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "StructureOrdinaryCost", "结构容量账号", "structure-ordinary-cost", "结构容量账号", Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.pasteFolderStructure"));
             using var ordinary = actor.Client;
+            using var permissionScope = fixture.Services.CreateScope();
+            var permissionConnection = permissionScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.GetConnectionString()!;
+            using var permissions = minimumSlice ? new ClipboardPermissionQueries(new SqlConnectionStringBuilder(permissionConnection).InitialCatalog) : null;
             var input = new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = root, name = "普通账号独立结构" };
             if (shape == "dag")
             {
-                var preparation = await MeasureFolderCopyAsync(statistics, graph, async () => { await Command(fixture, ordinary, "workspace.folder.pasteFolderStructure", "/api/workspace/content/folders/copy-structure/prepare", new { input.mode, input.sourcePosition, input.linkIds, input.targetPosition }); });
+                permissions?.Begin();
+                object preparation;
+                try { preparation = await MeasureFolderCopyAsync(statistics, graph, async () => { await Command(fixture, ordinary, "workspace.folder.pasteFolderStructure", "/api/workspace/content/folders/copy-structure/prepare", new { input.mode, input.sourcePosition, input.linkIds, input.targetPosition }); }); }
+                finally { permissions?.End(); }
+                if (permissions is not null)
+                {
+                    var evidence = Path.Combine(Environment.GetEnvironmentVariable("NEWP_COPY_COST_ARTIFACT_ROOT")!, "structure-prepare");
+                    var plans = await permissions.ExplainAsync(permissionConnection, evidence);
+                    await File.WriteAllTextAsync(Path.Combine(evidence, "measurement.json"), JsonSerializer.Serialize(new { shape, size, dimensions, preparation, plans }));
+                }
                 output.WriteLine("STRUCTURE_CAPACITY " + JsonSerializer.Serialize(new { scenario = "prepare-only", actorKind = "ordinary-limited-features", rules = "formal default object rules; no synthetic complex ACL", sourceNodes = dimensions.Nodes, sourceEdges = dimensions.Edges, depth = dimensions.Depth, result = preparation }));
             }
             var foldersBefore = await Rows(fixture, "WorkspaceFolder"); var linksBefore = await Rows(fixture, "WorkspaceFolderContent");
-            var result = await MeasureFolderCopyAsync(statistics, graph, async () => { await Command(fixture, ordinary, "workspace.folder.pasteFolderStructure", "/api/workspace/content/folders/copy-structure", input); });
+            permissions?.Begin();
+            object result;
+            try { result = await MeasureFolderCopyAsync(statistics, graph, async () => { await Command(fixture, ordinary, "workspace.folder.pasteFolderStructure", "/api/workspace/content/folders/copy-structure", input); }); }
+            finally { permissions?.End(); }
+            if (permissions is not null)
+            {
+                var evidence = Path.Combine(Environment.GetEnvironmentVariable("NEWP_COPY_COST_ARTIFACT_ROOT")!, "structure-submit");
+                var plans = await permissions.ExplainAsync(permissionConnection, evidence);
+                await File.WriteAllTextAsync(Path.Combine(evidence, "measurement.json"), JsonSerializer.Serialize(new { shape, size, dimensions, result, plans }));
+            }
             output.WriteLine("STRUCTURE_CAPACITY " + JsonSerializer.Serialize(new {
                 environment = new { runtime = Environment.Version.ToString(), processors = Environment.ProcessorCount, os = Environment.OSVersion.ToString(), sql = "repository configured SQL Server; independent test catalog; Release" },
                 actorKind = "ordinary-limited-features", features = new[] { "workspace.spaces.access", "workspace.folder.pasteFolderStructure" }, rules = "formal default object rules; no synthetic complex ACL",

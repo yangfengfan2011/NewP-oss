@@ -25,29 +25,29 @@ it('recovers a lost object-copy receipt by reading its operation and never repea
 });
 it.each(['copy', 'copy-structure'] as const)('freezes %s a named copy against changed target, source snapshot, ended instance and unknown outcomes', async kind => {
   const session = new WorkspaceClipboardSession(vi.fn());
-  expect(() => session.prepareFolderCopy(target, 'copy-folder', kind)).toThrow();
+  expect(() => session.prepareFolderCopy(target, 'copy-folder', kind, 'copy-declaration')).toThrow();
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'folder', modelKey: 'WorkspaceFolder' }] })));
   await session.copy(source, ['folder'], 'copy');
-  const draft = session.prepareFolderCopy(target, 'copy-folder', kind);
-  await expect(session.pasteFolderCopy(draft, 'New', { ...target, linkIds: ['elsewhere'] }, 'copy-folder', kind)).rejects.toThrow();
-  await expect(session.pasteFolderCopy(draft, 'Wrong action', target, 'copy-folder', kind === 'copy' ? 'copy-structure' : 'copy')).rejects.toThrow();
+  const draft = session.prepareFolderCopy(target, 'copy-folder', kind, 'copy-declaration');
+  await expect(session.pasteFolderCopy(draft, 'New', { ...target, linkIds: ['elsewhere'] }, 'copy-folder', kind, undefined, 'copy-declaration')).rejects.toThrow();
+  await expect(session.pasteFolderCopy(draft, 'Wrong action', target, 'copy-folder', kind === 'copy' ? 'copy-structure' : 'copy', undefined, 'copy-declaration')).rejects.toThrow();
   expect(platformFetch).toHaveBeenCalledTimes(1);
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ succeeded: true })));
-  await session.pasteFolderCopy(draft, 'New', target, 'copy-folder', kind);
+  await session.pasteFolderCopy(draft, 'New', target, 'copy-folder', kind, undefined, 'copy-declaration');
   expect(session.getSnapshot().clipboard?.linkIds).toEqual(['folder']);
-  const second = session.prepareFolderCopy(target, 'copy-folder', kind);
+  const second = session.prepareFolderCopy(target, 'copy-folder', kind, 'copy-declaration');
   vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('lost'));
-  await expect(session.pasteFolderCopy(second, 'Another', target, 'copy-folder', kind)).rejects.toThrow();
+  await expect(session.pasteFolderCopy(second, 'Another', target, 'copy-folder', kind, undefined, 'copy-declaration')).rejects.toThrow();
   expect(session.getSnapshot().phase).toBe('unknown');
   session.close();
-  await expect(session.pasteFolderCopy(second, 'Again', target, 'copy-folder', kind)).rejects.toThrow();
+  await expect(session.pasteFolderCopy(second, 'Again', target, 'copy-folder', kind, undefined, 'copy-declaration')).rejects.toThrow();
   expect(platformFetch).toHaveBeenCalledTimes(3);
 });
 const validated = (ids: string[]) => new Response(JSON.stringify({ mode: 'copy', sourcePosition: source, items: ids.map(linkId => ({ linkId })) }));
 it.each(['snapshot', 'closed'] as const)('discards a delayed preparation after its %s identity expires', async reason => {
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'folder', modelKey: 'WorkspaceFolder' }] })));
-  await session.copy(source, ['folder'], 'copy'); const draft = session.prepareFolderCopy(target, 'named-copy');
+  await session.copy(source, ['folder'], 'copy'); const draft = session.prepareFolderCopy(target, 'named-copy', 'copy', 'copy-declaration');
   let finish!: (response: Response) => void;
   vi.mocked(platformFetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   const controller = new AbortController(); const reading = session.readFolderCopyInput(draft, controller.signal);
@@ -270,4 +270,15 @@ it('keeps the original unknown state across superseded validating requests and a
   finish(validated(['first'])); expect(await first).toBe(false);
   expect(session.getSnapshot()).toMatchObject({ phase: 'unknown', clipboard: { linkIds: ['old'] } });
   await expect(session.paste(target, 'paste')).rejects.toThrow();
+});
+
+it('requires the named-copy declaration before preparation and rejects a changed declaration before submit', async () => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'folder', modelKey: 'WorkspaceFolder' }] })));
+  await session.copy(source, ['folder'], 'copy');
+  expect(() => session.prepareFolderCopy(target, 'named-copy')).toThrow();
+  expect(platformFetch).toHaveBeenCalledTimes(1);
+  const draft = session.prepareFolderCopy(target, 'named-copy', 'copy', 'first-declaration');
+  await expect(session.pasteFolderCopy(draft, 'stale', target, 'named-copy', 'copy', true, 'second-declaration')).rejects.toThrow();
+  expect(platformFetch).toHaveBeenCalledTimes(1);
 });

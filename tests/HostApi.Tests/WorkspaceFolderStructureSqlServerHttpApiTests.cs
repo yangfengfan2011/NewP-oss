@@ -181,6 +181,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         control.Pause = true; using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/folders/copy-structure") { Content = JsonContent.Create(input) };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.pasteFolderStructure").Position);
+        request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure")).Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try { await control.Reached.Task.WaitAsync(TimeSpan.FromSeconds(20)); cancellation.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending); await control.RolledBack.Task.WaitAsync(TimeSpan.FromSeconds(20)); }
         finally { cancellation.Cancel(); control.Resume.TrySetResult(); try { (await pending).Dispose(); } catch (OperationCanceledException) { } }
@@ -214,7 +215,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var newChild = Assert.Single(await Rows(fixture, "WorkspaceFolder"), row => Equals(row["ENAME"], "跨空间后代") && !Equals(row["EID"], sourceChildId));
         Assert.Equal(personalPosition.SpaceId, newChild["OriginSpaceId"]); Assert.Equal(actor.AccountId, newChild["CreatedBy"]);
         using (var unreadable = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.spaces.access"), HttpMethod.Get,
-            "/api/workspace/folders/" + (string)copy["EID"]!)) Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
+            "/api/workspace/folders/" + (string)copy["EID"]!, null, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.read", Point(fixture, "workspace.spaces.access")))) Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
         var personalLink = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["CEID"], copy["EID"]));
         using (var privateDenied = await Send(fixture, admin, "workspace.folder.pasteFolderStructure", "folders/copy-structure", new { mode = "copy", sourcePosition = personalPosition, linkIds = new[] { (string)personalLink["LID"]! }, targetPosition = target, name = "越权" }))
             await Problem(privateDenied, HttpStatusCode.NotFound, "Workspace.PositionUnavailable");

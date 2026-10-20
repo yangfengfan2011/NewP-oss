@@ -22,8 +22,12 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceContents>();
         services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
             WorkspaceFolderExecutions.CreateCaller(), "submit", "parent", "candidate"));
-        services.AddSingleton(new DataScopeObjectInitializationLegacyBinding(ModuleId, "workspace.folder", WorkspaceFolderExecutions.CopyCaller(false)));
-        services.AddSingleton(new DataScopeObjectInitializationLegacyBinding(ModuleId, "workspace.folder", WorkspaceFolderExecutions.CopyCaller(true)));
+        services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
+            WorkspaceFolderCopyExecutions.Caller(), "submit", "parent", "candidate"));
+        services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
+            WorkspaceFolderCopyExecutions.StructureCaller(), "submit", "parent", "candidate"));
+        services.AddSingleton(new DataScopeObjectInitializationCreatedParentsBinding(ModuleId, "workspace.folder",
+            WorkspaceFolderCopyExecutions.StructureCaller(), "submit", "candidate"));
         services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransfer>();
         services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay>(provider => new(
             provider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(),

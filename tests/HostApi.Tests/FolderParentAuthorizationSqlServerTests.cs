@@ -152,9 +152,9 @@ public sealed class FolderParentAuthorizationSqlServerTests
         await CopyAsync("InheritedShallow298", true);
         await CopyAsync("OptOutShallow298", false);
         Assert.Equal(sharedBefore, JsonSerializer.Serialize(await RowAsync(fixture, shared)));
-        var sourceAfter = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId));
+        var sourceAfter = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")));
         Assert.Equal("ShallowSource298", Assert.Single(sourceAfter.GetProperty("subjects").EnumerateArray()).GetProperty("id").GetString());
-        var sharedAfter = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(sourcePosition, shared.LinkId));
+        var sharedAfter = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(sourcePosition, shared.LinkId), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")));
         Assert.Equal("ShallowShared298", Assert.Single(sharedAfter.GetProperty("subjects").EnumerateArray()).GetProperty("id").GetString());
 
         async Task CopyAsync(string name, bool? copyParent)
@@ -163,12 +163,12 @@ public sealed class FolderParentAuthorizationSqlServerTests
                 ["linkIds"] = new[] { source.LinkId }, ["targetPosition"] = targetPosition, ["name"] = name };
             if (copyParent.HasValue) body["copyParentAuthorization"] = copyParent.Value;
             using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteFolderCopy"), HttpMethod.Post,
-                "/api/workspace/content/folders/copy", body);
+                "/api/workspace/content/folders/copy", body, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.shallowCopy", Point(fixture, "workspace.folder.pasteFolderCopy")));
             var receipt = await ReadOkAsync(response);
             Assert.True(receipt.GetProperty("succeeded").GetBoolean());
             Assert.False(receipt.TryGetProperty("id", out _));
             var copied = await FindFolderAsync(fixture, name);
-            var configuration = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(targetPosition, copied.LinkId));
+            var configuration = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(targetPosition, copied.LinkId), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")));
             var entries = configuration.GetProperty("subjects").EnumerateArray().ToArray();
             if (copyParent == true)
             {
@@ -230,18 +230,13 @@ public sealed class FolderParentAuthorizationSqlServerTests
                 { Content = JsonContent.Create(body, options: new JsonSerializerOptions()) };
                 var feature = Point(fixture, "workspace.folder." + (shallow ? "pasteFolderCopy" : "create"));
                 request.Headers.Add("X-NewP-Feature", feature.Position);
-                // 正式新建使用同一真实声明；尚未迁移的浅副本仍沿其原显式边界。
-                if (!shallow)
-                {
-                    var declaration = Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
-                        binding => binding.Execution == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position));
-                    request.Headers.Add("X-NewP-Data-Declaration", declaration.Id);
-                }
+                var declaration = new FeatureHttpTestRequests(fixture).Declaration(shallow ? "workspace.folder.shallowCopy" : "workspace.folder.create", feature);
+                request.Headers.Add("X-NewP-Data-Declaration", declaration.Id);
                 if (cancel)
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
                     {
                         using var response = await admin.SendAsync(request, cancellation.Token);
-                        Assert.Fail($"请求未进入取消点，HTTP {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+                        Assert.Fail($"请求未进入取消点，HTTP {(int)response.StatusCode}");
                     });
                 else
                 {
@@ -514,7 +509,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         await SaveAsync(fixture, admin, position, source,
             [new("RetainedSourceDifferent298", "all", null, 99, new Dictionary<string, string> { ["delete"] = "deny" })]);
         var parentBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(parentOccurrence, parent.LinkId))).GetRawText();
-        var sourceBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId))).GetRawText();
+        var sourceBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")))).GetRawText();
         // 从未登录/绑定的真实账号允许正式软删；保留下来的ACL引用不是新手工选择器。
         using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("delete"), HttpMethod.Post,
             "/api/identity/accounts/" + accountId + "/delete", new { ExpectedRevision = account.GetProperty("revision").GetInt64(), Reason = "核证父已有直接项完整克隆" }))
@@ -607,7 +602,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
             }
         }
         Assert.Equal(parentBefore, (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(parentOccurrence, parent.LinkId))).GetRawText());
-        Assert.Equal(sourceBefore, (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId))).GetRawText());
+        Assert.Equal(sourceBefore, (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")))).GetRawText());
     }
     private static async Task<string> SnapshotAsync(BusinessAuditHostFixture fixture)
     {
@@ -639,7 +634,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         DataScopeDirectSubjectDto[] subjects)
     {
         using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put, PermissionsPath(position, target.LinkId),
-            new DataScopeObjectConfiguration("workspace.folder", target.Id, subjects));
+            new DataScopeObjectConfiguration("workspace.folder", target.Id, subjects), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")));
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 

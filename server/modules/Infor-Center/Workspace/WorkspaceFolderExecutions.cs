@@ -2,7 +2,7 @@ using ICP.Platform.Authorization.Contracts;
 
 namespace ICP.Platform.Modules.Workspace;
 
-/// <summary>文件夹入口固定执行及尚未迁移复制初始化的独立旧身份。</summary>
+/// <summary>文件夹基础入口与真实目标阶段的固定执行身份。</summary>
 public static class WorkspaceFolderExecutions
 {
     public const string Create = "workspace.folder.create";
@@ -11,8 +11,6 @@ public static class WorkspaceFolderExecutions
     public const string EditTarget = "workspace.folder.edit.target";
     public const string Candidates = "workspace.folder.candidates";
     public const string Provider = "workspace.backend";
-    public const string ShallowInitialization = "workspace.folder.shallowCopy.initialize.legacy";
-    public const string StructureInitialization = "workspace.folder.structureCopy.initialize.legacy";
 
     /// <summary>普通创建引用同一正式合同；调用者身份只来自服务端实际成员。</summary>
     public static DataExecutionBindingReference CreateBinding() => new(Create, Provider, "submit");
@@ -29,8 +27,4 @@ public static class WorkspaceFolderExecutions
     public static DataExecutionApiQueryContext CandidatesQuery() => new(new(Candidates, Provider, "read"), Candidates, "query");
     /// <summary>初始化引用已有创建合同，不创建额外权限目录。</summary>
     public static DataExecutionInternalBinding CreateCaller() => new(Create, Provider, typeof(WorkspaceContents), nameof(WorkspaceContents.CreateFolderAsync));
-    /// <summary>复制仍走明确旧执行身份，不能被缺声明的普通创建借用。</summary>
-    public static DataExecutionInternalBinding CopyCaller(bool structure) => structure
-        ? new(StructureInitialization, Provider, typeof(WorkspaceContents), nameof(WorkspaceContents.CopyFolderStructureAsync))
-        : new(ShallowInitialization, Provider, typeof(WorkspaceContents), nameof(WorkspaceContents.CopyFolderAsync));
 }

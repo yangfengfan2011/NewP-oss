@@ -78,6 +78,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return Results.Ok(await contents.PrepareFolderCopyAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>单源浅副本仅接受确切来源、目标位置及新根名称；提交后不附加新对象读取要求。</summary>
@@ -98,6 +103,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return Results.Ok(await contents.CopyFolderAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, name.GetString()!, copyParent.ValueKind == JsonValueKind.True, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>名称输入只读准备返回本次已核证源和目标，不形成随后提交的授权凭证。</summary>
@@ -107,9 +117,14 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         try
         {
             var request = ReadClipboardInput(input, true);
-            return Results.Ok(await contents.PrepareFolderCopyAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token));
+            return Results.Ok(await contents.PrepareFolderStructureAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>单源结构复制仅接受确切来源、目标位置及新根名称；提交后不附加新对象读取要求。</summary>
@@ -130,6 +145,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return Results.Ok(await contents.CopyFolderStructureAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, name.GetString()!, copyParent.ValueKind == JsonValueKind.True, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     private sealed record ClipboardInput(string Mode, WorkspacePosition SourcePosition, string[] LinkIds, WorkspacePosition? TargetPosition);

@@ -10,6 +10,10 @@ public abstract record DataScopeObjectInitializationSource(DataExecutionInternal
     public sealed record Declared(DataExecutionInternalBinding Caller, DataExecutionBindingReference Binding,
         IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
         : DataScopeObjectInitializationSource(Caller, ParentObjectIds, Target);
+    /// <summary>受控结构创建的真实新父候选事实；不表示这些新对象已被读取或获准编辑。</summary>
+    public sealed record DeclaredFromCreatedParents(DataExecutionInternalBinding Caller, DataExecutionBindingReference Binding,
+        IReadOnlyList<DataExecutionWriteFacts> Parents, DataExecutionWriteFacts Target)
+        : DataScopeObjectInitializationSource(Caller, Parents.Select(parent => parent.ObjectId).ToArray(), Target);
     public sealed record Legacy(DataExecutionInternalBinding Caller, IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
         : DataScopeObjectInitializationSource(Caller, ParentObjectIds, Target);
 }
@@ -17,6 +21,10 @@ public abstract record DataScopeObjectInitializationSource(DataExecutionInternal
 /// <summary>有限来源登记只引用同一正式执行的角色，不维护第二份数据动作要求。</summary>
 public sealed record DataScopeObjectInitializationBinding(string ModuleId, string ResourceKey,
     DataExecutionInternalBinding Caller, string Stage, string ParentRole, string CandidateRole);
+
+/// <summary>只为实际结构创建者登记新图父事实来源，复用其原候选角色，不定义第二份权限要求。</summary>
+public sealed record DataScopeObjectInitializationCreatedParentsBinding(string ModuleId, string ResourceKey,
+    DataExecutionInternalBinding Caller, string Stage, string CandidateRole);
 
 /// <summary>未迁移复制入口的显式旧执行身份；不允许缺声明的正式创建选择此来源。</summary>
 public sealed record DataScopeObjectInitializationLegacyBinding(string ModuleId, string ResourceKey, DataExecutionInternalBinding Caller);

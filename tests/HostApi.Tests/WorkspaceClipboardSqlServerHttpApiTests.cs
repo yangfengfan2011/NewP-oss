@@ -738,12 +738,14 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
     private static async Task<JsonElement> Command(BusinessAuditHostFixture fixture, HttpClient client, string behavior, string path, object? body = null)
     {
         var feature = Point(fixture, behavior);
-        var declaration = behavior == "workspace.folder.create"
+        var execution = behavior switch { "workspace.folder.create" => "workspace.folder.create",
+            "workspace.folder.createPart" => "workspace.content.createPart", "workspace.folder.createDocument" => "workspace.content.createDocument", _ => null };
+        var declaration = execution is not null
             ? Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-                item => item.Execution == "workspace.folder.create" && item.FeaturePositions.Contains(feature.Position))
+                item => item.Execution == execution && item.ViewKey == "workspace.folder.list" && item.Surface == "pageActions" && item.FeaturePositions.Contains(feature.Position))
             : ClipboardDeclaration(fixture, feature);
         using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, path, body, declaration);
-        Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"{behavior} returned HTTP {(int)response.StatusCode}.");
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
     private static async Task<WorkspacePosition> Root(BusinessAuditHostFixture fixture, HttpClient admin)
@@ -756,9 +758,19 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         var feature = Point(fixture, behavior);
         return FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, "/api/workspace/content/" + path, body, ClipboardDeclaration(fixture, feature));
     }
-    internal static ActionDataAccessRequirement? ClipboardDeclaration(BusinessAuditHostFixture fixture, FeaturePoint feature) =>
-        fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.SingleOrDefault(item =>
-            item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal) && item.FeaturePositions.Contains(feature.Position));
+    // 正常copy准备/提交按真实behavior选声明，裸请求反例仍自行构造，不按URL或缺头回退。
+    internal static ActionDataAccessRequirement? ClipboardDeclaration(BusinessAuditHostFixture fixture, FeaturePoint feature)
+    {
+        var folderExecution = feature.BehaviorKey switch
+        {
+            "workspace.folder.pasteFolderCopy" => "workspace.folder.shallowCopy",
+            "workspace.folder.pasteFolderStructure" => "workspace.folder.structureCopy",
+            _ => null
+        };
+        return fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.SingleOrDefault(item =>
+            (folderExecution is null ? item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal) : item.Execution == folderExecution)
+            && item.FeaturePositions.Contains(feature.Position));
+    }
     private static async Task Rule(BusinessAuditHostFixture fixture, HttpClient admin, string key, string resource, string id, string action, string opinion)
     {
         var rule = new DataScopeRuleDto(key, key, null, key, true, resource, new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),

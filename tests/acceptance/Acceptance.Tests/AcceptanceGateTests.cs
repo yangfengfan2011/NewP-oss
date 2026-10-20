@@ -652,6 +652,7 @@ public sealed class AcceptanceGateTests
                 await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
                 await driver.CreateFolderAsync(source, copyParentAuthorization: false);
                 await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName, source);
+                await driver.CreateFolderAsync("父授权子 " + runId[..8], copyParentAuthorization: false);
                 await driver.CopyFolderFromTreeContextMenuAsync(source, selectedOnly: true);
                 await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
                 await driver.PasteFolderCopyAsync("父授权浅副本 " + runId[..8], copyParentAuthorization: true);

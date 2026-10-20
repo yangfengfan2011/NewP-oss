@@ -273,7 +273,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         multipart.Add(new StringContent(JsonSerializer.Serialize(values)), "values");
         var file = new ByteArrayContent([1, 2, 3]); file.Headers.ContentType = new("application/pdf"); multipart.Add(file, "file", "permissions.pdf");
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/document-uploads") { Content = multipart };
-        request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
+        var uploadFeature = Point(fixture, "workspace.folder.createDocument");
+        request.Headers.Add("X-NewP-Feature", uploadFeature.Position);
+        request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.content.createDocument", uploadFeature).Id);
         using var response = await client.SendAsync(request); Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var uploadId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("uploadId").GetString();
         await Command(fixture, client, "workspace.folder.createDocument", "/api/workspace/content/documents", new { position, values, uploads = new { mainUploadId = uploadId, attachmentUploadIds = Array.Empty<string>() } });
@@ -322,6 +324,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         control.Pause = true; using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/folders/copy") { Content = JsonContent.Create(input) };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.pasteFolderCopy").Position);
+        request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.shallowCopy", Point(fixture, "workspace.folder.pasteFolderCopy")).Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try { await control.Reached.Task.WaitAsync(TimeSpan.FromSeconds(20)); cancellation.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending); await control.RolledBack.Task.WaitAsync(TimeSpan.FromSeconds(20)); }
         finally { cancellation.Cancel(); control.Resume.TrySetResult(); try { (await pending).Dispose(); } catch (OperationCanceledException) { } }
@@ -366,7 +369,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var result = await Command(fixture, ordinary, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", input); Assert.True(result.GetProperty("succeeded").GetBoolean()); Assert.False(result.TryGetProperty("id", out _));
         var copy = Assert.Single(await Rows(fixture, "WorkspaceFolder"), row => Equals(row["ENAME"], input.name)); Assert.Equal(personalPosition.SpaceId, copy["OriginSpaceId"]);
         using (var unreadable = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.spaces.access"), HttpMethod.Get,
-            "/api/workspace/folders/" + (string)copy["EID"]!)) Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
+            "/api/workspace/folders/" + (string)copy["EID"]!, null, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.read", Point(fixture, "workspace.spaces.access")))) Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
         var personalLink = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["CEID"], copy["EID"]));
         using (var privateDenied = await Send(fixture, admin, "workspace.folder.pasteFolderCopy", "folders/copy", new { mode = "copy", sourcePosition = personalPosition, linkIds = new[] { (string)personalLink["LID"]! }, targetPosition = target, name = "越权" }))
             await Problem(privateDenied, HttpStatusCode.NotFound, "Workspace.PositionUnavailable");

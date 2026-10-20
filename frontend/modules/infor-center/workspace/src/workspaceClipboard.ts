@@ -6,7 +6,7 @@ export interface WorkspaceClipboard { readonly mode: 'copy' | 'cut'; readonly so
 export interface ClipboardPasteReceipt { readonly succeeded: true; readonly noChange?: boolean }
 export interface ClipboardState { readonly phase: 'idle' | 'validating' | 'pasting' | 'unknown'; readonly clipboard?: WorkspaceClipboard }
 export type FolderCopyKind = 'copy' | 'copy-structure';
-export interface FolderCopyDraft { readonly kind: FolderCopyKind; readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; closed: boolean }
+export interface FolderCopyDraft { readonly kind: FolderCopyKind; readonly declarationId: string; readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; closed: boolean }
 export interface FolderCopyPreparation { readonly sourceName: string; readonly sourcePath: readonly string[]; readonly targetPath: readonly string[] }
 export interface ObjectCopyDraft { readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; operationId?: string; requiresReconfirmation?: boolean; fieldErrors?: Record<string, string>; closed: boolean }
 export interface ObjectCopyValuesRow { sourceLinkId: string; values: Record<string, unknown> }
@@ -156,26 +156,27 @@ export class WorkspaceClipboardSession {
   private requireObjectDraft(draft: ObjectCopyDraft): void {
     if (this.closed || draft.closed || !this.objectDrafts.has(draft) || this.state.clipboard !== draft.source) throw this.failure('Workspace.CopyInputExpired');
   }
-  prepareFolderCopy(target: ClipboardPosition, featurePosition?: string, kind: FolderCopyKind = 'copy'): FolderCopyDraft {
+  prepareFolderCopy(target: ClipboardPosition, featurePosition?: string, kind: FolderCopyKind = 'copy', declarationId?: string): FolderCopyDraft {
+    if (!declarationId) throw this.failure('Workspace.FolderCopyInputExpired');
     if (!this.canCopyFolder()) throw this.failure('Workspace.FolderCopySourceRequired');
-    const draft = { kind, source: this.state.clipboard!, targetKey: JSON.stringify(target), featurePosition, closed: false };
+    const draft = { kind, declarationId, source: this.state.clipboard!, targetKey: JSON.stringify(target), featurePosition, closed: false };
     this.folderDrafts.add(draft); return draft;
   }
   async readFolderCopyInput(draft: FolderCopyDraft, signal: AbortSignal): Promise<FolderCopyPreparation> {
     if (this.closed || draft.closed || !this.folderDrafts.has(draft) || this.state.clipboard !== draft.source) throw this.failure('Workspace.FolderCopyInputExpired');
-    const receipt = await command(`folders/${draft.kind}/prepare`, { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition }, draft.featurePosition, signal) as FolderCopyPreparation;
+    const receipt = await command(`folders/${draft.kind}/prepare`, { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition }, draft.featurePosition, signal, draft.declarationId) as FolderCopyPreparation;
     if (this.closed || draft.closed || this.state.clipboard !== draft.source) throw this.failure('Workspace.FolderCopyInputExpired');
     if (!receipt || typeof receipt.sourceName !== 'string' || !Array.isArray(receipt.sourcePath) || !Array.isArray(receipt.targetPath)
       || receipt.sourcePath.length === 0 || receipt.targetPath.length === 0 || [...receipt.sourcePath, ...receipt.targetPath].some(name => typeof name !== 'string'))
       throw this.failure('Workspace.InvalidClipboardInput');
     return receipt;
   }
-  async pasteFolderCopy(draft: FolderCopyDraft, name: string, target: ClipboardPosition, featurePosition?: string, kind: FolderCopyKind = 'copy', copyParentAuthorization?: boolean): Promise<ClipboardPasteReceipt> {
+  async pasteFolderCopy(draft: FolderCopyDraft, name: string, target: ClipboardPosition, featurePosition?: string, kind: FolderCopyKind = 'copy', copyParentAuthorization?: boolean, declarationId?: string): Promise<ClipboardPasteReceipt> {
     if (!this.canCopyFolder() || draft.closed || !this.folderDrafts.has(draft) || draft.source !== this.state.clipboard
-      || draft.kind !== kind || draft.targetKey !== JSON.stringify(target) || draft.featurePosition !== featurePosition)
+      || !declarationId || draft.declarationId !== declarationId || draft.kind !== kind || draft.targetKey !== JSON.stringify(target) || draft.featurePosition !== featurePosition)
       throw this.failure('Workspace.FolderCopyInputExpired');
     return this.write(`folders/${draft.kind}`, { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition, name,
-      ...(copyParentAuthorization !== undefined ? { copyParentAuthorization } : {}) }, featurePosition);
+      ...(copyParentAuthorization !== undefined ? { copyParentAuthorization } : {}) }, featurePosition, declarationId);
   }
 
   async paste(targetPosition: ClipboardPosition, featurePosition?: string, declarationId?: string): Promise<ClipboardPasteReceipt> {

@@ -43,7 +43,12 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
              new("CapacityUser298", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow", ["authorize"] = "deny" }),
              new("CapacityDepartment298", "department", department, 7, new Dictionary<string, string> { ["delete"] = "allow" }, new(true), "2099-06-01T00:00:00Z")]);
 
-        foreach (var units in new[] { 1, 6 })
+        var minimal = Environment.GetEnvironmentVariable("NEWP_WORKSPACE_FOLDER_COST_SLICE") == "320";
+        using var permissionScope = fixture.Services.CreateScope();
+        var permissionConnection = permissionScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.GetConnectionString()!;
+        using var permissions = minimal ? new WorkspaceClipboardSqlServerHttpApiTests.ClipboardPermissionQueries(
+            new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(permissionConnection).InitialCatalog) : null;
+        foreach (var units in Environment.GetEnvironmentVariable("NEWP_WORKSPACE_FOLDER_COST_SLICE") == "320" ? new[] { 1 } : new[] { 1, 6 })
         {
             var (source, sourceIds) = await BuildCapacityGraphAsync(fixture, admin, position, units);
             var edges = (await RowsAsync(fixture, "WorkspaceFolderContent")).Where(row => sourceIds.Contains((string)row["PEID"]!)
@@ -66,12 +71,22 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
             object Input(string name) => new { mode = "copy", sourcePosition = position, linkIds = new[] { source.LinkId }, targetPosition = position, name, copyParentAuthorization = true };
             var before = await RowsAsync(fixture, "WorkspaceFolder");
             var beforeIds = before.Select(row => (string)row["EID"]!).ToArray();
-            var measured = await MeasureCapacityAsync(cost, graph, async () =>
+            permissions?.Begin();
+            object measured;
+            try { measured = await MeasureCapacityAsync(cost, graph, async () =>
             {
                 using var response = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.folder.pasteFolderStructure"), HttpMethod.Post,
-                    "/api/workspace/content/folders/copy-structure", Input("父初始化容量副本" + units));
+                    "/api/workspace/content/folders/copy-structure", Input("父初始化容量副本" + units),
+                    new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure")));
                 await ReadOkAsync(response);
-            });
+            }); }
+            finally { permissions?.End(); }
+            if (permissions is not null)
+            {
+                var evidence = Path.Combine(Environment.GetEnvironmentVariable("NEWP_COPY_COST_ARTIFACT_ROOT")!, "parent-initialization");
+                var plans = await permissions.ExplainAsync(permissionConnection, evidence);
+                await File.WriteAllTextAsync(Path.Combine(evidence, "measurement.json"), JsonSerializer.Serialize(new { dimensions, measured, plans }));
+            }
             testOutput.WriteLine("PARENT_AUTHORIZATION_CAPACITY " + JsonSerializer.Serialize(new { scenario = "success", dimensions, measured,
                 actorKind = "ordinary-limited-features", scope = "Single isolated request; graph application lock only, no SQL internal lock-wait measurement; diagnostic evidence without SLA or business limit." }));
             var foldersAfter = await RowsAsync(fixture, "WorkspaceFolder");
@@ -110,10 +125,11 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
                     using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/folders/copy-structure")
                     { Content = JsonContent.Create(Input("父初始化容量取消"), options: new JsonSerializerOptions()) };
                     request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.pasteFolderStructure").Position);
+                    request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure")).Id);
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
                     {
                         using var response = await ordinary.SendAsync(request, cancellation.Token);
-                        Assert.Fail($"未进入真实取消点，HTTP {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+                        Assert.Fail($"未进入真实取消点，HTTP {(int)response.StatusCode}");
                     });
                     await graph.RolledBack.Task.WaitAsync(TimeSpan.FromSeconds(30));
                 });

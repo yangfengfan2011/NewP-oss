@@ -483,7 +483,7 @@ it('keeps a committed clipboard after refresh failure and retries only reading',
 });
 
 it.each(['copy', 'copy-structure'] as const)('submits the real prepared folder copy once and retries only reading after its committed refresh fails', async kind => {
-  const page = await mount({ folderRow: true, failRefresh: true });
+  const page = await mount({ folderRow: true, failRefresh: true, formalDeclarations: true });
   await page.copyRows(['WorkspaceFolder']); await waitFor(() => expect(page.writes).toHaveLength(1));
   await page.select('B'); await waitFor(async () => expect(await page.disabled(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构')).toBe(false));
   await page.click(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构');
@@ -491,6 +491,21 @@ it.each(['copy', 'copy-structure'] as const)('submits the real prepared folder c
   await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!.click());
   await waitFor(() => expect(page.container.textContent).toContain('已保存，刷新失败'));
   expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1);
+  const actionKey = kind === 'copy' ? 'pasteFolderCopy' : 'pasteFolderStructure';
+  const declaration = clipboardContract.declarations.find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === actionKey)!;
+  const copyCalls = page.request.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes(`/folders/${kind}`));
+  // StrictMode首prepare被取消后重建同来源，只允许两次prepare和一次用户submit。
+  expect(copyCalls).toHaveLength(3);
+  const preparations = copyCalls.filter(([input]) => String(input instanceof Request ? input.url : input).endsWith('/prepare'));
+  expect(preparations).toHaveLength(2);
+  const firstPreparation = preparations[0];
+  expect((firstPreparation[0] instanceof Request ? firstPreparation[0].signal : firstPreparation[1]?.signal)?.aborted).toBe(true);
+  for (const call of copyCalls) {
+    const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
+    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
+  }
+  expect(page.request.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/folders/'))).toBe(false);
   expect(page.writes.find(item => item.path.endsWith(`/folders/${kind}`))!.body).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] },
     linkIds: ['WorkspaceFolder-lid'], targetPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['B-link'] }, name: 'WorkspaceFolder source', copyParentAuthorization: true });
   await act(async () => page.button('刷新').click());
@@ -559,7 +574,7 @@ it.each(['separate', 'context-only', 'column-only', 'default'] as const)('keeps 
 });
 
 it.each(['copy', 'copy-structure'] as const)('keeps the name after a %s collation conflict without replay or automatic suffix', async kind => {
-  const page = await mount({ folderRow: true, folderCopy: async () => json({ code: 'Workspace.SiblingNameConflict', status: 409 }, 409) });
+  const page = await mount({ folderRow: true, formalDeclarations: true, folderCopy: async () => json({ code: 'Workspace.SiblingNameConflict', status: 409 }, 409) });
   await page.copyRows(['WorkspaceFolder']); await waitFor(() => expect(page.writes).toHaveLength(1)); await page.select('B');
   const label = kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构';
   await waitFor(async () => expect(await page.disabled(label)).toBe(false)); await page.click(label);

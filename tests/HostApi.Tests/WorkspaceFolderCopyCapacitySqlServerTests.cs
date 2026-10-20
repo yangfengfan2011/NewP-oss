@@ -29,7 +29,10 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             multipart.Add(new StringContent(JsonSerializer.Serialize(source, new JsonSerializerOptions(JsonSerializerDefaults.Web))), "position"); multipart.Add(new StringContent(JsonSerializer.Serialize(values)), "values");
             var file = new ByteArrayContent([1, 2, 3]); file.Headers.ContentType = new("application/pdf"); multipart.Add(file, "file", "shallow.pdf");
             using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/document-uploads") { Content = multipart };
-            request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
+            var createDocument = Point(fixture, "workspace.folder.createDocument");
+            request.Headers.Add("X-NewP-Feature", createDocument.Position);
+            request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture)
+                .Declaration("workspace.content.createDocument", createDocument).Id);
             using var response = await admin.SendAsync(request); Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var uploadId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("uploadId").GetString();
             await Command(fixture, admin, "workspace.folder.createDocument", "/api/workspace/content/documents", new { position = source, values, uploads = new { mainUploadId = uploadId, attachmentUploadIds = Array.Empty<string>() } });
@@ -41,7 +44,11 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.pasteFolderCopy"));
         using var ordinary = actor.Client;
         var sourceId = FolderId(source, await Rows(fixture, "WorkspaceFolderContent")); var previous = 3;
-        foreach (var size in new[] { 3, 30, 100, 300 })
+        var minimal = Environment.GetEnvironmentVariable("NEWP_WORKSPACE_FOLDER_COST_SLICE") == "320";
+        using var permissionScope = fixture.Services.CreateScope();
+        var permissionConnection = permissionScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.GetConnectionString()!;
+        using var permissions = minimal ? new ClipboardPermissionQueries(new SqlConnectionStringBuilder(permissionConnection).InitialCatalog) : null;
+        foreach (var size in Environment.GetEnvironmentVariable("NEWP_WORKSPACE_FOLDER_COST_SLICE") == "320" ? new[] { 3 } : new[] { 3, 30, 100, 300 })
         {
             using (var scope = fixture.Services.CreateScope())
             {
@@ -56,8 +63,17 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 await db.SaveChangesAsync();
             }
             previous = size;
-            var result = await MeasureFolderCopyAsync(statistics, lockClock, async () => {
-                await Command(fixture, ordinary, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = root, name = "容量副本" + size }); });
+            permissions?.Begin();
+            object result;
+            try { result = await MeasureFolderCopyAsync(statistics, lockClock, async () => {
+                await Command(fixture, ordinary, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = root, name = "容量副本" + size }); }); }
+            finally { permissions?.End(); }
+            if (permissions is not null)
+            {
+                var evidence = Path.Combine(Environment.GetEnvironmentVariable("NEWP_COPY_COST_ARTIFACT_ROOT")!, "shallow");
+                var plans = await permissions.ExplainAsync(permissionConnection, evidence);
+                await File.WriteAllTextAsync(Path.Combine(evidence, "measurement.json"), JsonSerializer.Serialize(new { directNodes = size + 1, directEdges = size, result, plans }));
+            }
             output.WriteLine("SHALLOW_CAPACITY " + JsonSerializer.Serialize(new { environment = new { runtime = Environment.Version.ToString(), processors = Environment.ProcessorCount, os = Environment.OSVersion.ToString(), sql = "local repository configured SQL Server; test catalog; Release" }, actorKind = "ordinary-limited-features", rules = "formal default object rules; no synthetic complex ACL", directNodes = size + 1, directEdges = size, depth = 1, folder = 1, document = 1, part = size - 2, result, acceptance = "Measured evidence only; no SLA or capacity acceptance and no business hard limit." }));
             var rows = await Rows(fixture, "WorkspaceFolder"); var copyId = (string)Assert.Single(rows, row => Equals(row["ENAME"], "容量副本" + size))["EID"]!;
             Assert.Equal(size, (await Rows(fixture, "WorkspaceFolderContent")).Count(row => Equals(row["PEID"], copyId)));

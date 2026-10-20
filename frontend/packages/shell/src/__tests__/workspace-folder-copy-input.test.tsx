@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
 import { expect, it, vi } from 'vitest';
-import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import type { ActionDataAccessRequirement, StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import * as core from '@icp-platform/core';
 import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
@@ -11,6 +11,11 @@ import { ActionInstanceScope } from '../composition/ActionInstanceScope';
 vi.unmock('@icp-platform/core');
 const { default: resource } = await loadComponentSource<{ default: StandardCrudResourceRegistration }>('Workspace', 'workspaceRootResource.ts');
 await loadComponentSource('Workspace', 'WorkspaceFolderCopyInput.tsx');
+import compiled from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
+function copyContext(actionKey: string) {
+  const dataAccess = (compiled.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === actionKey)!;
+  return { action: { key: actionKey, labelKey: '粘贴文件夹副本', dataAccess }, featurePosition: dataAccess.featurePositions.find(position => position.includes('/surface:list.pageActions/'))! };
+}
 const source = { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' };
 const target = { ...source, linkIds: '["target-link"]' };
 const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json').Workspace as Record<string, { zhs: string }>;
@@ -28,8 +33,8 @@ it.each((['pasteFolderCopy', 'pasteFolderStructure'] as const).flatMap(action =>
   await resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, featurePosition: 'copy' });
   function Harness({ scope = target }: { scope?: Record<string, unknown> }) {
     const [value, setValue] = useState<unknown>(); draft = value;
-    return <StandardCrudActionReviewDialog instance={instance} action={{ key: actionKey, labelKey: '粘贴文件夹副本' }} title="粘贴文件夹副本"
-      featurePosition="named-copy" queryScope={scope} value={value} onChange={setValue} inputRenderer={copyInput}
+    return <StandardCrudActionReviewDialog instance={instance} {...copyContext(actionKey)} title="粘贴文件夹副本"
+      queryScope={scope} value={value} onChange={setValue} inputRenderer={copyInput}
       pending={false} onCancel={cancel} onConfirm={() => undefined} />;
   }
   const element = document.createElement('div'); document.body.append(element); const root = createRoot(element);
@@ -44,7 +49,7 @@ it.each((['pasteFolderCopy', 'pasteFolderStructure'] as const).flatMap(action =>
     else if (change === 'snapshot') await act(async () => resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, featurePosition: 'copy' }));
     else await act(async () => dispose());
     if (change !== 'position') expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')!.disabled).toBe(true);
-    await expect(resource.actionHandlers![actionKey]({ instance, input: { ...old, name: 'stale' }, queryScope: target, featurePosition: 'named-copy' })).rejects.toThrow();
+    await expect(resource.actionHandlers![actionKey]({ instance, input: { ...old, name: 'stale' }, queryScope: target, ...copyContext(actionKey) })).rejects.toThrow();
     expect(request.mock.calls.filter(([path]) => String(path).endsWith(actionKey === 'pasteFolderStructure' ? '/folders/copy-structure' : '/folders/copy'))).toHaveLength(0);
   } finally { await act(async () => root.unmount()); element.remove(); dispose(); request.mockRestore(); }
 });
@@ -56,8 +61,8 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('locks the actual 
   await resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, featurePosition: 'copy' });
   function Harness({ pending }: { pending: boolean }) {
     const [value, setValue] = useState<unknown>(); draft = value;
-    return <StandardCrudActionReviewDialog instance={instance} action={{ key: actionKey, labelKey: '粘贴文件夹副本' }} title="粘贴文件夹副本"
-      featurePosition="named-copy" queryScope={target} value={value} onChange={setValue} inputRenderer={copyInput}
+    return <StandardCrudActionReviewDialog instance={instance} {...copyContext(actionKey)} title="粘贴文件夹副本"
+      queryScope={target} value={value} onChange={setValue} inputRenderer={copyInput}
       pending={pending} onCancel={() => undefined} onConfirm={() => undefined} />;
   }
   const element = document.createElement('div'); document.body.append(element); const root = createRoot(element);
@@ -66,10 +71,10 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('locks the actual 
     let finish!: (response: Response) => void; request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const input = { ...(draft as Record<string, unknown>), name: 'Named copy' };
     let write: unknown;
-    await act(async () => { write = resource.actionHandlers![actionKey]({ instance, input, queryScope: target, featurePosition: 'named-copy' }); });
+    await act(async () => { write = resource.actionHandlers![actionKey]({ instance, input, queryScope: target, ...copyContext(actionKey) }); });
     await act(async () => root.render(<Harness pending />));
     expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')!.disabled).toBe(true);
-    await expect(resource.actionHandlers![actionKey]({ instance, input, queryScope: target, featurePosition: 'named-copy' })).rejects.toThrow();
+    await expect(resource.actionHandlers![actionKey]({ instance, input, queryScope: target, ...copyContext(actionKey) })).rejects.toThrow();
     await act(async () => { finish(new Response('{"succeeded":true}')); await write; });
     expect(request.mock.calls.filter(([path]) => String(path).endsWith(actionKey === 'pasteFolderStructure' ? '/folders/copy-structure' : '/folders/copy'))).toHaveLength(1);
   } finally { await act(async () => root.unmount()); element.remove(); dispose(); request.mockRestore(); }

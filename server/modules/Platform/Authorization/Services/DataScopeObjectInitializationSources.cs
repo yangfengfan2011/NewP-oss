@@ -6,7 +6,9 @@ namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>初始化来源只做零SQL事实核对，父读取/编辑与候选创建仍由同一正式执行负责。</summary>
 public sealed class DataScopeObjectInitializationSources(DataScopeCatalog catalog, CanonicalModulePlan plan, IDataExecutionAccess execution,
-    IEnumerable<DataScopeObjectInitializationBinding> declared, IEnumerable<DataScopeObjectInitializationLegacyBinding> legacy)
+    IEnumerable<DataScopeObjectInitializationBinding> declared, IEnumerable<DataScopeObjectInitializationLegacyBinding> legacy,
+    IEnumerable<DataScopeObjectInitializationCreatedParentsBinding> createdParents,
+    ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor transactions)
 {
     /// <summary>在任何配置锁、读取或克隆前核验真实父集合、新对象和有限调用者来源。</summary>
     public void Validate(string resourceKey, IReadOnlyList<string> parents, string newObjectId, DataScopeObjectInitializationSource source)
@@ -22,6 +24,9 @@ public sealed class DataScopeObjectInitializationSources(DataScopeCatalog catalo
         {
             case DataScopeObjectInitializationSource.Declared current:
                 ValidateDeclared(resource, parents.Count, current);
+                break;
+            case DataScopeObjectInitializationSource.DeclaredFromCreatedParents graph:
+                ValidateCreatedParents(resource, parents, newObjectId, graph);
                 break;
             case DataScopeObjectInitializationSource.Legacy old:
                 var registrations = legacy.Where(item => item.ResourceKey == resourceKey && item.Caller == old.Caller).ToArray();
@@ -51,6 +56,33 @@ public sealed class DataScopeObjectInitializationSources(DataScopeCatalog catalo
             || parentCount < parent.MinimumCount || parent.MaximumCount is { } maximum && parentCount > maximum
             || candidate is null || candidate.Shape != "candidate" || !candidate.Resources.Contains(resource.ResourceKey))
             throw Invalid();
+        execution.Validate([source.Binding], resource.ResourceKey);
+    }
+
+    // 新图父由实际创建者给出，完整事实与参与集合一致；不借外部单父角色给新父追加读取或编辑。
+    private void ValidateCreatedParents(DataScopeResource resource, IReadOnlyList<string> parents, string newObjectId,
+        DataScopeObjectInitializationSource.DeclaredFromCreatedParents source)
+    {
+        var matches = createdParents.Where(item => item.ResourceKey == resource.ResourceKey && item.Caller == source.Caller).ToArray();
+        if (!transactions.IsActive || matches.Length != 1 || source.Binding is null
+            || source.Caller.Execution != source.Binding.Execution || source.Caller.Provider != source.Binding.Provider
+            || source.Parents is null || source.Parents.Count != parents.Count
+            || source.Parents.Select(parent => parent.ObjectId).Distinct(StringComparer.OrdinalIgnoreCase).Count() != parents.Count)
+            throw Invalid();
+        var registration = matches[0];
+        ValidateCaller(resource, registration.ModuleId, source.Caller);
+        var parentIds = parents.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var parent in source.Parents)
+            if (parent.ResourceKey != resource.ResourceKey || parent.ObjectId == newObjectId
+                || !parentIds.Contains(parent.ObjectId)
+                || parent.Values is null || !parent.Values.TryGetValue(resource.IdField, out var key)
+                || key is not string id || id != parent.ObjectId) throw Invalid();
+        var contract = plan.Modules.Single(module => module.ModuleId == registration.ModuleId).DataExecutions
+            .SingleOrDefault(item => item.Key == source.Binding.Execution);
+        var candidate = contract?.Requirements.SingleOrDefault(item => item.Role == registration.CandidateRole && item.Stage == registration.Stage);
+        if (contract is null || contract.Boundary != "entry" || contract.Provider != source.Binding.Provider
+            || source.Binding.Stage != registration.Stage || source.Binding.Branch is not null
+            || candidate is null || candidate.Shape != "candidate" || !candidate.Resources.Contains(resource.ResourceKey)) throw Invalid();
         execution.Validate([source.Binding], resource.ResourceKey);
     }
 

@@ -19,6 +19,7 @@ export default function WorkspaceFolderCopyInput({ instance, action, queryScope,
   const session = useMemo(() => instance?.active ? workspaceClipboard(instance) : undefined, [instance]);
   const state = useSyncExternalStore(session?.subscribe ?? noSubscription, session?.getSnapshot ?? noSnapshot);
   const name = typeof value === 'object' && value !== null && 'name' in value && typeof value.name === 'string' ? value.name : '';
+  const declarationId = action.dataAccess?.id;
   const kind = action.key === 'pasteFolderStructure' ? 'copy-structure' : 'copy';
   const root = workspacePosition(queryScope).linkIds.length === 0;
   const copyParentAuthorization = !root && !(typeof value === 'object' && value !== null && 'copyParentAuthorization' in value && value.copyParentAuthorization === false);
@@ -30,7 +31,7 @@ export default function WorkspaceFolderCopyInput({ instance, action, queryScope,
     setPreparation(undefined);
     try {
       const owner = workspaceClipboard(instance);
-      current = owner.prepareFolderCopy(JSON.parse(targetKey), featurePosition, kind);
+      current = owner.prepareFolderCopy(JSON.parse(targetKey), featurePosition, kind, declarationId);
       setDraft(current); setFailure(false); callbacks.current.onChange({ draft: current, name: '', copyParentAuthorization: !root });
       const opened = current;
       void owner.readFolderCopyInput(opened, read.signal).then(result => {
@@ -39,7 +40,7 @@ export default function WorkspaceFolderCopyInput({ instance, action, queryScope,
       }).catch(() => { if (!read.signal.aborted && !opened.closed) setFailure(true); });
     } catch { setFailure(true); }
     return () => { if (current) current.closed = true; read.abort(); };
-  }, [instance, targetKey, featurePosition, kind, root]);
+  }, [instance, targetKey, featurePosition, kind, root, declarationId]);
   useEffect(() => {
     callbacks.current.onDraftStateChange?.({ dirty: !!preparation && (name !== preparation.sourceName || !root && !copyParentAuthorization), ready: !!draft && !!preparation && !expired && state?.phase === 'idle' && !submitting && name.trim().length > 0 && name.length <= 256 });
   }, [draft, preparation, expired, state?.phase, name, submitting, kind, root, copyParentAuthorization]);

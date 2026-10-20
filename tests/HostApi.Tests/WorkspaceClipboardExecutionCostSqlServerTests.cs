@@ -128,7 +128,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
     }
 
     // 按当前阶段捕获权限查询形状及次数，测量结束后重放每种形状一个样本；重放不混入运行时往返。
-    private sealed class ClipboardPermissionQueries : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
+    internal sealed class ClipboardPermissionQueries : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
     {
         private readonly IDisposable all;
         private readonly string database;

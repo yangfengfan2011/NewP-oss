@@ -5,7 +5,7 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 /// <summary>从标准导航和 View 引用展开静态位置；复用的 View 在每个位置独立投影。</summary>
 public static class StandardFeatureMetadataCompiler
 {
-    /// <summary>仅投影明确采用位置授权的导航；未切换模块由原授权协议拥有。</summary>
+    /// <summary>展开标准页面与Capsule动作的正式按钮身份；复用既有功能位置，不创建额外授权点。</summary>
     public static IReadOnlyList<FeatureDeclaration> Read(string moduleId, IEnumerable<JsonElement> documents, IReadOnlyList<FeatureDeclaration>? customFeatures = null,
         bool includeCustomFeatures = false)
     {
@@ -47,6 +47,15 @@ public static class StandardFeatureMetadataCompiler
             }
         }
         var customKeys = customFeatures?.Select(feature => feature.ReferenceKey ?? feature.Key).ToHashSet(StringComparer.Ordinal) ?? [];
+        // 手写页面的Capsule动作同样拥有实际按钮身份；缺dataAccess只表示没有数据要求，不生成新功能位置。
+        for (var index = 0; index < result.Count; index++)
+        {
+            var feature = result[index];
+            if (feature.Kind != "action" || feature.DataAccess.Count != 0 || !customKeys.Contains(feature.ReferenceKey ?? feature.Key)) continue;
+            var button = new ActionDataAccessDeclaration(moduleId, "feature:" + (feature.ReferenceKey ?? feature.Key),
+                "featureActions", feature.Key, "", [], []) { BusinessBinding = feature.BehaviorKey };
+            result[index] = feature with { DataAccess = [button] };
+        }
         return includeCustomFeatures ? result : result.Where(feature => !customKeys.Contains(feature.ReferenceKey ?? feature.Key)).ToArray();
 
         // 导航祖先也是独立资格，但纯容器不获得任何后代读取行为。

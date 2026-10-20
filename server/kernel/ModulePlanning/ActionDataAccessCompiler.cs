@@ -51,7 +51,8 @@ public static class ActionDataAccessCompiler
             {
                 if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
                     || string.IsNullOrWhiteSpace(declaration.ActionKey) || declaration.Execution.Length != 0
-                    || declaration.Resources.Count != 1 || !resources.Contains(declaration.Resources[0])
+                    || declaration.Resources.Count > 1 || declaration.Object is not null && declaration.Resources.Count != 1
+                    || declaration.Resources.Any(resource => !resources.Contains(resource))
                     || declaration.AdditionalActions.Count != 0
                     || declaration.Object is null && declaration.Actions.Count != 0
                     || declaration.Object is not null && (string.IsNullOrWhiteSpace(declaration.Object) || declaration.Actions.Count == 0)

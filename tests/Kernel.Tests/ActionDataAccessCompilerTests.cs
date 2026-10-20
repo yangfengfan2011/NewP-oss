@@ -9,6 +9,32 @@ namespace ICP.Platform.Kernel.Tests;
 [Trait("Category", "ModuleMetadataConsumer")]
 public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
 {
+    [Fact]
+    public void FormalCapsuleCommands_ProjectTheirOwnIdentityWithoutAViewOrDataRequirement()
+    {
+        var candidates = Candidates();
+        var result = new CanonicalModulePlanCompiler().Compile("capsule-commands", candidates);
+        Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
+        var plan = result.Plan!;
+        var path = Path.Combine(AppContext.BaseDirectory, "modules", "Authorization", "plugin.json");
+        using var capsule = JsonDocument.Parse(File.ReadAllText(path));
+        var original = FeatureCatalogCompiler.Read(capsule.RootElement, "Authorization");
+        var points = FeatureCatalogCompiler.Compile(original);
+        foreach (var action in original.Where(item => item.Kind == "action"))
+        {
+            var point = Assert.Single(points, item => item.ReferenceKey == (action.ReferenceKey ?? action.Key));
+            var button = Assert.Single(plan.ActionDataAccessCatalog, item => item.ViewKey == "feature:" + (action.ReferenceKey ?? action.Key)
+                && item.ActionKey == action.Key);
+            Assert.Equal(action.BehaviorKey, button.BusinessBinding);
+            Assert.Equal(new[] { point.Position }, button.FeaturePositions);
+            Assert.Null(button.Object);
+            Assert.Empty(button.Actions);
+            Assert.Empty(button.Resources);
+            Assert.Empty(button.Execution);
+            Assert.Null(button.Requirements);
+        }
+    }
+
     [Theory]
     [InlineData("{\"object\":\"Position\",\"actions\":[\"edit\"]}", true)]
     [InlineData("{\"object\":\"Unknown\",\"actions\":[\"edit\"]}", false)]

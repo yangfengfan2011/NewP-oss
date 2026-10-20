@@ -336,8 +336,9 @@ internal sealed class WorkspacePageDriver(IPage page)
     internal async Task RestorePositionAsync(string address, params string[] labels)
     {
         await page.GotoAsync(address);
-        await WaitForContentAsync(labels[^1]);
+        // 重新装载先等待原树定位完成，再核对内容；初始空快照不是最终读取结果。
         await new StandardTreePageDriver(page).WaitForBreadcrumbAsync(labels);
+        await WaitForContentAsync(labels[^1]);
     }
 
     internal async Task RestoreMissingPositionAsync(string address)

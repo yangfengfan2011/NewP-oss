@@ -7,6 +7,54 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "恢复树位置先等待既有面包屑就绪，不把异步空快照当作最终内容，无服务器或端口")]
+    public async Task RestorePosition_WaitsForTheRestoredBreadcrumbBeforeCheckingContent()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        var requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            if (new Uri(route.Request.Url).AbsolutePath == "/ready")
+            {
+                requested.TrySetResult();
+                await ready.Task;
+                await route.FulfillAsync(new() { Body = "{}", ContentType = "application/json" });
+            }
+            else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><aside aria-label="结构树">暂无节点</aside>
+                <section aria-label="节点内容">请选择节点</section>
+                <script>
+                  fetch('/ready').then(()=>{
+                    document.querySelector('section').innerHTML='<nav aria-label="面包屑"><button>公共空间</button><span aria-current="page">恢复目录</span></nav><table class="ant-table"><tr><td>内容</td></tr></table>';
+                  });
+                </script>
+                """ });
+        });
+        var restoring = new WorkspacePageDriver(page).RestorePositionAsync("http://workspace.test/workspace?node=restored", "公共空间", "恢复目录");
+        await requested.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            // 原文本断言在5秒内失败；控制只延迟准备，未改变driver或Playwright的任何超时。
+            var first = await Task.WhenAny(restoring, Task.Delay(TimeSpan.FromSeconds(6)));
+            if (ReferenceEquals(restoring, first))
+            {
+                await restoring;
+                Assert.Fail("恢复准备未释放前不应完成内容断言。");
+            }
+        }
+        finally { ready.TrySetResult(); }
+        await restoring;
+        await Assertions.Expect(page.GetByRole(AriaRole.Region, new() { Name = "节点内容" }).Locator(".ant-table")).ToBeVisibleAsync();
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "两种文件夹复制 driver 等待异步准备并消费各自正式提交端点，无服务器或端口")]
     public async Task FolderCopies_UseTheirOwnActionAndEndpointAfterPreparation()
     {

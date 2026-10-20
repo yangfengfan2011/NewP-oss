@@ -169,7 +169,8 @@ it('appends clipboard sources, expands server descendants and submits only the f
     return { total: items.length, items, catalogs: [...new Set(items.map(value => value.resourceKey))].map(resourceKey => ({ resourceKey,
       actions: [{ key: 'read', title: 'Read', enabled: true }], subjectTypes: [{ key: 'all', title: 'All', requiresId: false }] })) };
   });
-  await act(async () => { await workspaceClipboard(instance).copy({ ...source, linkIds: ['other-container'] }, ['clipboard-folder'], positions.copyPosition); });
+  await act(async () => { await workspaceClipboard(instance).copy({ ...source, linkIds: ['other-container'] }, ['clipboard-folder'], positions.copyPosition,
+    formalDataAccessFor('workspace.folder.list', 'pageActions', 'copySelected').id); });
   const click = async (label: string) => {
     const button = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(value => value.textContent?.replace(/\s/g, '') === label);
     expect(button, label).toBeDefined();

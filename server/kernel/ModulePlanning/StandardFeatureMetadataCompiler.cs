@@ -271,8 +271,9 @@ public static class StandardFeatureMetadataCompiler
         void DataAccess(JsonElement view, JsonElement action, string surface, string key, string owner, string? sourceKey = null)
         {
             var hasDataAccess = action.TryGetProperty("dataAccess", out var declared);
-            var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey");
-            var isButton = surface is "pageActions" or "rowActions" or "featureActions" or "outputActions";
+            var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey")
+                ?? (surface is "outputActions" or "detailContributions" ? "view" : null);
+            var isButton = surface is "pageActions" or "rowActions" or "featureActions" or "outputActions" or "detailContributions";
             if (!hasDataAccess && (!isButton || operation is null or "view" or "refresh")) return;
             var index = result.FindIndex(feature => (feature.ReferenceKey ?? feature.Key) == owner);
             if (index < 0) throw new InvalidOperationException("数据声明缺少合法功能归属。");
@@ -286,8 +287,14 @@ public static class StandardFeatureMetadataCompiler
                 var objectName = hasDataAccess ? Text(declared, "object") : null;
                 if (objectName is not null && !all.Any(document => document.TryGetProperty(objectName, out var definition) && Optional(definition, "kind") == "Entity"))
                     throw new InvalidOperationException("BUTTON_DATA_ACCESS_OBJECT_UNKNOWN");
+                // 对象声明引用既有Entity绑定；model-less履历等呈现资源不能替代真实对象资源。
+                var targetResources = objectName is null ? [Text(view, "resourceKey")] : views.Values
+                    .Where(candidate => Optional(candidate, "model") == objectName && !candidate.TryGetProperty("querySource", out _))
+                    .Select(candidate => Text(candidate, "resourceKey"))
+                    .Distinct(StringComparer.Ordinal).ToArray();
+                if (targetResources.Length != 1) throw new InvalidOperationException($"BUTTON_DATA_ACCESS_OBJECT_BINDING_INVALID: {moduleId}/{objectName}/{Text(view, "key")}: {string.Join(",", targetResources)}");
                 var button = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, "",
-                    [Text(view, "resourceKey")], hasDataAccess ? declared.GetProperty("actions").EnumerateArray().Select(item => item.GetString()!).ToArray() : [])
+                    targetResources, hasDataAccess ? declared.GetProperty("actions").EnumerateArray().Select(item => item.GetString()!).ToArray() : [])
                 { Object = objectName, BusinessBinding = node.BehaviorKey };
                 if (!node.DataAccess.Any(item => item.Id == button.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, button] };
                 return;

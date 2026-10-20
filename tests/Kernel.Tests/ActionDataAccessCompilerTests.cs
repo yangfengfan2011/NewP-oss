@@ -35,6 +35,37 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         }
     }
 
+    [Fact]
+    public void ModelLessHistoryButtons_ResolveTheDeclaredObjectFromItsExistingEntityView()
+    {
+        using var navigation = JsonDocument.Parse("""
+            {"navigation":{"items":[{"key":"entry","featureAuthorization":true,"targetKey":"items"},
+              {"key":"history","featureAuthorization":true,"targetKey":"history"}]}}
+            """);
+        using var model = JsonDocument.Parse("""{"Position":{"kind":"Entity"}}""");
+        using var items = JsonDocument.Parse("""{"view":{"key":"items","mode":"list","model":"Position","resourceKey":"test.position"}}""");
+        using var references = JsonDocument.Parse("""{"view":{"key":"references","mode":"list","model":"Position","resourceKey":"test.references","querySource":{"kind":"link"}}}""");
+        using var history = JsonDocument.Parse("""
+            {"view":{"key":"history","mode":"list","resourceKey":"test.history",
+              "pageActions":[{"key":"output","standardAction":"view","dataAccess":{"object":"Position","actions":["read"]}}],
+              "outputActions":[{"key":"exportAll","dataAccess":{"object":"Position","actions":["read"]}}],
+              "detailContributions":[{"key":"history.detail","navigationKey":"history","pageRef":{"pageKey":"platform.list","parameters":{"viewKey":"history"}},
+                "dataAccess":{"object":"Position","actions":["read"]}}]}}
+            """);
+        var declarations = ActionDataAccessCompiler.Compile(StandardFeatureMetadataCompiler.Read("Test",
+            [navigation.RootElement, model.RootElement, items.RootElement, references.RootElement, history.RootElement]),
+            [new("Authorization", "read", "Read", "data.read")]);
+        Assert.Equal(3, declarations.Count);
+        Assert.All(declarations, declaration =>
+        {
+            Assert.Equal("Position", declaration.Object);
+            Assert.Equal(new[] { "test.position" }, declaration.Resources);
+            Assert.Equal("test.history.read", declaration.BusinessBinding);
+            Assert.Equal(new[] { "read" }, declaration.Actions);
+            Assert.Null(declaration.Requirements);
+        });
+    }
+
     [Theory]
     [InlineData("{\"object\":\"Position\",\"actions\":[\"edit\"]}", true)]
     [InlineData("{\"object\":\"Unknown\",\"actions\":[\"edit\"]}", false)]

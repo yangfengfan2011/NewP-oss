@@ -251,11 +251,31 @@ internal sealed class WorkspacePageDriver(IPage page)
         await page.Locator(".ant-select-dropdown:visible").GetByText(language, new() { Exact = true }).ClickAsync();
     }
 
-    /// <summary>归属维护复用实际列表工具栏或行菜单；只等待真实输入面板，不在浏览器裁决归属值。</summary>
+    /// <summary>归属维护复用真实入口；页级待补齐先等本次读取完成，再交给输入控件的默认断言，不裁决归属值。</summary>
     internal async Task<ILocator> OpenOwnershipInitializationAsync(string? rowName = null, bool english = false)
     {
         var crud = new StandardCrudPageDriver(page);
-        if (rowName is null) await crud.ClickPageActionAsync(english ? "Missing ownership" : "待补齐归属", english ? "Access and ownership" : "授权与归属");
+        if (rowName is null)
+        {
+            var pendingRequests = new HashSet<IRequest>();
+            // 旧在途读取和其他端点不能替代本次打开输入后触发的pending准备。
+            void PendingStarted(object? sender, IRequest request)
+            {
+                if (request.Method == "GET" && new Uri(request.Url).AbsolutePath == "/api/workspace/ownership/pending")
+                    pendingRequests.Add(request);
+            }
+            page.Request += PendingStarted;
+            try
+            {
+                var response = await page.RunAndWaitForResponseAsync(
+                    () => crud.ClickPageActionAsync(english ? "Missing ownership" : "待补齐归属", english ? "Access and ownership" : "授权与归属"),
+                    reply => pendingRequests.Contains(reply.Request));
+                var failure = await response.FinishedAsync();
+                if (!response.Ok || failure is not null)
+                    throw new InvalidOperationException($"待补齐归属读取失败：{response.Status}，传输完成：{failure is null}");
+            }
+            finally { page.Request -= PendingStarted; }
+        }
         else
         {
             var row = await crud.WaitForRowAsync(rowName);

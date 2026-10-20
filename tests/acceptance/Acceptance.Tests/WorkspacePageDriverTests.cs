@@ -7,6 +7,109 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "待补齐页driver等待本次pending响应完成后才开始默认UI断言，旧请求或非匹配响应不能解锁，无服务器或端口")]
+    public async Task OwnershipInitialization_WaitsForItsOwnPendingResponseBeforeTheDefaultUiAssertion()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        var oldStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var targetStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var targetReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reads = 0;
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            var path = new Uri(route.Request.Url).AbsolutePath;
+            if (path == "/api/workspace/ownership/pending" && route.Request.Method == "GET")
+            {
+                if (++reads == 1) { oldStarted.TrySetResult(); await oldReady.Task; }
+                else { targetStarted.TrySetResult(); oldReady.TrySetResult(); await targetReady.Task; }
+                await route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" });
+            }
+            else if (path.StartsWith("/api/", StringComparison.Ordinal))
+                await route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" });
+            else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><button id="group">授权与归属</button><div role="menu" hidden><button role="menuitem">待补齐归属</button></div>
+                <script>
+                  fetch('/api/workspace/ownership/pending');
+                  document.querySelector('#group').onclick=()=>document.querySelector('[role=menu]').hidden=false;
+                  document.querySelector('[role=menuitem]').onclick=async()=>{
+                    document.querySelector('[role=menu]').hidden=true;
+                    const modal=document.createElement('div'); modal.className='ant-modal'; modal.role='dialog';
+                    modal.innerHTML='<button disabled>选择当前许可页</button>'; document.body.append(modal);
+                    await fetch('/api/workspace/ownership/pending',{method:'POST'});
+                    await fetch('/api/workspace/ownership/status');
+                    await fetch('/api/workspace/ownership/pending');
+                    modal.querySelector('button').disabled=false;
+                  };
+                </script>
+                """ });
+        });
+        await page.GotoAsync("http://workspace.test/workspace");
+        await oldStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        async Task OpenAndCheckAsync()
+        {
+            var dialog = await new WorkspacePageDriver(page).OpenOwnershipInitializationAsync();
+            await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "选择当前许可页", Exact = true })).ToBeEnabledAsync();
+        }
+        var opening = OpenAndCheckAsync();
+        await targetStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            // 与实际Native相同的默认5秒断言不能吞掉真实响应耗时；只延迟受控响应，不修改等待阈值。
+            var first = await Task.WhenAny(opening, Task.Delay(TimeSpan.FromSeconds(6)));
+            if (ReferenceEquals(opening, first))
+            {
+                await opening;
+                Assert.Fail("本次pending响应完成前不能交给默认UI可用性断言。");
+            }
+        }
+        finally { targetReady.TrySetResult(); oldReady.TrySetResult(); }
+        await opening;
+        Assert.Equal(2, reads);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "待补齐页读取失败保留明确错误，不把HTTP失败当作可交互输入，无服务器或端口")]
+    public async Task OwnershipInitialization_RejectsAnUnsuccessfulPendingResponse()
+    {
+        const int status = 403;
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            if (new Uri(route.Request.Url).AbsolutePath == "/api/workspace/ownership/pending")
+                await route.FulfillAsync(new() { Status = status, ContentType = "application/json", Body = "{}" });
+            else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><button id="group">授权与归属</button><div role="menu" hidden><button role="menuitem">待补齐归属</button></div>
+                <script>
+                  document.querySelector('#group').onclick=()=>document.querySelector('[role=menu]').hidden=false;
+                  document.querySelector('[role=menuitem]').onclick=()=>{
+                    document.querySelector('[role=menu]').hidden=true;
+                    const modal=document.createElement('div'); modal.className='ant-modal'; modal.role='dialog';
+                    modal.innerHTML='<button disabled>选择当前许可页</button>'; document.body.append(modal);
+                    fetch('/api/workspace/ownership/pending');
+                  };
+                </script>
+                """ });
+        });
+        await page.GotoAsync("http://workspace.test/workspace");
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => new WorkspacePageDriver(page).OpenOwnershipInitializationAsync());
+        Assert.Contains("待补齐归属读取失败", exception.Message);
+        Assert.Contains(status.ToString(), exception.Message);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "独立Part片段等正式列表初载后选择真实新建按钮并保存，无服务器或端口")]
     public async Task IndependentPartCreate_WaitsForTheInitialListBeforeChoosingTheCreateEntry()
     {

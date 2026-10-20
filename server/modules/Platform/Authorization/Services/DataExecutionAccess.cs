@@ -8,7 +8,8 @@ namespace ICP.Platform.Modules.Authorization.Services;
 /// <summary>正式执行仅消费装配结果，客户端声明引用不能替代目标、角色或固定下限。</summary>
 public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpContextAccessor http,
     IDataScopeObjectAccess reads, IDataScopeObjectDecisionProvider decisions, IDataScopeResourceCatalog? resources = null,
-    IEnumerable<IDataExecutionTargetResolver>? resolvers = null, IDataScopeReadPlanProvider? queryReads = null, IDataScopeReadableIds? targetReads = null) : IDataExecutionAccess
+    IEnumerable<IDataExecutionTargetResolver>? resolvers = null, IDataScopeReadPlanProvider? queryReads = null, IDataScopeReadableIds? targetReads = null,
+    IButtonQueryReadScope? buttonQueries = null, IButtonExecutionAccess? buttons = null) : IDataExecutionAccess
 {
     private readonly IReadOnlyList<IDataExecutionTargetResolver> _resolvers = (resolvers ?? []).ToArray();
     /// <inheritdoc/>
@@ -18,6 +19,15 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
     public Task<DataScopeReadPlan> GetQueryReadPlanAsync(DataExecutionQueryContext context, string resourceKey,
         CancellationToken cancellationToken = default)
     {
+        if (buttonQueries?.Current is { } source)
+        {
+            if (context.Binding != source.Target.Source.Binding || context.Role != source.Target.Source.Role || context.TargetSets.Count != 0
+                || resourceKey != source.Target.ResourceKey || buttons?.BindHandler(source.Invocation.HandlerType) != source.Invocation)
+                throw new ActionDataAccessException(400, "ButtonExecution.QuerySourceInvalid");
+            var declaration = plan.ActionDataAccessCatalog.Single(item => item.Id == source.Invocation.ButtonId);
+            ButtonQuerySources.Validate(plan, declaration, source.Target, resources ?? throw new InvalidOperationException("DATA_EXECUTION_RESOURCE_CATALOG_REQUIRED"));
+            return (queryReads ?? throw new InvalidOperationException("DATA_EXECUTION_QUERY_READS_REQUIRED")).GetReadPlanAsync(resourceKey, cancellationToken);
+        }
         var effective = Resolve([context.Binding], resourceKey);
         var requirement = Role(effective, context.Binding, context.Role, "query");
         RequireReadPlanRole(requirement, resourceKey);

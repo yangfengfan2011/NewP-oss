@@ -7,7 +7,7 @@ namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>只消费活动按钮投影与真实端点绑定；请求只能引用身份和正式业务输入。</summary>
 public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContextAccessor http,
-    IDataScopeResourceCatalog resources, IObjectActionAccess access) : IButtonExecutionAccess
+    IDataScopeResourceCatalog resources, IObjectActionAccess access, IButtonQueryReadScope? queries = null) : IButtonExecutionAccess
 {
     /// <inheritdoc/>
     public ButtonBusinessInvocation BindHandler(Type handlerType)
@@ -37,6 +37,8 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
         if (BindHandler(invocation.HandlerType) != invocation) throw new ActionDataAccessException(400, "ButtonExecution.BindingInvalid");
         var declaration = plan.ActionDataAccessCatalog.Single(item => item.Id == invocation.ButtonId);
         await CheckTargetAsync(declaration, target, cancellationToken);
+        using var querySource = target is ButtonQueryTarget query
+            ? (queries ?? throw new ActionDataAccessException(400, "ButtonExecution.QueryContextRequired")).Enter(invocation, query) : null;
         return await execute(cancellationToken);
     }
 
@@ -83,6 +85,11 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
     // 目标种类来自服务器业务适配；候选直接消费完整事实，不经已有对象read或借用外层允许。
     private async Task CheckTargetAsync(ActionDataAccessRequirement declaration, ButtonBusinessTarget? target, CancellationToken token)
     {
+        if (target is ButtonQueryTarget query)
+        {
+            ButtonQuerySources.Validate(plan, declaration, query, resources);
+            return;
+        }
         if (target is null)
         {
             if (declaration.Object is not null) throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");

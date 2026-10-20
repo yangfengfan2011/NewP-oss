@@ -54,7 +54,8 @@ public static class ActionDataAccessCompiler
         var positions = FeatureCatalogCompiler.Compile(features).ToDictionary(point => (point.ModuleId, point.ReferenceKey));
         var resources = features.SelectMany(feature => feature.DataResources).ToHashSet(StringComparer.Ordinal);
         var entries = features.SelectMany(feature => feature.DataAccess.Select(declaration => (feature, declaration))).ToArray();
-        if (contracts.Values.Any(contract => contract.Boundary == "entry" && !entries.Any(entry => entry.declaration.Execution == contract.Key)))
+        if (contracts.Values.Any(contract => contract.Boundary == "entry" && !entries.Any(entry => entry.declaration.Execution == contract.Key
+            || QuerySource(entry.declaration, contracts)?.Key == contract.Key)))
             throw new InvalidOperationException("DATA_EXECUTION_BINDING_MISSING");
         foreach (var (feature, declaration) in entries)
         {
@@ -76,6 +77,8 @@ public static class ActionDataAccessCompiler
                             || objects.Select(item => item.ResourceKey).Distinct(StringComparer.Ordinal).Count() != objects.Count
                             || !objects.Select(item => item.ResourceKey).Order(StringComparer.Ordinal).SequenceEqual(declaration.Resources.Order(StringComparer.Ordinal))))
                     throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
+                if (declaration.Surface == "export" && QuerySource(declaration, contracts) is null)
+                    throw new InvalidOperationException("BUTTON_QUERY_SOURCE_INVALID");
                 continue;
             }
             if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
@@ -112,7 +115,9 @@ public static class ActionDataAccessCompiler
                 return new ActionDataAccessRequirement(first.Id, first.ModuleId, first.ViewKey, first.Surface, first.ActionKey,
                     "", first.Resources, first.Actions, group.Select(entry => positions[(entry.feature.ModuleId,
                         entry.feature.ReferenceKey ?? entry.feature.Key)].Position).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray())
-                { Object = first.Object, BusinessBinding = first.BusinessBinding, ObjectRequirements = first.ObjectRequirements };
+                { Object = first.Object, BusinessBinding = first.BusinessBinding, ObjectRequirements = first.ObjectRequirements,
+                    Requirements = QuerySource(first, contracts)?.Requirements, Provider = QuerySource(first, contracts)?.Provider,
+                    ProviderModuleId = QuerySource(first, contracts)?.ProviderModuleId };
             }
             var contract = contracts[first.Execution];
             if (group.Any(entry => entry.declaration.Execution != first.Execution
@@ -140,6 +145,21 @@ public static class ActionDataAccessCompiler
     private static bool ValidActions(IReadOnlyList<string> keys, IReadOnlyList<DataActionDeclaration> actions) => keys is not null
         && keys.Count > 0 && keys.Distinct(StringComparer.Ordinal).Count() == keys.Count
         && keys.All(key => actions.Any(action => action.Key == key));
+
+    // 标准输出按钮只适配其原查询来源；read是查询能力约束，不通过伪造EID或逐项判权实现。
+    private static DataExecutionContract? QuerySource(ActionDataAccessDeclaration declaration, IReadOnlyDictionary<string, DataExecutionContract> contracts)
+    {
+        if (declaration.Surface != "export" || declaration.BusinessBinding is null
+            || !contracts.TryGetValue(declaration.BusinessBinding, out var contract) || contract.ModuleId != declaration.ModuleId
+            || contract.Boundary != "entry" || contract.Provider != "standardCrud.export" || contract.Requirements.Count != 1
+            || !contract.FeatureBehaviors.Contains(declaration.BusinessBinding, StringComparer.Ordinal)) return null;
+        var objects = declaration.ObjectRequirements ?? (declaration.Object is null ? [] : new[] { new ButtonObjectRequirement(declaration.Object, declaration.Actions, declaration.Resources.Single()) });
+        var query = contract.Requirements[0];
+        return objects.Count == 1 && objects[0].Actions.SequenceEqual(["read"]) && query.Role == "query" && query.Stage == "read"
+            && query.Shape == "query" && query.Resources.SequenceEqual([objects[0].ResourceKey]) && query.AnyOf.Count == 1
+            && query.AnyOf[0].SequenceEqual(["read"]) && query.MinimumCount == 0 && query.MaximumCount is null
+            && query.Branch is null && query.ReadResolverKey is null && query.ResourceAnyOf is null ? contract : null;
+    }
 
     // 同一authoring在多个出现位置独立解析；比较内容而非数组实例身份。
     private static bool SameObjects(IReadOnlyList<ButtonObjectRequirement>? left, IReadOnlyList<ButtonObjectRequirement>? right) =>

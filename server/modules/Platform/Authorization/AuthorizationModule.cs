@@ -24,6 +24,7 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IObjectActionAccess, ObjectActionAccess>();
         services.AddScoped<IButtonExecutionAccess, ButtonExecutionAccess>();
         services.AddScoped<IButtonBusinessExecutor, ButtonBusinessExecutor>();
+        services.AddScoped<IButtonQueryReadScope, ButtonQueryReadScope>();
         services.AddScoped<DataExecutionExceptionFilter>();
         services.AddScoped<IDataScopeObjectPermissionQueries>(provider =>
             ActivatorUtilities.CreateInstance<DataScopeObjectPermissionQueries>(provider, provider.GetRequiredService<IDataExecutionAccess>()));

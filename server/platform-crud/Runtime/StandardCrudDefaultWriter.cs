@@ -163,6 +163,12 @@ public sealed class StandardCrudDefaultWriter
         return preparation;
     }
 
+    /// <summary>仅准备完整创建事实供业务自己的候选检查使用，不判权、登记实体或取得写事务。</summary>
+    /// <remarks>结果包含本次服务端新身份；成功不是写入来源或后续提交允许，实际创建仍须在正式边界重新准备和检查。</remarks>
+    public Task<StandardCrudMutationResult> PrepareCreateCandidateFactsAsync(StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default) =>
+        PrepareCreateCandidateCoreAsync(descriptor, values, cancellationToken);
+
     // 业务字段、服务端默认值、可信审计、归属和真实新EID只在这里补齐，不携带权限允许状态。
     private async Task<StandardCrudMutationResult> PrepareCreateCandidateCoreAsync(StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken)

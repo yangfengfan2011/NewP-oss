@@ -87,6 +87,71 @@ public sealed class StandardCrudCreatePreparationTests
         Assert.Equal(0, repository.Registrations);
     }
 
+    [Fact]
+    public async Task PrepareCreateFacts_OutsideTransactionReturnsCompleteFactsWithoutAuthorizingOrReusingPermission()
+    {
+        var repository = new PreparationRepository([]);
+        var transaction = new PreparationTransaction();
+        var decision = new CandidateDecision { Allow = false };
+        var ids = new CandidateIds();
+        var writer = Writer(repository, transaction, decision, ids);
+        var original = Descriptor();
+        var descriptor = original with
+        {
+            FieldSet = original.FieldSet with { DetailFields = [.. original.FieldSet.DetailFields, "IsEnabled"] },
+            FieldPolicies = [.. original.FieldPolicies, new() { Field = "IsEnabled", ValueType = ICP.Platform.Modeling.FieldValueType.Boolean,
+                StorageRequired = true, ValueOwner = StandardCrudFieldValueOwner.ServerOnCreate, CreateDefaultValue = true }]
+        };
+        var input = new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选事实" };
+        Assert.False(((IPlatformTransactionExecutor)transaction).IsActive);
+        var result = await writer.PrepareCreateCandidateFactsAsync(descriptor, input);
+        Assert.True(result.Succeeded);
+        var facts = result.Detail!.Fields;
+        Assert.Equal("Person_00000000000000000000000000000001", facts["EID"]);
+        Assert.Equal("P001", facts["PersonNo"]);
+        Assert.Equal("候选事实", facts["ENAME"]);
+        Assert.Equal(true, facts["IsEnabled"]);
+        Assert.Equal("trusted-actor", facts["CreatedBy"]);
+        Assert.Equal("trusted-actor", facts["UpdatedBy"]);
+        Assert.Equal(Stamp.Time, facts["CreatedAt"]);
+        Assert.Equal(Stamp.Time, facts["UpdatedAt"]);
+        Assert.Equal(2, input.Count);
+        Assert.Equal(1, repository.UniqueChecks);
+        Assert.Equal(0, decision.CandidateChecks);
+        Assert.Equal(1, ids.Calls);
+        var denied = await writer.PrepareCreateCandidateAsync(descriptor, input,
+            source: ICP.Platform.Testing.StandardCrudTestAccess.Source(descriptor));
+        Assert.False(denied.Succeeded);
+        Assert.Equal("DataScope.ActionDenied", denied.Error!.Code);
+        Assert.Equal(1, decision.CandidateChecks);
+        Assert.Equal(2, ids.Calls);
+        Assert.NotEqual(facts["EID"], decision.Candidate!["EID"]);
+        Assert.Equal(0, transaction.Executions);
+        Assert.Equal(0, transaction.Flushes);
+        Assert.Equal(0, repository.Writes);
+        Assert.Equal(0, repository.Registrations);
+    }
+
+    [Fact]
+    public async Task PrepareCreateFacts_RejectsServerOwnedInputBeforeQueriesOrIdentityWithoutAWriteSource()
+    {
+        var repository = new PreparationRepository([]);
+        var transaction = new PreparationTransaction();
+        var decision = new CandidateDecision();
+        var ids = new CandidateIds();
+        var result = await Writer(repository, transaction, decision, ids).PrepareCreateCandidateFactsAsync(Descriptor(),
+            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选", ["CreatedBy"] = "forged" });
+        Assert.False(result.Succeeded);
+        Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", result.Error!.Code);
+        Assert.Equal(0, repository.UniqueChecks);
+        Assert.Equal(0, decision.CandidateChecks);
+        Assert.Equal(0, ids.Calls);
+        Assert.Equal(0, transaction.Executions);
+        Assert.Equal(0, transaction.Flushes);
+        Assert.Equal(0, repository.Writes);
+        Assert.Equal(0, repository.Registrations);
+    }
+
     private static StandardCrudDefaultWriter Writer(PreparationRepository repository, PreparationTransaction transaction, CandidateDecision decision, CandidateIds ids) =>
         new(new ICP.Platform.Testing.StandardCrudTestAccess(decision), repository, [], [], auditValueProvider: new EntityAuditValueProvider(new Stamp()), transactionExecutor: transaction, objectIds: ids);
 

@@ -205,7 +205,9 @@ public static class StandardFeatureMetadataCompiler
                 throw new InvalidOperationException("按钮声明身份冲突。");
             foreach (var action in actions.EnumerateArray())
             {
-                if (newButtonsOnly && (!action.TryGetProperty("dataAccess", out var buttonAccess) || !buttonAccess.TryGetProperty("object", out _))) continue;
+                if (newButtonsOnly && (action.TryGetProperty("dataAccess", out var buttonAccess)
+                    ? !buttonAccess.TryGetProperty("object", out _)
+                    : Optional(action, "handlerKey") is null or "view" or "refresh")) continue;
                 // 普通快捷跳转复用目标资格；标准行查看可沿当前读取资格进入无独立授权的呈现页。
                 if (Optional(action, "navigationTargetKey") is { } target)
                 {
@@ -239,6 +241,16 @@ public static class StandardFeatureMetadataCompiler
                     ActionReads(view, action, operation),
                     FullTitleKey(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")));
                 DataAccess(view, action, property, Text(action, "key"), result[^1].ReferenceKey!);
+                // 只有动作显式要求所属资源read时才投影已有列表来源；隐含ActionReads不授予查询调用身份。
+                if (action.TryGetProperty("readBehaviors", out var explicitReads)
+                    && explicitReads.EnumerateArray().Any(read => read.GetString() == resource + ".read"))
+                {
+                    var source = Optional(view, "mode") == "detail"
+                        ? views.Values.Single(candidate => Optional(candidate, "mode") == "list"
+                            && Optional(candidate, "resourceKey") == resource && Optional(candidate, "detailViewKey") == Text(view, "key"))
+                        : view;
+                    DataAccess(source, source, "read", "", result[^1].ReferenceKey!);
+                }
                 if (operation is "create" or "edit") BindLookupDataAccess(view, true, result[^1].ReferenceKey!);
                 if (operation == "edit") BindDetailRead(view, result[^1].ReferenceKey!);
             }

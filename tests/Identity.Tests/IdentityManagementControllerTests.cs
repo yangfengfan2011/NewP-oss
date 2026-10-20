@@ -351,10 +351,18 @@ public sealed class IdentityManagementControllerTests
 
     private static IdentityAccountsController Controller(RecordingAccountApplicationService accounts) => new(
         new RecordingManagementQueryService(),
-        accounts)
+        new DirectCommandExecutor(),
+        new IdentityAccountButtonHandler(accounts))
     {
         ControllerContext = Context()
     };
+
+    // 这些单元测试只验证命令映射和响应；HTTP 按钮身份由真实入口集成测试覆盖。
+    private sealed class DirectCommandExecutor : ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor
+    {
+        public Task<TResult> ExecuteAsync<TInput, TState, TResult>(ICP.Platform.Authorization.Contracts.IButtonBusinessHandler<TInput, TState, TResult> handler,
+            TInput input, CancellationToken token = default) => handler.WithinBoundaryAsync(input, "", (state, inner) => handler.ExecuteAsync(state, inner), token);
+    }
 
     private static ControllerContext Context()
     {

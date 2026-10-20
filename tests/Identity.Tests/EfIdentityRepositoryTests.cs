@@ -94,7 +94,7 @@ public sealed class EfIdentityRepositoryTests
         Assert.DoesNotContain("NormalizedECODE", executedSql, StringComparison.Ordinal);
 
         var queryService = IdentityCrudQueryTestFactory.Create(repository, new EfPlatformQueryExecutor(context), new TestTemporalDisplayProjectionExecutor(), context);
-        var controller = new ICP.Platform.Modules.Identity.Controllers.IdentityAccountsController(queryService, null!);
+        var controller = new ICP.Platform.Modules.Identity.Controllers.IdentityAccountsController(queryService, null!, null!);
         var response = await controller.GetSnapshot("User_2", CancellationToken.None);
         var payload = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(response.Result).Value;
         using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));

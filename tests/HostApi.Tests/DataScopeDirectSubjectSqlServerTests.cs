@@ -24,8 +24,8 @@ public sealed class DataScopeDirectSubjectSqlServerTests
         var initialized = await http.InitializeOrganizationAsync(admin);
         var department = initialized.GetProperty("departmentId").GetString()!;
         var create = http.Organization("persons", "create", "list.pageActions");
-        var person = await FeatureHttpTestRequests.CreateAsync(admin, create,
-            "/api/organization/persons", new { PersonNo = "SELECTOR295", ENAME = "部门选择器", EmploymentStatus = "Active", IsEnabled = true }, OwnedResourceReadHttpRequests.Declaration(fixture, create, "organization.person", "create"));
+        var person = await http.CreateButtonAsync(admin, create,
+            "/api/organization/persons", new { PersonNo = "SELECTOR295", ENAME = "部门选择器", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
         var path = "/api/authorization/data-scope/objects/organization.person/" + id;
@@ -60,8 +60,8 @@ public sealed class DataScopeDirectSubjectSqlServerTests
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         var create = http.Organization("persons", "create", "list.pageActions");
-        var person = await FeatureHttpTestRequests.CreateAsync(admin, create,
-            "/api/organization/persons", new { PersonNo = "DIRECT295", ENAME = "直接项期限", EmploymentStatus = "Active", IsEnabled = true }, OwnedResourceReadHttpRequests.Declaration(fixture, create, "organization.person", "create"));
+        var person = await http.CreateButtonAsync(admin, create,
+            "/api/organization/persons", new { PersonNo = "DIRECT295", ENAME = "直接项期限", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
         var path = "/api/authorization/data-scope/objects/organization.person/" + id;

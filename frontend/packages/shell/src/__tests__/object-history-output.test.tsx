@@ -17,7 +17,7 @@ it('uses each formal output button identity without mixing the list read declara
   });
   downloadSpies();
   const declarations = ['exportSelected', 'exportAll', 'printSelected', 'printAll'].map(actionKey => ({
-    id: 'button-' + actionKey, moduleId: 'Part', viewKey: 'part.history.list', surface: 'outputActions', actionKey,
+    id: 'button-' + actionKey, moduleId: 'Part', viewKey: 'workspace.history.list', surface: 'outputActions', actionKey,
     execution: '', object: 'Part', businessBinding: 'part.part.history', actions: ['read'], resources: ['part.part'], featurePositions: [featurePosition],
   }));
   await mount(fetcher, { dataAccessDeclarations: declarations });

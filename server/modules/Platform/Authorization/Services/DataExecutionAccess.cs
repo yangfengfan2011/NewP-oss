@@ -214,12 +214,13 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
             var generic = owners[0].ModuleId == requirement.ProviderModuleId && feature?.Count == 1
                 && plan.FeatureCatalog.Any(point => point.Position == position[0]
                 && point.ModuleId == resource.ModuleId && point.BehaviorKey == resourceKey + "." + feature[0].ActionKey);
+            var inputRead = endpointBehaviors.Length == 1 && IsDeclaredInputReadSource(requirement, contract, endpointBehaviors[0], position[0]!);
             var ownEndpoint = feature?.Count == 0 && owners[0].ModuleId == requirement.ModuleId && endpointBehaviors.Length == 1
-                && contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)
+                && (contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal) || inputRead)
                 && plan.FeatureCatalog.Any(point => point.Position == position[0] && point.ModuleId == resource.ModuleId
                     && (point.BehaviorKey == endpointBehaviors[0] || point.ReadBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)));
             var ownerEntry = feature?.Count == 0 && owners[0].ModuleId == requirement.ModuleId && endpointBehaviors.Length == 1
-                && contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)
+                && (contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal) || inputRead)
                 && plan.FeatureCatalog.Any(point => point.Position == position[0] && point.ModuleId == requirement.ModuleId
                     && (point.BehaviorKey == endpointBehaviors[0] || point.ReadBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)));
             var providerEntry = generic && resource.ModuleId == requirement.ModuleId && feature![0].ActionKey == "authorize"

@@ -5,7 +5,7 @@
     "viewKey": "part.part.list",
     "surface": "pageActions",
     "actionKey": "create",
-    "execution": "part.part.create",
+    "execution": "",
     "resources": [
       "part.part"
     ],
@@ -15,23 +15,7 @@
     "featurePositions": [
       "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.pageActions/action:create"
     ],
-    "requirements": [
-      {
-        "role": "candidate",
-        "stage": "submit",
-        "shape": "candidate",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "create"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.create"
+    "object": "Part",
+    "businessBinding": "part.part.create"
   }
 ]

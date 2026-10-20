@@ -22,7 +22,7 @@ public static class PartCrudDescriptor
         var fieldSet = new StandardCrudFieldSet(fields, fields, ["ECODE", "ENAME", "Description"], ["ECODE", "ENAME", "Description"]);
         return new()
         {
-            DataExecutions = new Dictionary<string, string> { ["list"] = "part.part.list", ["read"] = "part.part.read", ["create"] = "part.part.create" },
+            DataExecutions = new Dictionary<string, string> { ["list"] = "part.part.list", ["read"] = "part.part.read" },
             RequiresCreationRecord = true, RequiresUpdateRecord = true,
             ResourceKey = "part.part", ModuleId = "Part", ModelName = "Part", Route = "api/part/parts",
             IdField = "EID", DisplayField = "ENAME", FieldSet = fieldSet, DeletePolicy = StandardCrudDeletePolicy.Hard,

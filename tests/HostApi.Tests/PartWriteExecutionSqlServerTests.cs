@@ -33,7 +33,7 @@ public sealed class PartWriteExecutionSqlServerTests
             [new("PartOptionalFloorSubject", "all", null, 0, new Dictionary<string, string> { ["create"] = "deny", ["read"] = "deny", ["edit"] = "deny" })], []);
         using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
             HttpMethod.Put, "/api/authorization/data-scope/rules/PartOptionalFloor", rule)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
-        var declaration = OwnedResourceReadHttpRequests.Declaration(fixture, create, "part.part", "create");
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("part.part.create", create);
         using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts",
             new { ECODE = "PART-PUBLIC-DENIED", ENAME = name }, declaration)) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts",
@@ -131,7 +131,7 @@ public sealed class PartWriteExecutionSqlServerTests
         }
         finally { accessor.HttpContext = previous; }
     }
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实普通Part入口和固定内部创建更新删除消费自身要求，资源/目标/caller串用写前拒绝")]
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实普通Part入口、保留的复制创建来源与显式内部更新删除核对精确目标")]
     public async Task EntryAndInternalWrites_RequireExactSourceAndPreserveClosedHttpOperations()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includePart: true);
@@ -141,7 +141,7 @@ public sealed class PartWriteExecutionSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PartWriteSource", "Part写来源",
             "part-write-source", "Part写来源账号", read, create);
         using var ordinary = actor.Client;
-        var declaration = OwnedResourceReadHttpRequests.Declaration(fixture, create, "part.part", "create");
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("part.part.create", create);
         var values = new { ECODE = "PART-SOURCE-ENTRY", ENAME = "独立正式创建" };
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts", values))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
@@ -163,14 +163,10 @@ public sealed class PartWriteExecutionSqlServerTests
         try
         {
             var executor = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
-            ObjectOperationWriteSource.Declared Source(string operation, string? id)
-            {
-                var key = operation == "create" ? "part.part.internal.create" : "part.part." + operation;
-                return new(new(new(key, "standardCrud." + operation, "submit"), "part.part", id)
-                { Internal = new(key, "standardCrud." + operation, typeof(WorkspaceContents), operation == "create" ? "CreateObjectAsync" : "MutateObjectsAsync") });
-            }
+            var key = "part.part.internal.create";
+            var source = new ObjectOperationWriteSource.Declared(new(new(key, "standardCrud.create", "submit"), "part.part", null)
+            { Internal = new(key, "standardCrud.create", typeof(ICP.Platform.Modules.Part.PartCopyBehavior), "ExecuteAsync") });
             var input = new Dictionary<string, object?> { ["ECODE"] = "PART-SOURCE-INTERNAL", ["ENAME"] = "可信内部候选" };
-            var source = Source("create", null);
             foreach (var wrong in new[]
             {
                 source with { Context = source.Context with { ResourceKey = "document.document" } },
@@ -186,15 +182,16 @@ public sealed class PartWriteExecutionSqlServerTests
             var id = (string)result.Detail!.Fields["EID"]!;
             Assert.Equal(actor.AccountId, result.Detail.Fields["OwnerId"]);
             Assert.Equal(actor.AccountId, result.Detail.Fields["CreatedBy"]);
-            var update = Source("update", id);
+            var update = new ObjectOperationWriteSource.Internal("part.part", "Part", ObjectOperationAction.Update, id);
             var mismatch = await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", ObjectOperationAction.Update,
                 entryId, new Dictionary<string, object?> { ["ENAME"] = "不得串目标" }, update));
-            Assert.Equal("ActionDataAccess.WriteBindingInvalid", mismatch.Code);
+            Assert.Equal("ObjectOperation.InternalBindingInvalid", mismatch.Code);
             var updated = await executor.ExecuteAsync("part.part", ObjectOperationAction.Update, id,
                 new Dictionary<string, object?> { ["ENAME"] = "内部正常修改" }, update);
             Assert.True(updated.Succeeded, updated.Error?.Code);
             Assert.Equal("内部正常修改", updated.Detail!.Fields["ENAME"]);
-            var deleted = await executor.ExecuteAsync("part.part", ObjectOperationAction.Delete, id, new Dictionary<string, object?>(), Source("delete", id));
+            var deleted = await executor.ExecuteAsync("part.part", ObjectOperationAction.Delete, id, new Dictionary<string, object?>(),
+                new ObjectOperationWriteSource.Internal("part.part", "Part", ObjectOperationAction.Delete, id));
             Assert.True(deleted.Succeeded, deleted.Error?.Code);
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             Assert.False(await db.Set<Dictionary<string, object?>>("Part").AnyAsync(row => EF.Property<string>(row, "EID") == id));
@@ -202,14 +199,14 @@ public sealed class PartWriteExecutionSqlServerTests
         }
         finally { accessor.HttpContext = previous; }
     }
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实Part内部写在原旧事实保护位置执行read和edit/delete，拒绝不修改对象")]
-    public async Task InternalWrites_ReadAndActionDenialsPreserveProtectedFacts()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "已退役Part声明写来源不能回退为显式内部授权，拒绝保留实体与审计")]
+    public async Task RetiredDeclaredWrites_RejectInsteadOfFallingBackToInternalAuthority()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includePart: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var read = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Part" && point.Kind == "navigation" && point.Key == "part.parts");
         var create = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "part.part.create");
-        var declaration = OwnedResourceReadHttpRequests.Declaration(fixture, create, "part.part", "create");
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("part.part.create", create);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PartWriteDenials", "内部写拒绝",
             "part-write-denials", "内部写普通账号", read, create);
         using var ordinary = actor.Client;
@@ -233,31 +230,29 @@ public sealed class PartWriteExecutionSqlServerTests
         var previous = accessor.HttpContext;
         accessor.HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "part-internal-write-denials")) };
-        using var trace = new Activity(nameof(InternalWrites_ReadAndActionDenialsPreserveProtectedFacts)).Start();
+        using var trace = new Activity(nameof(RetiredDeclaredWrites_RejectInsteadOfFallingBackToInternalAuthority)).Start();
         try
         {
             var executor = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
-            foreach (var (denied, operation, status, code) in new[]
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var beforeAudit = JsonSerializer.Serialize(await db.Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking().ToArrayAsync());
+            foreach (var (denied, operation) in new[]
             {
-                ("read", "update", 404, "StandardCrud.NotFound"),
-                ("read", "delete", 404, "StandardCrud.NotFound"),
-                ("edit", "update", 403, "DataScope.ActionDenied"),
-                ("delete", "delete", 403, "DataScope.ActionDenied")
+                ("read", "update"), ("read", "delete"), ("edit", "update"), ("delete", "delete")
             })
             {
                 var key = "part.part." + operation;
                 var source = new ObjectOperationWriteSource.Declared(new(new(key, "standardCrud." + operation, "submit"), "part.part", ids[denied])
                 { Internal = new(key, "standardCrud." + operation, typeof(WorkspaceContents), "MutateObjectsAsync") });
                 var action = operation == "update" ? ObjectOperationAction.Update : ObjectOperationAction.Delete;
-                var result = await executor.ExecuteAsync("part.part", action, ids[denied],
-                    new Dictionary<string, object?> { ["ENAME"] = "不得生效" }, source);
-                Assert.False(result.Succeeded);
-                Assert.Equal(status, result.Error!.StatusCode);
-                Assert.Equal(code, result.Error.Code);
+                var error = await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", action, ids[denied],
+                    new Dictionary<string, object?> { ["ENAME"] = "不得生效" }, source));
+                Assert.Equal(400, error.Status);
             }
             var rows = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Part").AsNoTracking().ToListAsync();
             Assert.Equal(3, rows.Count);
             Assert.All(rows, row => Assert.Equal("拒绝前的名称", row["ENAME"]));
+            Assert.Equal(beforeAudit, JsonSerializer.Serialize(await db.Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking().ToArrayAsync()));
         }
         finally { accessor.HttpContext = previous; }
     }

@@ -9,33 +9,34 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class PartWriteExecutionContractTests
 {
     [Fact]
-    public void PartCreate_ProjectsItsExistingEntryAndInternalWritesHaveNoInventedEntry()
+    public void PartCreate_UsesOneButtonDeclarationAndPreservesOnlyTheUnmigratedCopySource()
     {
         var compiled = new CanonicalModulePlanCompiler().Compile("part-write-consumer",
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
         var plan = compiled.Plan!;
         var descriptor = PartCrudDescriptor.Create();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "part.part.create");
-        Assert.Equal(("part.part.list", "pageActions", "create", "standardCrud.create"),
-            (declaration.ViewKey, declaration.Surface, declaration.ActionKey, declaration.Provider));
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "part.part.create");
+        Assert.Equal(("part.part.list", "pageActions", "create"), (declaration.ViewKey, declaration.Surface, declaration.ActionKey));
+        Assert.Empty(declaration.Execution);
+        Assert.Equal("Part", declaration.Object);
+        Assert.Equal(["create"], declaration.Actions);
+        Assert.True(declaration.Requirements is null or { Count: 0 });
         var feature = Assert.Single(plan.FeatureCatalog, point => point.ModuleId == "Part" && point.BehaviorKey == "part.part.create");
         Assert.Equal(new[] { feature.Position }, declaration.FeaturePositions);
         Assert.StartsWith("Workspace/navigation:workspace/module:Part/navigation:part.parts/", feature.Position);
-        var candidate = Assert.Single(declaration.Requirements!);
-        Assert.Equal(("candidate", "submit", "candidate"), (candidate.Role, candidate.Stage, candidate.Shape));
-        Assert.Equal(new[] { "create" }, Assert.Single(candidate.AnyOf));
         var owner = Assert.Single(plan.Modules, module => module.ModuleId == "Part");
         foreach (var operation in new[] { "create", "update", "delete" })
         {
-            var key = operation == "create" ? "part.part.internal.create" : "part.part." + operation;
-            var contract = Assert.Single(owner.DataExecutions, item => item.Key == key);
-            Assert.Equal("internal", contract.Boundary);
-            Assert.Equal("standardCrud." + operation, contract.Provider);
-            Assert.Empty(contract.FeatureBehaviors);
-            Assert.NotEmpty(contract.FixedBindings);
-            Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.Execution == key);
+            Assert.False(descriptor.DataExecutions.ContainsKey(operation));
+            Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "part.part." + operation);
         }
+        var copy = Assert.Single(owner.DataExecutions, item => item.Key == "part.part.internal.create");
+        Assert.Equal("internal", copy.Boundary);
+        Assert.Equal("standardCrud.create", copy.Provider);
+        Assert.Empty(copy.FeatureBehaviors);
+        Assert.EndsWith("PartCopyBehavior.ExecuteAsync", Assert.Single(copy.FixedBindings).Caller);
+        Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.Execution == copy.Key);
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "ICP-Platform.sln"))) root = root.Parent;
         var path = Path.Combine(root!.FullName, "tests/Kernel.Tests/Fixtures/PartWriteDataAccess.contract.json");

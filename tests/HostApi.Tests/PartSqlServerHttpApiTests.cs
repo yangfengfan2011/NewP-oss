@@ -25,7 +25,7 @@ public sealed class PartSqlServerHttpApiTests
             Content = JsonContent.Create(new { ECODE = "PART-001", ENAME = "首个零组件", Description = new string('字', 500) }, options: new JsonSerializerOptions())
         };
         request.Headers.Add("X-NewP-Feature", Create(fixture).Position);
-        request.Headers.Add("X-NewP-Data-Declaration", CreateDeclaration(fixture).Id);
+        request.Headers.Add("X-NewP-Button", CreateDeclaration(fixture).Id);
         using var response = await admin.SendAsync(request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -166,25 +166,29 @@ public sealed class PartSqlServerHttpApiTests
             Assert.Equal(1, (await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, Entry(fixture), "part.part", "list", "/api/part/parts?keyword=READ-FAULT")).GetProperty("total").GetInt32());
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "零组件规范重读在唯一事务内，读取失败不得遗留已提交实体")]
-    public async Task Create_NormalizationReadFailureRollsBackTheInsertedEntity()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "实际INSERT故障在唯一事务内回滚实体与创建审计；不冒充不存在的事务内规范重读")]
+    public async Task Create_PersistenceFailureRollsBackTheEntityAndAudit()
     {
-        var fault = new PostCommitReadFault { ReadsBeforeFailure = 0 };
+        var fault = new PartInsertFault();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
             services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(fault)), includePart: true);
         using var admin = await fixture.LoginAdministratorAsync();
-        fault.Arm = true;
-        using var response = await SendCreateAsync(fixture, admin, new { ECODE = "ROLLBACK", ENAME = "规范重读失败" });
+        int changes;
+        using (var scope = fixture.Services.CreateScope())
+            changes = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("BusinessChange").CountAsync();
+        fault.Enabled = true;
+        using var response = await SendCreateAsync(fixture, admin, new { ECODE = "ROLLBACK", ENAME = "实际写入失败" });
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.True(fault.Triggered);
+        Assert.True(fault.InTransaction);
         fault.Enabled = false;
         Assert.Equal(0, (await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, Entry(fixture), "part.part", "list", "/api/part/parts?keyword=ROLLBACK")).GetProperty("total").GetInt32());
-        Assert.True(fault.FailedInsideTransaction);
+        using var finalScope = fixture.Services.CreateScope();
+        Assert.Equal(changes, await finalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("BusinessChange").CountAsync());
     }
-
     // 已有正向旅程使用实际编译声明；缺声明反例由PartWriteExecutionSqlServerTests直接构造请求。
     private static ActionDataAccessRequirement CreateDeclaration(BusinessAuditHostFixture fixture)
-        => OwnedResourceReadHttpRequests.Declaration(fixture, Create(fixture), "part.part", "create");
+        => new FeatureHttpTestRequests(fixture).Declaration("part.part.create", Create(fixture));
 
     private static Task<HttpResponseMessage> SendCreateAsync(BusinessAuditHostFixture fixture, HttpClient client, object values)
         => FeatureHttpTestRequests.SendAsync(client, Create(fixture), HttpMethod.Post, "/api/part/parts", values, CreateDeclaration(fixture));
@@ -223,7 +227,24 @@ public sealed class PartSqlServerHttpApiTests
         }
     }
 
-    // 标准默认仓储插入后先规范化重读一次；随后对象读取裁决才是可降级的写后展示边界。
+    // 故障发生在实际插入命令，区别于提交后允许降级的展示读取。
+    private sealed class PartInsertFault : DbCommandInterceptor
+    {
+        internal bool Enabled;
+        internal bool Triggered;
+        internal bool InTransaction;
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (Enabled && command.CommandText.Contains("INSERT INTO [dbo].[Part]", StringComparison.Ordinal))
+            {
+                Triggered = true;
+                InTransaction = eventData.Context?.Database.CurrentTransaction is not null;
+                throw new InvalidOperationException("Injected Part insert failure.");
+            }
+            return ValueTask.FromResult(result);
+        }
+    }
     private sealed class PostCommitReadFault : DbCommandInterceptor
     {
         public bool Arm; public bool Enabled;

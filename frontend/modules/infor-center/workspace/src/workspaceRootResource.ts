@@ -2,7 +2,7 @@ import { workspaceHistoryCheck } from './workspaceHistoryCheck';
 import { platformFetch } from '@icp-platform/core';
 import { createObjectOwnershipTransferActions, createObjectOwnershipActions, createObjectAuthorizationActions } from '@icp-platform/ui';
 import { createElement, lazy, Suspense } from 'react';
-import { isStandardCrudRecord, readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionContext, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { isStandardCrudRecord, readStandardCrudRequestError, standardCrudRequestHeaders, StandardCrudRequestError, type StandardCrudActionContext, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { workspaceContentSource } from './workspaceTree';
 import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
 import { WorkspaceDocumentSession } from './workspaceDocumentSession';
@@ -13,9 +13,14 @@ import { workspaceClipboard as clipboard, type FolderCopyDraft, type ObjectCopyD
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
 // 创建只透传当前实际动作或adapter上下文的正式声明；无来源旧调用不能借列表read或默认值。
-function folderCreateHeaders(featurePosition?: string, declarationId?: string): Record<string, string> {
-  if (!declarationId) throw new StandardCrudRequestError('缺少文件夹创建声明。', 400);
-  return { ...headers(featurePosition), 'Content-Type': 'application/json', 'X-NewP-Data-Declaration': declarationId };
+function folderCreateHeaders(featurePosition?: string, buttonId?: string): Record<string, string> {
+  if (!buttonId) throw new StandardCrudRequestError('缺少文件夹创建声明。', 400);
+  return { 'Content-Type': 'application/json', ...standardCrudRequestHeaders({ featurePosition, buttonId }) };
+}
+// 执行与准备都只接受本次真实点击的身份；旧声明不能补救缺失或串用的按钮。
+function currentButtonId(buttonId: string | undefined, action: StandardCrudActionContext['action']): string {
+  if (!buttonId || buttonId !== action?.buttonId) throw new StandardCrudRequestError('缺少当前按钮身份。', 400);
+  return buttonId;
 }
 const WorkspaceBatchAuthorizationInput = lazy(() => import('./WorkspaceBatchAuthorizationInput'));
 const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
@@ -46,7 +51,7 @@ function authorization(context: Pick<StandardCrudActionContext, 'id' | 'row' | '
 }
 async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string, declarationId?: string, buttonId?: string) {
   const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json',
-    ...(buttonId ? { 'X-NewP-Button': buttonId } : declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) }, body: JSON.stringify(body) });
+    ...(buttonId ? standardCrudRequestHeaders({ featurePosition, buttonId }) : declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   return { operation: 'action' as const, payload: await response.json() as unknown, change: { operation: 'update' as const, id: '' } };
 }
@@ -104,11 +109,11 @@ const resource: StandardCrudResourceRegistration = {
   },
   actionHandlers: {
     ...transfer.actionHandlers, ...ownership.actionHandlers,
-    create: async ({ input, queryScope, featurePosition, action }) => {
+    create: async ({ input, queryScope, featurePosition, action, buttonId }) => {
       if (!isStandardCrudRecord(input)) throw new Error('缺少文件夹创建输入');
       const values = Object.fromEntries(['ENAME', 'Description'].filter(key => input[key] !== undefined).map(key => [key, input[key]]));
       const position = workspacePosition(queryScope);
-      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: folderCreateHeaders(featurePosition, action?.dataAccess?.id),
+      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: folderCreateHeaders(featurePosition, currentButtonId(buttonId, action)),
         body: JSON.stringify({ position, values, copyParentAuthorization: position.linkIds.length > 0 && input.copyParentAuthorization === true }) });
       if (!response.ok) throw await readStandardCrudRequestError(response);
       const payload: unknown = await response.json();
@@ -176,25 +181,25 @@ const resource: StandardCrudResourceRegistration = {
       };
       return result;
     },
-    editObject: async ({ id, input, queryScope, featurePosition, action }) => {
+    editObject: async ({ id, input, queryScope, featurePosition, action, buttonId }) => {
       if (!id) throw new Error('缺少引用标识');
-      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前编辑声明。', 400);
-      return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope), values: input }, featurePosition, action.dataAccess.id);
+      const identity = currentButtonId(buttonId, action);
+      return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope), values: input }, featurePosition, undefined, identity);
     },
-    deleteObject: async ({ id, queryScope, featurePosition, action }) => {
+    deleteObject: async ({ id, queryScope, featurePosition, action, buttonId }) => {
       if (!id) throw new Error('缺少引用标识');
-      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前删除对象声明。', 400);
-      return referenceCommand('DELETE', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition, action.dataAccess.id);
+      const identity = currentButtonId(buttonId, action);
+      return referenceCommand('DELETE', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition, undefined, identity);
     },
-    deleteObjects: async ({ selectedRows, queryScope, featurePosition, action }) => {
-      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前选择删除声明。', 400);
+    deleteObjects: async ({ selectedRows, queryScope, featurePosition, action, buttonId }) => {
+      const identity = currentButtonId(buttonId, action);
       return referenceCommand('POST', '/api/workspace/content/delete',
-        { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition, action.dataAccess.id);
+        { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition, undefined, identity);
     },
-    createPart: async ({ input, queryScope, featurePosition, action }) => {
-      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前Part创建声明。', 400);
+    createPart: async ({ input, queryScope, featurePosition, action, buttonId }) => {
+      const identity = currentButtonId(buttonId, action);
       return referenceCommand('POST', '/api/workspace/content/parts',
-        { position: workspacePosition(queryScope), values: input }, featurePosition, action.dataAccess.id);
+        { position: workspacePosition(queryScope), values: input }, featurePosition, undefined, identity);
     },
     createDocument: Object.assign(async ({ input, queryScope, featurePosition, action }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const draft = typeof input === 'object' && input !== null ? input as WorkspaceDocumentDraft : undefined;
@@ -269,7 +274,7 @@ const resource: StandardCrudResourceRegistration = {
     create: async (values, _before, context) => {
       const { WorkspacePosition: position, ...fields } = values;
       if (!position) throw new Error('缺少工作空间创建位置');
-      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: folderCreateHeaders(context?.featurePosition, context?.dataAccess?.id),
+      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: folderCreateHeaders(context?.featurePosition, context?.buttonId),
         body: JSON.stringify({ position, values: fields }) });
       if (!response.ok) throw await readStandardCrudRequestError(response);
       const payload: unknown = await response.json();

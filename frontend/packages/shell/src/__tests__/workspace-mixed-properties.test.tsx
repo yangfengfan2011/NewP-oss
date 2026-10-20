@@ -17,10 +17,12 @@ const { documentResource } = await loadComponentSource<{ documentResource: Stand
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
 import partModel from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
 import documentModel from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
+import workspaceWrites from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 import workspaceHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryFeatures.contract.json';
 import partHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/PartHistoryFeatures.contract.json';
 import documentHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/DocumentHistoryFeatures.contract.json';
 import notificationFeatures from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceTransferNotificationFeatures.contract.json';
+const workspaceEntry = workspaceWrites.features.find(point => point.kind === 'navigation' && point.key === 'workspace')!;
 const notifications = readComponentJson('Workspace', 'metadata/views/WorkspaceTransferNotificationsList.view.json');
 const historyFeatures = { Workspace: workspaceHistoryFeatures, Part: partHistoryFeatures, Document: documentHistoryFeatures };
 const historyViews = ['Workspace', 'Part', 'Document'].map(owner => readComponentJson(owner, `metadata/views/${owner === 'Workspace' ? 'WorkspaceObjectHistoryList' : owner + 'ObjectHistoryList'}.view.json`));
@@ -62,8 +64,12 @@ vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 async function renderMixedProperties(type: 'part' | 'document') {
+  const deletePoints = workspaceWrites.features.filter(point => point.key === 'delete' && point.actionScope === 'list.rowActions'
+    || point.key === 'deleteObjects' && point.actionScope === 'list.pageActions');
+  const present = new Set(['part', 'document']);
+  const deletes: { path: string; body: unknown; button: string | null; feature: string | null }[] = [];
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false, isLocalAdministrator: false,
-    timeZoneId: 'Asia/Taipei', featurePositions: ['workspace-entry', 'workspace-edit', 'workspace-createPart', 'workspace-createDocument', 'part-entry', 'document-entry'] };
+    timeZoneId: 'Asia/Taipei', featurePositions: [workspaceEntry.position, 'workspace-edit', 'workspace-createPart', 'workspace-createDocument', 'part-entry', 'document-entry', ...deletePoints.map(point => point.position)] };
   const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
   const writes: unknown[] = [];
   const edits: unknown[] = [];
@@ -97,7 +103,7 @@ async function renderMixedProperties(type: 'part' | 'document') {
       expect(url.searchParams.get('anchorModelKey')).toBe(type === 'part' ? 'Part' : 'Document');
       expect(url.searchParams.get('anchorId')).toBe('same-id');
       expect(url.searchParams.has('queryScope')).toBe(false);
-      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Feature')).toBe('workspace-entry');
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Feature')).toBe(workspaceEntry.position);
       return json({ items: [{ linkId: 'incoming-relation', associatedObject: { modelKey: 'WorkspaceFolder', id: 'parent-folder' },
         fields: { LID: 'incoming-relation', Name: '直接父文件夹', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } }], total: 1, page: 1, pageSize: 20 });
     }
@@ -108,16 +114,30 @@ async function renderMixedProperties(type: 'part' | 'document') {
     if (url.pathname === '/api/workspace/folders/parent-folder') return json({ fields: { EID: 'parent-folder', ENAME: '父文件夹属性', Description: '只开对象不定位路径',
       CreatedBy: 'actor', CreatedBy_DisplayValue: '创建账号', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号',
       CreatedAt: '2026-10-08T00:00:00Z', CreatedAt_DisplayValue: '2026-10-08 08:00', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } });
-    if (url.pathname === '/api/links/workspace.content') return json({ items: ['part', 'document'].map(owner => ({ linkId: owner + '-relation',
+    if (url.pathname === '/api/links/workspace.content') return json({ items: ['part', 'document'].filter(owner => present.has(owner)).map(owner => ({ linkId: owner + '-relation',
       associatedObject: { modelKey: owner === 'part' ? 'Part' : 'Document', id: 'same-id' },
       fields: { LID: owner + '-relation', ObjectType: owner === 'part' ? 'Part' : 'Document',
-        ObjectType_DisplayValue: owner === 'part' ? '零组件' : '图文档', Name: owner + '-name', Code: 'SAME-CODE' } })), total: 2, page: 1, pageSize: 20 });
+        ObjectType_DisplayValue: owner === 'part' ? '零组件' : '图文档', Name: owner + '-name', Code: 'SAME-CODE' } })), total: present.size, page: 1, pageSize: 20 });
     if (url.pathname === `/api/${type}/${type === 'part' ? 'parts' : 'documents'}/same-id`) {
       const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
       expect(headers.get('X-NewP-Feature')).toBe(type + '-entry');
       return json({ fields: { EID: 'same-id', ECODE: 'SAME-CODE', ENAME: type + '-owned-properties', Description: '所属对象说明',
         CreatedBy: 'actor', CreatedBy_DisplayValue: '创建账号', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号',
         CreatedAt: '2026-10-08T00:00:00Z', CreatedAt_DisplayValue: '2026-10-08 08:00', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' }, summaries: {} });
+    }
+    const method = input instanceof Request ? input.method : init?.method ?? 'GET';
+    if (method === 'DELETE' && url.pathname === '/api/workspace/content/part-relation' || method === 'POST' && url.pathname === '/api/workspace/content/delete') {
+      const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
+      deletes.push({ path: url.pathname, body, button: headers.get('X-NewP-Button'), feature: headers.get('X-NewP-Feature') });
+      for (const id of method === 'DELETE' ? ['part-relation'] : body.linkIds as string[]) present.delete(id.split('-')[0]);
+      return json({ succeeded: true });
+    }
+    if (url.pathname === `/api/workspace/content/${type}-relation/edit-values` || url.pathname === `/api/workspace/content/${type}-relation` && method === 'PUT') {
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      expect(headers.get('X-NewP-Button')).toBe(formalDataAccessFor('workspace.folder.list', 'rowActions', 'edit').id);
+      expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
     }
     if (url.pathname === `/api/workspace/content/${type}-relation/edit-values`) return json({ fields: { ECODE: 'SAME-CODE', ENAME: 'editable-name', Description: '原说明' } });
     if (url.pathname === `/api/workspace/content/${type}-relation` && (input instanceof Request ? input.method : init?.method) === 'PUT') {
@@ -132,7 +152,7 @@ async function renderMixedProperties(type: 'part' | 'document') {
     { metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...documentModule }], 'workspace-mixed');
   const navs = [partNavigation, documentNavigation].map((navigation, index) => ({ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === (index ? 'document.history' : 'part.history') ? historyFeatures[index ? 'Document' : 'Part'].historyPosition : index ? 'document-entry' : 'part-entry' })) } }));
   const views = [tree, list, detail, references, partList, partDetail, documentList, documentDetail, ...historyViews, notifications];
-  const workspaceNav = { ...workspaceNavigation, navigation: { items: workspaceNavigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'workspace.history' ? historyFeatures.Workspace.historyPosition : item.key === 'workspace.transfers' ? notificationFeatures.notificationsPosition : 'workspace-entry' })) } };
+  const workspaceNav = { ...workspaceNavigation, navigation: { items: workspaceNavigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'workspace.history' ? historyFeatures.Workspace.historyPosition : item.key === 'workspace.transfers' ? notificationFeatures.notificationsPosition : workspaceEntry.position })) } };
   expect(buildMenusFromNavDocuments([workspaceNav, ...navs], (title, fallback) => title ?? fallback ?? '').map(menu => menu.path)).toEqual(['/workspace']);
   expect(compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [workspaceNavigation, ...navs], views, []).detailEntries).toHaveLength(2);
   const catalogs = { zhs: Object.fromEntries([[dictionary.Workspace, 'Workspace'], [partDictionary.Part, 'Part'], [documentDictionary.Document, 'Document'], ...historyDictionaries].flatMap(([dict, key]) =>
@@ -143,12 +163,12 @@ async function renderMixedProperties(type: 'part' | 'document') {
   const wrap = (page: React.ReactNode) => <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
     <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey="workspace-mixed">
       <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
-        { key: 'workspace', position: 'workspace-entry', kind: 'navigation' },
+        { key: 'workspace', position: workspaceEntry.position, kind: 'navigation' },
         // 新目录采用实际编译事实，原交互位置及actor grants不替换、不扩history资格。
         { key: 'workspace', position: historyFeatures.Workspace.readPosition, kind: 'navigation' },
         { key: 'workspace.history', position: historyFeatures.Workspace.historyPosition, kind: 'navigation', parentPosition: historyFeatures.Workspace.readPosition },
         { key: 'workspace.transfers', position: notificationFeatures.notificationsPosition, kind: 'navigation', parentPosition: notificationFeatures.readPosition },
-        { key: 'edit', position: 'workspace-edit', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.rowActions' }, ...['createPart', 'createDocument'].map(key => ({ key, position: 'workspace-' + key, kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' })),
+        ...deletePoints, { key: 'edit', position: 'workspace-edit', kind: 'action', parentPosition: workspaceEntry.position, staticScope: 'folder', actionScope: 'list.rowActions' }, ...['createPart', 'createDocument'].map(key => ({ key, position: 'workspace-' + key, kind: 'action', parentPosition: workspaceEntry.position, staticScope: 'folder', actionScope: 'list.pageActions' })),
       ] }, ...['Part', 'Document'].map(moduleId => ({ moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [{ key: moduleId === 'Part' ? 'part.parts' : 'document.documents', kind: 'navigation', position: moduleId.toLowerCase() + '-entry' },
         { key: moduleId === 'Part' ? 'part.parts' : 'document.documents', kind: 'navigation', position: historyFeatures[moduleId as 'Part' | 'Document'].readPosition },
         { key: moduleId === 'Part' ? 'part.history' : 'document.history', kind: 'navigation', position: historyFeatures[moduleId as 'Part' | 'Document'].historyPosition, parentPosition: historyFeatures[moduleId as 'Part' | 'Document'].readPosition }] }))] },
@@ -157,14 +177,14 @@ async function renderMixedProperties(type: 'part' | 'document') {
       </RuntimeMetadataProvider>
     </PlatformQueryProvider></AuthorizationProvider></AuthProvider>
   </LocalizationProvider>;
-  const router = createMemoryRouter([{ path: '/workspace', element: wrap(<PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'workspace-entry' }, inputResolverKey: 'workspace.tree.current' }} />) },
+  const router = createMemoryRouter([{ path: '/workspace', element: wrap(<PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: workspaceEntry.position }, inputResolverKey: 'workspace.tree.current' }} />) },
     { path: type === 'part' ? '/parts/:id' : '/documents/:id', element: wrap(<OwnedPage />) }], { initialEntries: ['/workspace?node=public%3Aroot%3Ashared-link&other=keep'] });
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   onTestFinished(async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'workspace-mixed-cleanup'); });
   await act(async () => root.render(<RouterProvider router={router} />));
   await vi.waitFor(() => expect(container.querySelector(`tr[data-row-key="${type}-relation"]`)).not.toBeNull());
 
-  return { container, router, fetcher, writes, edits };
+  return { container, router, fetcher, writes, edits, deletes, deletePoints };
 }
 
 it.each(['part', 'document'] as const)('creates %s with draft confirmation and one formal save', async type => {
@@ -267,4 +287,29 @@ it.each(['part', 'document'] as const)('edits %s through the current occurrence 
   await vi.waitFor(() => expect(edits).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] },
     values: { ECODE: 'SAME-CODE', ENAME: '编辑后的名称', Description: '原说明' } }]));
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer')).toBeNull());
+});
+
+
+it.each(['single', 'mixed'] as const)('deletes the actual %s selection through its own compiled button and one confirmation', async mode => {
+  const { container, deletes, deletePoints } = await renderMixedProperties('part');
+  const row = container.querySelector('tr[data-row-key="part-relation"]')!;
+  if (mode === 'single') {
+    await act(async () => row.querySelector<HTMLButtonElement>('button[aria-label="更多"]')!.click());
+  } else {
+    for (const key of ['part', 'document']) await act(async () => container.querySelector<HTMLInputElement>(`tr[data-row-key="${key}-relation"] input[type="checkbox"]`)!.click());
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '移除与删除')!.click());
+  }
+  await vi.waitFor(() => expect([...document.querySelectorAll('[role="menuitem"]')].some(item => item.textContent === '删除')).toBe(true));
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '删除')!.click());
+  await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('所有文件夹中的引用'));
+  expect(deletes).toHaveLength(0);
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!.click());
+  await vi.waitFor(() => expect(deletes).toHaveLength(1));
+  const key = mode === 'single' ? 'delete' : 'deleteObjects';
+  const declaration = formalDataAccessFor('workspace.folder.list', mode === 'single' ? 'rowActions' : 'pageActions', key);
+  expect(deletes[0]).toEqual({ path: mode === 'single' ? '/api/workspace/content/part-relation' : '/api/workspace/content/delete',
+    body: { position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] }, ...(mode === 'mixed' ? { linkIds: ['part-relation', 'document-relation'] } : {}) },
+    button: declaration.id, feature: deletePoints.find(point => point.key === key)!.position });
+  await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="part-relation"]')).toBeNull());
+  expect(container.querySelector('tr[data-row-key="document-relation"]') === null).toBe(mode === 'mixed');
 });

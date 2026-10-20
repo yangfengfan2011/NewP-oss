@@ -49,11 +49,14 @@ it('edits and batch deletes through the current occurrence using LIDs', async ()
   const context = { featurePosition: 'write', queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' } };
   expect(resource.actionHandlers?.editObject).toBeTypeOf('function');
   expect(resource.actionHandlers?.deleteObjects).toBeTypeOf('function');
-  const dataAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.execution === 'workspace.content.edit' && item.surface === 'rowActions')!;
-  await resource.actionHandlers!.editObject({ ...context, id: 'relation', input: { ENAME: 'changed', Description: 'note' }, action: { key: 'edit', labelKey: 'Edit', dataAccess } });
-  const deleteAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.execution === 'workspace.content.delete' && item.surface === 'pageActions')!;
-  await resource.actionHandlers!.deleteObjects({ ...context, action: { key: 'deleteObjects', labelKey: 'Delete', dataAccess: deleteAccess }, selectedRows: [{ LID: 'a', ObjectId: 'entity-a' }, { LID: 'b', ObjectId: 'entity-b' }] });
+  const dataAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.businessBinding === 'workspace.folder.editObject' && item.surface === 'rowActions')!;
+  await resource.actionHandlers!.editObject({ ...context, id: 'relation', input: { ENAME: 'changed', Description: 'note' }, action: { key: 'edit', labelKey: 'Edit', dataAccess, buttonId: dataAccess.id }, buttonId: dataAccess.id });
+  const deleteAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.businessBinding === 'workspace.folder.deleteObjects' && item.surface === 'pageActions')!;
+  await resource.actionHandlers!.deleteObjects({ ...context, action: { key: 'deleteObjects', labelKey: 'Delete', dataAccess: deleteAccess, buttonId: deleteAccess.id }, buttonId: deleteAccess.id, selectedRows: [{ LID: 'a', ObjectId: 'entity-a' }, { LID: 'b', ObjectId: 'entity-b' }] });
   const writes = await Promise.all(request.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/content/')).map(async ([input, init]) => input instanceof Request ? input.clone().json() : JSON.parse(String(init?.body))));
+  const commands = request.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/content/'));
+  expect(commands.map(([input, init]) => new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Button'))).toEqual([dataAccess.id, deleteAccess.id]);
+  expect(commands.every(([input, init]) => !new Headers(input instanceof Request ? input.headers : init?.headers).has('X-NewP-Data-Declaration'))).toBe(true);
   expect(writes).toEqual([
     { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, values: { ENAME: 'changed', Description: 'note' } },
     { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, linkIds: ['a', 'b'] },

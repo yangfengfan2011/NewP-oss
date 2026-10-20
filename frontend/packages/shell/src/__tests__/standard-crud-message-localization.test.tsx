@@ -42,6 +42,10 @@ it.each(['createPart', 'createDocument'] as const)('retranslates the real Worksp
     requests.push({ path: url.pathname, method, body: method === 'POST' ? input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)) : undefined });
     if (url.pathname.endsWith('antiforgery-token')) return new Response(JSON.stringify({ requestToken: 'token' }));
     if (url.pathname === '/api/workspace/folders/candidates') return new Response(JSON.stringify({ items: [{ id: 'draft-object', name: '保留的业务草稿' }], total: 1, page: 1, pageSize: 20 }));
+    if (url.pathname === path) {
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      expect(headers.get(scenario === 'createPart' ? 'X-NewP-Button' : 'X-NewP-Data-Declaration')).toBe(dataAccess.id);
+    }
     if (url.pathname === path) return new Response(JSON.stringify({ title: 'Workspace.ParentWriteDenied', code: 'Workspace.ParentWriteDenied', reasonKey: 'Workspace.ParentWriteDenied', status: 403 }), { status: 403 });
     throw new Error(`Unexpected request ${url.pathname}`);
   }));
@@ -51,7 +55,7 @@ it.each(['createPart', 'createDocument'] as const)('retranslates the real Worksp
   const refresh = vi.fn();
   function Consumer() {
     const { t } = useLocalization();
-    return <><LanguageSelect /><StandardCrudActions actions={[{ key: scenario, labelKey: t(scenario === 'createPart' ? 'Workspace.CreatePart' : 'Workspace.CreateDocument'), inputKey: 'createObject', dataAccess }]}
+    return <><LanguageSelect /><StandardCrudActions actions={[{ key: scenario, labelKey: t(scenario === 'createPart' ? 'Workspace.CreatePart' : 'Workspace.CreateDocument'), inputKey: 'createObject', dataAccess, buttonId: dataAccess.businessBinding ? dataAccess.id : undefined }]}
       handlers={workspaceResource.actionHandlers} actionInputs={workspaceResource.actionInputRenderers}
       featureResolutionForAction={() => ({ kind: 'allowed', position: featurePosition })} refresh={refresh}
       context={{ id: 'root', queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' } }} /></>;

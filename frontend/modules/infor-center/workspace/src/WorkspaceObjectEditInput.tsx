@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
 import { formatRequestError, platformFetch, useLocalization } from '@icp-platform/core';
-import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudFieldDefinition } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, standardCrudRequestHeaders, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudFieldDefinition } from '@icp-platform/sdk';
 import { StandardCrudForm } from '@icp-platform/ui/crud-form';
 
 /** 编辑从当前 LID 重新读取完整业务字段；表单不会把列表投影当成可保存的完整对象。 */
-export default function WorkspaceObjectEditInput({ row, queryScope, featurePosition, action, value, onChange, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
+export default function WorkspaceObjectEditInput({ row, queryScope, featurePosition, buttonId, action, value, onChange, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
   const { t } = useLocalization();
   const target = row as Record<string, unknown>;
   const folder = target.ObjectModelKey === 'WorkspaceFolder';
   const dictionary = folder ? 'Workspace' : target.ObjectModelKey === 'Part' ? 'Part' : 'Document';
   const position = JSON.stringify({ spaceId: queryScope?.spaceId, rootFolderId: queryScope?.rootFolderId,
     linkIds: JSON.parse(String(queryScope?.linkIds ?? '[]')) as unknown });
-  const declarationId = action.dataAccess?.id;
-  const readKey = JSON.stringify([target.LID, position, featurePosition, declarationId]);
+  const currentButton = buttonId && buttonId === action.buttonId ? buttonId : undefined;
+  const readKey = JSON.stringify([target.LID, position, featurePosition, currentButton]);
   const [loaded, setLoaded] = useState<{ key: string; fields: Record<string, unknown> } | null>(null);
   const initial = loaded?.key === readKey ? loaded.fields : null;
   const [failure, setFailure] = useState<{ key: string; error: unknown } | null>(null);
@@ -21,9 +21,9 @@ export default function WorkspaceObjectEditInput({ row, queryScope, featurePosit
     setLoaded(null); setFailure(null);
     void (async () => {
       try {
-        if (!declarationId) throw new StandardCrudRequestError('缺少当前编辑声明。', 400);
+        if (!currentButton) throw new StandardCrudRequestError('缺少当前编辑声明。', 400);
         const response = await platformFetch(`/api/workspace/content/${encodeURIComponent(String(target.LID))}/edit-values`, {
-          method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', 'X-NewP-Data-Declaration': declarationId, ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
+          method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', ...standardCrudRequestHeaders({ featurePosition, buttonId: currentButton }) },
           body: JSON.stringify({ position: JSON.parse(position) as unknown }),
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -35,7 +35,7 @@ export default function WorkspaceObjectEditInput({ row, queryScope, featurePosit
       } catch (error) { if (!controller.signal.aborted) setFailure({ key: readKey, error }); }
     })();
     return () => controller.abort();
-  }, [target.LID, position, featurePosition, declarationId, readKey, onChange]);
+  }, [target.LID, position, featurePosition, currentButton, readKey, onChange]);
   const values = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
   const baseline = initial && Object.fromEntries(Object.entries(initial).filter(([field]) => ['ECODE', 'ENAME', 'Description'].includes(field)));
   const dirty = baseline !== null && JSON.stringify(values) !== JSON.stringify(baseline);

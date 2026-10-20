@@ -41,17 +41,28 @@ public sealed class WorkspaceClipboardDataExecutionContractTests
         Assert.Equal(2, reorder.Length);
         Assert.All(reorder, item => { Assert.Equal("WorkspaceFolder", item.Object); Assert.Equal(new[] { "edit" }, item.Actions); Assert.Null(item.Requirements); });
         Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "workspace.folder.reorder");
+        foreach (var (action, model) in new[] { ("create", "WorkspaceFolder"), ("createPart", "Part") })
+        {
+            var item = Assert.Single(allDeclarations, item => item.Surface == "pageActions" && item.ActionKey == action);
+            Assert.Empty(item.Execution); Assert.Equal(model, item.Object); Assert.Equal(["create"], item.Actions);
+            Assert.Equal("workspace.folder." + action, item.BusinessBinding);
+        }
+        foreach (var (surface, action, required) in new[] { ("rowActions", "edit", "edit"), ("rowActions", "delete", "delete"), ("pageActions", "deleteObjects", "delete") })
+        {
+            var item = Assert.Single(allDeclarations, item => item.Surface == surface && item.ActionKey == action);
+            Assert.Empty(item.Execution); Assert.Null(item.Object);
+            Assert.NotNull(item.ObjectRequirements);
+            Assert.Equal(["Document", "Part", "WorkspaceFolder"], item.ObjectRequirements.Select(target => target.Object).Order());
+            Assert.All(item.ObjectRequirements, target => Assert.Equal([required], target.Actions));
+        }
         // 同一正式fixture也覆盖已存在树动作的目标读取来源，位置仍取实际编译目录。
-        var clipboardKeys = new[] { "copy", "copySelected", "cut", "cutSelected", "paste", "remove", "removeSelected", "clearClipboard", "edit", "moveUp", "moveDown", "createPart", "createDocument", "delete", "deleteObjects", "pasteFolderCopy", "pasteFolderStructure", "pasteObjectCopy", "resolveObjectCopy" };
+        var clipboardKeys = new[] { "create", "copy", "copySelected", "cut", "cutSelected", "paste", "remove", "removeSelected", "clearClipboard", "edit", "moveUp", "moveDown", "createPart", "createDocument", "delete", "deleteObjects", "pasteFolderCopy", "pasteFolderStructure", "pasteObjectCopy", "resolveObjectCopy" };
         var features = compiled.Plan.FeatureCatalog.Where(point => point.ModuleId == "Workspace"
             && (point.Kind == "navigation" && point.Key == "workspace" || point.Kind == "action" && clipboardKeys.Contains(point.Key))).ToArray();
         var json = JsonSerializer.Serialize(new { declarations = allDeclarations, features }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
-        if (Environment.GetEnvironmentVariable("NEWP_WORKSPACE_CLIPBOARD_CONTRACT_FIXTURE") == "1")
-        {
-            File.WriteAllText(Path.Combine(root!.FullName, ".codex-temp", "issue-305", "workspace-clipboard-data-access.json"), json);
-            return;
-        }
         var fixture = Path.Combine(root!.FullName, "tests", "Kernel.Tests", "Fixtures", "WorkspaceClipboardDataAccess.contract.json");
+        if (Environment.GetEnvironmentVariable("NEWP_WORKSPACE_CLIPBOARD_CONTRACT_FIXTURE") == "1")
+            File.WriteAllText(fixture, json.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal));
         Assert.True(File.Exists(fixture));
         Assert.Equal(JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(fixture))),
             JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(json)));

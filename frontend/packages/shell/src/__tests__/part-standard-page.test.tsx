@@ -36,10 +36,12 @@ it.each(['success', 'receipt'] as const)('uses the formal Part routes and standa
   const readPosition = historyFeatures.readPosition;
   const createPosition = createDeclaration.featurePositions[0];
   const writeBindings: Array<{ declaration: string | null; position: string | null }> = [];
-  expect(createDeclaration.execution).toBe('part.part.create');
+  expect(createDeclaration.execution).toBe('');
+  expect(createDeclaration.businessBinding).toBe('part.part.create');
+  expect(createDeclaration.object).toBe('Part');
+  expect(createDeclaration.actions).toEqual(['create']);
   expect(createDeclaration.resources).toEqual(['part.part']);
-  expect(createDeclaration.requirements).toEqual([{ role: 'candidate', stage: 'submit', shape: 'candidate',
-    resources: ['part.part'], anyOf: [['create']], minimumCount: 1, maximumCount: 1 }]);
+  expect(createDeclaration.requirements).toBeUndefined();
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false,
     isLocalAdministrator: false, timeZoneId: 'Asia/Taipei', featurePositions: [readPosition, createPosition] };
   const fields = { EID: 'part-one', ECODE: 'P-001', ENAME: '首个零组件', Description: '说明', CreatedBy: 'actor', CreatedBy_DisplayValue: '账号',
@@ -52,7 +54,7 @@ it.each(['success', 'receipt'] as const)('uses the formal Part routes and standa
     if (path.endsWith('current-user')) return json(user);
     if (path.startsWith('/api/part/parts') && method === 'POST') {
       const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
-      writeBindings.push({ declaration: headers.get('X-NewP-Data-Declaration'), position: headers.get('X-NewP-Feature') });
+      writeBindings.push({ declaration: headers.get('X-NewP-Button'), position: headers.get('X-NewP-Feature') });
       writes.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
       return json(scenario === 'success' ? { fields, summaries: {} } : { succeeded: true });
     }

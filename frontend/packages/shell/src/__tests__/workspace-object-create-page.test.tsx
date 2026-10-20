@@ -55,7 +55,7 @@ it.each(['Part', 'Document'] as const)('carries the compiled %s creation source 
     if (url.pathname === '/api/workspace/content/' + (type === 'Part' ? 'parts' : 'documents') && method === 'POST') {
       const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
       writes.push({ body: input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)),
-        declaration: headers.get('X-NewP-Data-Declaration'), position: headers.get('X-NewP-Feature') });
+        declaration: headers.get(type === 'Part' ? 'X-NewP-Button' : 'X-NewP-Data-Declaration'), position: headers.get('X-NewP-Feature') });
       return json({ succeeded: true });
     }
     throw new Error(`Unexpected request ${method} ${url.pathname}`);

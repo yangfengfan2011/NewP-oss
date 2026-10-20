@@ -38,11 +38,11 @@ function lastBody() {
 }
 function createContext() {
   const dataAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item =>
-    item.execution === 'workspace.folder.create' && item.surface === 'pageActions' && item.actionKey === 'create');
+    item.businessBinding === 'workspace.folder.create' && item.surface === 'pageActions' && item.actionKey === 'create');
   if (!dataAccess) throw new Error('正式Workspace创建fixture缺失');
   const featurePosition = dataAccess.featurePositions.find(position => position.endsWith('/surface:list.pageActions/action:create'));
   if (!featurePosition) throw new Error('正式Workspace创建位置缺失');
-  return { featurePosition, dataAccess, action: { key: 'create', labelKey: 'Workspace.CreateFolder', dataAccess } };
+  return { featurePosition, dataAccess, buttonId: dataAccess.id, action: { key: 'create', labelKey: 'Workspace.CreateFolder', dataAccess, buttonId: dataAccess.id } };
 }
 
 it('keeps the actual create binding and option outside model fields, rejecting an unbound adapter', async () => {
@@ -65,7 +65,7 @@ it('keeps the actual create binding and option outside model fields, rejecting a
   const context = createContext();
   const result = await create({ input, queryScope: target, ...context });
   expect(platformFetch).toHaveBeenLastCalledWith('/api/workspace/content/folders', expect.objectContaining({ headers: expect.objectContaining({
-    'X-NewP-Feature': context.featurePosition, 'X-NewP-Data-Declaration': context.dataAccess.id,
+    'X-NewP-Feature': context.featurePosition, 'X-NewP-Button': context.buttonId,
   }) }));
   expect(result).toMatchObject({ change: { operation: 'create', id: '' } });
   let body = lastBody();
@@ -137,18 +137,18 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('uses the existing
 
 
 it('discards edit preparation when the current declaration disappears and never publishes the old fields', async () => {
-  const declaration = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.execution === 'workspace.content.edit')!;
+  const declaration = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.businessBinding === 'workspace.folder.editObject')!;
   let finish!: (response: Response) => void;
   let signal: AbortSignal | undefined;
   vi.mocked(platformFetch).mockImplementation((_url, init) => { signal = init?.signal as AbortSignal; return new Promise(resolve => { finish = resolve; }); });
   const change = vi.fn(); const draft = vi.fn(); const view = host();
   const render = (dataAccess?: ActionDataAccessRequirement) => localized(<WorkspaceObjectEditInput
     row={{ LID: 'edit-link', ObjectModelKey: 'WorkspaceFolder' }} queryScope={target}
-    featurePosition={declaration.featurePositions[0]} action={{ key: 'edit', labelKey: 'Edit', dataAccess }}
+    featurePosition={declaration.featurePositions[0]} buttonId={dataAccess?.id} action={{ key: 'edit', labelKey: 'Edit', dataAccess, buttonId: dataAccess?.id }}
     value={null} onChange={change} onDraftStateChange={draft} />);
   await act(async () => view.root.render(render(declaration)));
   expect(vi.mocked(platformFetch)).toHaveBeenCalledTimes(1);
-  expect(new Headers(vi.mocked(platformFetch).mock.calls[0][1]?.headers).get('X-NewP-Data-Declaration')).toBe(declaration.id);
+  expect(new Headers(vi.mocked(platformFetch).mock.calls[0][1]?.headers).get('X-NewP-Button')).toBe(declaration.id);
   await act(async () => view.root.render(render()));
   expect(signal?.aborted).toBe(true);
   await act(async () => finish(new Response(JSON.stringify({ fields: { ENAME: 'stale-edit', Description: 'must not publish' } }))));

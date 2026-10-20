@@ -534,53 +534,18 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "create",
-      "execution": "workspace.folder.create",
+      "execution": "",
       "resources": [
         "workspace.folder"
       ],
       "actions": [
-        "read",
-        "edit",
         "create"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:create"
       ],
-      "requirements": [
-        {
-          "role": "parent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "candidate",
-          "stage": "submit",
-          "shape": "candidate",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "create"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.create"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:createDocument",
@@ -643,37 +608,18 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "createPart",
-      "execution": "workspace.content.createPart",
+      "execution": "",
       "resources": [
-        "workspace.folder"
+        "part.part"
       ],
       "actions": [
-        "read",
-        "edit"
+        "create"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:createPart"
       ],
-      "requirements": [
-        {
-          "role": "parent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "Part",
+      "businessBinding": "workspace.folder.createPart"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:cutSelected",
@@ -740,37 +686,40 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "deleteObjects",
-      "execution": "workspace.content.delete",
+      "execution": "",
       "resources": [
-        "workspace.folder"
+        "workspace.folder",
+        "part.part",
+        "document.document"
       ],
-      "actions": [
-        "read",
-        "edit"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:deleteObjects"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.deleteObjects",
+      "objectRequirements": [
         {
-          "role": "parent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
+          "object": "WorkspaceFolder",
+          "actions": [
+            "delete"
           ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
+          "resourceKey": "workspace.folder"
+        },
+        {
+          "object": "Part",
+          "actions": [
+            "delete"
           ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
+          "resourceKey": "part.part"
+        },
+        {
+          "object": "Document",
+          "actions": [
+            "delete"
+          ],
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "workspace.backend"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:initializeOwnershipPending",
@@ -2007,37 +1956,40 @@
       "viewKey": "workspace.folder.list",
       "surface": "rowActions",
       "actionKey": "delete",
-      "execution": "workspace.content.delete",
+      "execution": "",
       "resources": [
-        "workspace.folder"
+        "workspace.folder",
+        "part.part",
+        "document.document"
       ],
-      "actions": [
-        "read",
-        "edit"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:delete"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.deleteObject",
+      "objectRequirements": [
         {
-          "role": "parent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
+          "object": "WorkspaceFolder",
+          "actions": [
+            "delete"
           ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
+          "resourceKey": "workspace.folder"
+        },
+        {
+          "object": "Part",
+          "actions": [
+            "delete"
           ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
+          "resourceKey": "part.part"
+        },
+        {
+          "object": "Document",
+          "actions": [
+            "delete"
+          ],
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "workspace.backend"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/rowActions/action:edit",
@@ -2045,55 +1997,41 @@
       "viewKey": "workspace.folder.list",
       "surface": "rowActions",
       "actionKey": "edit",
-      "execution": "workspace.content.edit",
+      "execution": "",
       "resources": [
-        "workspace.folder"
+        "workspace.folder",
+        "part.part",
+        "document.document"
       ],
-      "actions": [
-        "read",
-        "edit"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:edit",
         "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:edit"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.editObject",
+      "objectRequirements": [
         {
-          "role": "parent",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
+          "object": "WorkspaceFolder",
+          "actions": [
+            "edit"
           ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
+          "resourceKey": "workspace.folder"
         },
         {
-          "role": "parent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
+          "object": "Part",
+          "actions": [
+            "edit"
           ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
+          "resourceKey": "part.part"
+        },
+        {
+          "object": "Document",
+          "actions": [
+            "edit"
           ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "workspace.backend"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/rowActions/action:history",
@@ -3086,6 +3024,29 @@
       "staticScope": "folder",
       "staticScopeTitle": "\u6587\u4EF6\u5939",
       "titleKey": "Workspace.Copy",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:create",
+      "moduleId": "Workspace",
+      "key": "create",
+      "kind": "action",
+      "title": "\u65B0\u5EFA\u6587\u4EF6\u5939",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.create",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:create",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.CreateFolder",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
       "readBehaviors": [

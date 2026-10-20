@@ -101,7 +101,7 @@ it.each(['receipt', 'success', 'missing-read'] as const)('mounts the real shared
       return json({ succeeded: true });
     }
     if (path === '/api/workspace/content/folders' && method === 'POST') {
-      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Button'))
         .toBe(formalDataAccessFor('workspace.folder.list', 'pageActions', 'create').id);
       writes.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
       return json(scenario === 'success' ? rootDetail('created-folder', '创建后可读', '') : { succeeded: true });

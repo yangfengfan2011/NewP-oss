@@ -1011,7 +1011,6 @@ public sealed class AcceptanceGateTests
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);
-                var crud = new StandardCrudPageDriver(page);
                 var suffix = runId[..8];
                 var folder = "按钮文件夹 " + suffix;
                 var part = "按钮零组件 " + suffix;
@@ -1030,16 +1029,41 @@ public sealed class AcceptanceGateTests
                 await driver.EditObjectFromContextMenuAsync(fixture.ExistingDocumentName, fixture.ExistingDocumentName + " 已编辑");
                 await driver.DeleteSelectedAsync(part + " 已编辑", fixture.ExistingDocumentName + " 已编辑");
                 await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "workspace-writes-saved.png"));
-                await page.GotoAsync(new Uri(new Uri(page.Url), "/parts").ToString());
-                var drawer = await crud.OpenCreateDrawerAsync("新建零组件");
-                await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "编码", "BUTTON-INDEPENDENT-" + suffix);
-                await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "名称", "独立按钮零组件 " + suffix);
-                await crud.SaveAndCloseAsync(drawer, new("POST", "/api/part/parts", 201, "独立创建零组件"));
-                await crud.WaitForRowAsync("独立按钮零组件 " + suffix);
+                await CreateIndependentPartAsync(page, suffix);
                 await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "part-independent-created.png"));
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = page.Url, actor = "ordinary", journey = "folder-create-tree-edit-delete-part-create-row-edit-document-context-edit-mixed-delete-independent-part-create" }, token);
             }).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "当前普通账号沿正式独立Part列表创建一次，复用Workspace对象写入旅程的独立片段")]
+    public async Task NativeIndependentPartCreate_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-independent-part-create");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                await CreateIndependentPartAsync(page, runId[..8]);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "part-independent-created.png"));
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "independent-part-create" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
+    // 两个正式场景复用相同Part片段，字段输入和保存仍由既有标准CRUD driver拥有。
+    internal static async Task CreateIndependentPartAsync(IPage page, string suffix)
+    {
+        await page.GotoAsync(new Uri(new Uri(page.Url), "/parts").ToString());
+        var crud = new StandardCrudPageDriver(page);
+        // CurrentRelease fixture保证已有Part；先等真实初载，避免把尚未出现的按钮误当菜单。
+        await crud.WaitForTableReadyAsync();
+        var drawer = await crud.OpenCreateDrawerAsync("新建零组件");
+        await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "编码", "BUTTON-INDEPENDENT-" + suffix);
+        await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "名称", "独立按钮零组件 " + suffix);
+        await crud.SaveAndCloseAsync(drawer, new("POST", "/api/part/parts", 201, "独立创建零组件"));
+        await crud.WaitForRowAsync("独立按钮零组件 " + suffix);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号在原Workspace入口创建零组件与带文件图文档，编辑后选中并删除两种对象")]

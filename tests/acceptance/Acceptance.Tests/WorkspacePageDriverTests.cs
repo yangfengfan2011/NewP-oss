@@ -7,6 +7,70 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "独立Part片段等正式列表初载后选择真实新建按钮并保存，无服务器或端口")]
+    public async Task IndependentPartCreate_WaitsForTheInitialListBeforeChoosingTheCreateEntry()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        var requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writes = 0;
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            var path = new Uri(route.Request.Url).AbsolutePath;
+            if (path == "/ready")
+            {
+                requested.TrySetResult();
+                await ready.Task;
+                await route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" });
+            }
+            else if (path == "/api/part/parts")
+            {
+                Assert.Equal("POST", route.Request.Method);
+                writes++;
+                await route.FulfillAsync(new() { Status = 201, ContentType = "application/json", Body = "{}" });
+            }
+            else if (path == "/parts") await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><main>列表加载中</main><script>
+                  fetch('/ready').then(()=>{
+                    document.querySelector('main').innerHTML='<div role="toolbar"><button id="create">新建零组件</button></div><table><tbody class="ant-table-tbody"><tr class="ant-table-row"><td>已有零组件</td></tr></tbody></table>';
+                    document.querySelector('#create').onclick=()=>{
+                      const drawer=document.createElement('div'); drawer.className='ant-drawer-content';
+                      drawer.innerHTML='<label>编码<input></label><label>名称<input id="name"></label><button>保存并关闭</button>'; document.body.append(drawer);
+                      drawer.querySelector('button').onclick=async()=>{
+                        const name=drawer.querySelector('#name').value;
+                        await fetch('/api/part/parts',{method:'POST'});
+                        const row=document.createElement('tr'); row.className='ant-table-row';
+                        const cell=document.createElement('td'); cell.textContent=name; row.append(cell);
+                        document.querySelector('tbody').append(row); drawer.remove();
+                      };
+                    };
+                  });
+                </script>
+                """ });
+            else await route.FulfillAsync(new() { ContentType = "text/html", Body = "<main>工作台</main>" });
+        });
+        await page.GotoAsync("http://workspace.test/");
+        var creating = AcceptanceGateTests.CreateIndependentPartAsync(page, "controlled");
+        await requested.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            // 初载未释放时只有占位，没有可选按钮或菜单；不修改driver的等待阈值。
+            var first = await Task.WhenAny(creating, Task.Delay(TimeSpan.FromSeconds(6)));
+            Assert.NotSame(creating, first);
+            Assert.Equal(0, writes);
+        }
+        finally { ready.TrySetResult(); }
+        await creating;
+        Assert.Equal(1, writes);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "树编辑driver先等本次保存后的目标路径读取，旧请求和其他节点不能提前完成，无服务器或端口")]
     public async Task TreeEdit_WaitsForItsSavedTargetPathBeforeCheckingTheBreadcrumb()
     {

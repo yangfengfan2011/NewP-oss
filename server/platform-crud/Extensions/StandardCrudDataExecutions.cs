@@ -1,6 +1,7 @@
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Kernel.ModulePlanning;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -108,11 +109,31 @@ public static class StandardCrudDataExecutions
         var provider = "standardCrud." + (prepareOnly ? "update" : executionOperation);
         if (contract is null || contract.Boundary != "entry" || contract.ModuleId != descriptor.ModuleId || contract.Provider != provider
             || !contract.Requirements.All(requirement => requirement.Resources.SequenceEqual([descriptor.ResourceKey]))
-            || !plan.ActionDataAccessCatalog.Any(requirement => requirement.Execution == execution))
+            || !plan.ActionDataAccessCatalog.Any(requirement => requirement.Execution == execution
+                || operation == "export" && requirement.BusinessBinding == execution && requirement.Surface == "export"))
             throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_BINDING_INVALID");
         var bindings = new List<DataExecutionBindingReference> { new(execution, provider, operation is "read" or "list" or "export" or "options" ? "read" : "submit") };
         if (operation == "read") bindings = DetailReadBindings(descriptor).ToList();
         endpoint.WithMetadata(new StandardCrudDataExecutionEndpoint(descriptor.ResourceKey, operation, bindings));
+        // 端点按活动声明固定按钮路径，同时保留原查询合同登记；缺失HTTP身份不能回退旧入口。
+        if (operation == "export" && plan.ActionDataAccessCatalog.Any(item => item.BusinessBinding == execution && item.Surface == "export"))
+        {
+            endpoint.WithMetadata(new ButtonBusinessHandlerAttribute(typeof(StandardCrudExportHandler)));
+            endpoint.AddEndpointFilter(async (context, next) =>
+            {
+                try
+                {
+                    context.HttpContext.RequestServices.GetRequiredService<IButtonExecutionAccess>().BindHandler(typeof(StandardCrudExportHandler));
+                    return await next(context);
+                }
+                catch (ActionDataAccessException exception)
+                {
+                    return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                        extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+                }
+            });
+            return endpoint;
+        }
         endpoint.AddEndpointFilter(async (context, next) =>
         {
             try

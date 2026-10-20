@@ -925,7 +925,7 @@
     "viewKey": "organization.person.list",
     "surface": "export",
     "actionKey": "export",
-    "execution": "organization.person.export",
+    "execution": "",
     "resources": [
       "organization.person"
     ],
@@ -935,6 +935,8 @@
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list/action:export"
     ],
+    "object": "Person",
+    "businessBinding": "organization.person.export",
     "requirements": [
       {
         "role": "query",

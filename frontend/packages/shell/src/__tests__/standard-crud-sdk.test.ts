@@ -10,9 +10,29 @@ import {
   readStandardCrudString,
   StandardCrudRequestError,
   readStandardCrudRequestError,
+  type ActionDataAccessRequirement,
 } from '@icp-platform/sdk';
+import exampleDataAccess from '../../../../../tests/Kernel.Tests/Fixtures/ExampleCrudDataAccess.contract.json';
 
 describe('standard CRUD SDK helpers', () => {
+  it.each(['current', 'all'] as const)('preserves the formal export query with the compiled button identity for %s', async mode => {
+    const declaration = (exampleDataAccess as ActionDataAccessRequirement[]).find(item => item.surface === 'export')!;
+    expect(declaration.businessBinding).toBe('example.record.export');
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('xlsx', { status: 200 }));
+    const adapter = createStandardCrudRestDataAdapter({ apiRoute: '/api/example/records', fetcher,
+      mapListItem: item => item, getRowId: () => 'ExampleRecord_1' });
+    const query = { pageIndex: 2, pageSize: 10, sortBy: 'ECODE', sortDirection: 'asc' as const, filters: { keyword: 'formal' } };
+    await adapter.exportList({ mode, columns: [{ key: 'name', field: 'ENAME', title: 'Name' }], query },
+      { featurePosition: declaration.featurePositions[0], dataAccess: declaration });
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe('/api/example/records/export');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('X-NewP-Button')).toBe(declaration.id);
+    expect(headers.get('X-NewP-Feature')).toBe(declaration.featurePositions[0]);
+    expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
+    expect(JSON.parse(String(init?.body))).toEqual({ mode, columns: [{ key: 'name', field: 'ENAME', title: 'Name' }], query });
+  });
+
   it('shares the real Response parser with authentication without consuming the response body', async () => {
     const problem = {
       code: 'AUTH_ADMISSION_DENIED', reasonKey: 'Authentication.AdmissionDenied', args: { reason: 'inactive' },

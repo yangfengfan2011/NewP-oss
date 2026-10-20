@@ -9,6 +9,7 @@ using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public sealed class ButtonQueryReadSourceTests
 {
     [Theory]
@@ -86,7 +87,8 @@ public sealed class ButtonQueryReadSourceTests
         var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Organization");
         candidates[owner] = candidates[owner] with { Features = candidates[owner].Features.Select(feature => feature with
         {
-            DataAccess = feature.DataAccess.Select(declaration => declaration.Execution != "organization.person.export" ? declaration
+            DataAccess = feature.DataAccess.Select(declaration => declaration.Execution != "organization.person.export"
+                && declaration.BusinessBinding != "organization.person.export" ? declaration
                 : declaration with { Execution = "", Object = array ? null : "Person", Actions = array ? [] : ["read"],
                     Resources = array ? ["organization.person", "organization.company"] : declaration.Resources,
                     ObjectRequirements = array ? [new("Person", ["read"], "organization.person"), new("Company", ["edit"], "organization.company")] : null,

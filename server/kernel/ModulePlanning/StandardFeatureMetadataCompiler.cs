@@ -288,8 +288,8 @@ public static class StandardFeatureMetadataCompiler
         {
             var hasDataAccess = action.TryGetProperty("dataAccess", out var declared);
             var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey")
-                ?? (surface is "outputActions" or "detailContributions" ? "view" : null);
-            var isButton = surface is "pageActions" or "rowActions" or "featureActions" or "outputActions" or "detailContributions";
+                ?? (surface == "export" ? "export" : surface is "outputActions" or "detailContributions" ? "view" : null);
+            var isButton = surface is "pageActions" or "rowActions" or "featureActions" or "outputActions" or "detailContributions" or "export";
             if (!hasDataAccess && (!isButton || operation is null or "view" or "refresh")) return;
             var index = result.FindIndex(feature => (feature.ReferenceKey ?? feature.Key) == owner);
             if (index < 0) throw new InvalidOperationException("数据声明缺少合法功能归属。");

@@ -14,7 +14,7 @@ public sealed class ButtonObjectArrayMetadataTests
         Assert.Empty(declaration.Actions);
         Assert.Equal(new[] { "test.folder", "part.part" }, declaration.Resources);
         Assert.Equal(new[] { "Folder", "Part" }, declaration.ObjectRequirements!.Select(item => item.Object));
-        Assert.All(declaration.ObjectRequirements, requirement => Assert.Equal(new[] { "read" }, requirement.Actions));
+        Assert.All(declaration.ObjectRequirements!, requirement => Assert.Equal(new[] { "read" }, requirement.Actions));
     }
 
     [Theory]

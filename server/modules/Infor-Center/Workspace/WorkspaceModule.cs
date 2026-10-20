@@ -23,6 +23,7 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<Func<WorkspacePositions>>(provider => () => provider.GetRequiredService<WorkspacePositions>());
         services.AddScoped<WorkspaceContents>();
         services.AddScoped<WorkspaceReorderHandler>();
+        services.AddScoped<WorkspaceHistoryButtonHandler>();
         services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
             WorkspaceFolderExecutions.CreateCaller(), "submit", "parent", "candidate"));
         services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",

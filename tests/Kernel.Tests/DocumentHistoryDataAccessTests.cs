@@ -15,16 +15,24 @@ public sealed class DocumentHistoryDataAccessTests
         var compiled = new CanonicalModulePlanCompiler().Compile("document-history", candidates);
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
         var plan = compiled.Plan!;
-        var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Document" && item.Execution.StartsWith("document.history.", StringComparison.Ordinal)).ToArray();
+        var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Document" && (item.Execution == "document.history.list" || item.BusinessBinding == "document.document.history")).ToArray();
         Assert.NotEmpty(declarations);
         Assert.All(declarations, item =>
         {
             Assert.Equal(new[] { "read" }, item.Actions);
             Assert.Equal(new[] { "document.document" }, item.Resources);
-            Assert.Equal("document.backend", item.Provider);
-            var target = Assert.Single(item.Requirements!);
-            Assert.Equal(("target", "read", "object"), (target.Role, target.Stage, target.Shape));
-            Assert.Equal(new[] { "read" }, Assert.Single(target.AnyOf));
+            if (item.BusinessBinding is not null)
+            {
+                Assert.Equal("Document", item.Object);
+                Assert.Null(item.Requirements);
+            }
+            else
+            {
+                Assert.Equal("document.backend", item.Provider);
+                var target = Assert.Single(item.Requirements!);
+                Assert.Equal(("target", "read", "object"), (target.Role, target.Stage, target.Shape));
+                Assert.Equal(new[] { "read" }, Assert.Single(target.AnyOf));
+            }
         });
         var repository = new DirectoryInfo(AppContext.BaseDirectory);
         while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
@@ -34,11 +42,12 @@ public sealed class DocumentHistoryDataAccessTests
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             var view = document.RootElement.GetProperty("view");
-            return (view.TryGetProperty("dataAccess", out var read) && IsHistory(read) ? 1 : 0) + new[] { "pageActions", "rowActions", "outputActions", "detailContributions" }
-                .Sum(surface => view.TryGetProperty(surface, out var actions) ? actions.EnumerateArray().Count(action => action.TryGetProperty("dataAccess", out var access) && IsHistory(access)) : 0);
+            var ownHistory = view.GetProperty("key").GetString() == "document.history.list";
+            return (ownHistory && view.TryGetProperty("dataAccess", out _) ? 1 : 0) + new[] { "pageActions", "rowActions", "outputActions", "detailContributions" }
+                .Sum(surface => view.TryGetProperty(surface, out var actions) ? actions.EnumerateArray().Count(action => action.TryGetProperty("dataAccess", out _)
+                    && (ownHistory || action.GetProperty("key").GetString() == "history")) : 0);
         });
         Assert.Equal(count, declarations.Length);
-        static bool IsHistory(JsonElement access) => access.GetProperty("execution").GetString()!.StartsWith("document.history.", StringComparison.Ordinal);
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         var fixture = JsonSerializer.Deserialize<ActionDataAccessRequirement[]>(File.ReadAllText(Path.Combine(repository.FullName,
             "tests/Kernel.Tests/Fixtures/DocumentHistoryDataAccess.contract.json")), options);
@@ -47,7 +56,7 @@ public sealed class DocumentHistoryDataAccessTests
             plan.Modules.Select(module => module.ModuleId).ToArray(), plan.Modules.Select(module => module.ModuleId).ToArray(), plan.FeatureCatalog, plan.ActionDataAccessCatalog));
         var projected = manifest.RootElement.GetProperty("modules").EnumerateArray().Single(module => module.GetProperty("moduleId").GetString() == "Document").GetProperty("dataAccess");
         Assert.Equal(JsonSerializer.Serialize(declarations, options), JsonSerializer.Serialize(projected.Deserialize<ActionDataAccessRequirement[]>(options)!
-            .Where(item => item.Execution.StartsWith("document.history.", StringComparison.Ordinal)), options));
+            .Where(item => (item.Execution == "document.history.list" || item.BusinessBinding == "document.document.history")), options));
         var history = Assert.Single(plan.FeatureCatalog, feature => feature.ModuleId == "Document" && feature.BehaviorKey == "document.document.history");
         Assert.All(declarations, declaration => Assert.Equal(new[] { history.Position }, declaration.FeaturePositions));
         using var features = JsonDocument.Parse(File.ReadAllText(Path.Combine(repository.FullName, "tests/Kernel.Tests/Fixtures/DocumentHistoryFeatures.contract.json")));
@@ -63,9 +72,9 @@ public sealed class DocumentHistoryDataAccessTests
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
         var owner = Array.FindIndex(candidates, item => item.ModuleId == "Document");
         var features = candidates[owner].Features.ToArray();
-        var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.Execution == "document.history.enter"));
-        features[index] = features[index] with { DataAccess = features[index].DataAccess.Select(item => item.Execution != "document.history.enter" ? item
-            : additional ? item with { AdditionalActions = ["edit"] } : item with { Actions = ["read"] }).ToArray() };
+        var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.BusinessBinding == "document.document.history"));
+        features[index] = features[index] with { DataAccess = features[index].DataAccess.Select(item => item.BusinessBinding != "document.document.history" ? item
+            : additional ? item with { AdditionalActions = ["edit"] } : item with { Actions = ["unknown"] }).ToArray() };
         candidates[owner] = candidates[owner] with { Features = features };
         Assert.False(new CanonicalModulePlanCompiler().Compile("document-history-invalid-input", candidates).IsSuccess);
     }

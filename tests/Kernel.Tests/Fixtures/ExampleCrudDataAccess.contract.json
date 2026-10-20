@@ -94,7 +94,7 @@
     "viewKey": "example.record.list",
     "surface": "export",
     "actionKey": "export",
-    "execution": "example.record.export",
+    "execution": "",
     "resources": [
       "example.record"
     ],
@@ -104,6 +104,8 @@
     "featurePositions": [
       "Example/navigation:example.group/navigation:example.records/surface:list/action:export"
     ],
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.export",
     "requirements": [
       {
         "role": "query",

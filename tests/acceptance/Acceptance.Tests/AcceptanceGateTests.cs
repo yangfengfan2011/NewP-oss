@@ -185,6 +185,27 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    /// <summary>两个独立模块经各自正式路由和履历按钮打开详情并选中输出，复用当前三成员准备与清理。</summary>
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "独立Part和Document正式bundle的履历入口、详情及一次选中导出")]
+    public async Task NativeIndependentPartDocumentHistory_UsesFormalDrivers()
+    {
+        var (root, runId) = PrepareRun("native-independent-part-document-history");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                token.ThrowIfCancellationRequested();
+                await driver.InspectIndependentObjectHistoryAndOutputAsync("/parts", fixture.ExistingName,
+                    "/parts/history", "/api/part/parts", Path.Combine(root, "part-history-selected.xlsx"));
+                token.ThrowIfCancellationRequested();
+                await driver.InspectIndependentObjectHistoryAndOutputAsync("/documents", fixture.ExistingDocumentName,
+                    "/documents/history", "/api/document/documents", Path.Combine(root, "document-history-selected.xlsx"));
+                token.ThrowIfCancellationRequested();
+            }).RunAsync(CancellationToken.None);
+    }
+
     private const string RunEnvironmentVariable = "NEWP_RUN_ACCEPTANCE";
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "固定发行物的角色输入读取与功能授权PageRef最短接线")]

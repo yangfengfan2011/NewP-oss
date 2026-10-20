@@ -26,41 +26,48 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "DeclaredHistory301", "声明履历", "declared-history301", "声明履历账号",
             Point(fixture, "workspace.spaces.access"), history);
         using var ordinary = actor.Client;
-        var declaration = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Single(item => item.ModuleId == "Workspace"
+        var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
+        var list = plan.ActionDataAccessCatalog.Single(item => item.ModuleId == "Workspace"
             && item.ViewKey == "workspace.history.list" && item.Surface == "read");
-        Assert.Equal(new[] { "read" }, declaration.Actions);
-        ordinary.DefaultRequestHeaders.Add("X-NewP-Data-Declaration", declaration.Id);
+        var entered = HistoryButton(plan, "history");
+        var exported = HistoryButton(plan, "exportAll");
+        Assert.Equal(new[] { "read" }, list.Actions);
         var configuration = new DataScopeObjectDto("part.part", part.Id,
             [new("Declared301", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
-            "/api/part/parts/" + part.Id + "/permissions", configuration))
-            Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+        await Configure(configuration);
         var path = "/api/workspace/content/" + part.LinkId + "/history?queryScope="
             + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, path))
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, path, dataAccess: list))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var entered = plan.ActionDataAccessCatalog.Single(item => item.ModuleId == "Workspace" && item.Execution == "workspace.history.enter");
-        ordinary.DefaultRequestHeaders.Remove("X-NewP-Data-Declaration");
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, path)) Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
-        foreach (var invalid in new[] { "unregistered", entered.Id })
-        {
-            ordinary.DefaultRequestHeaders.Add("X-NewP-Data-Declaration", invalid);
-            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, path);
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            ordinary.DefaultRequestHeaders.Remove("X-NewP-Data-Declaration");
-        }
-        ordinary.DefaultRequestHeaders.Add("X-NewP-Data-Declaration", entered.Id);
+        using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, path, dataAccess: entered)) Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
         var checkPath = path.Replace("/history?", "/history/check/enter?", StringComparison.Ordinal);
-        using (var check = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, checkPath)) Assert.Equal(HttpStatusCode.NoContent, check.StatusCode);
-        ordinary.DefaultRequestHeaders.Remove("X-NewP-Data-Declaration");
-        ordinary.DefaultRequestHeaders.Add("X-NewP-Data-Declaration", declaration.Id);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
-            "/api/part/parts/" + part.Id + "/permissions", configuration with { Subjects = [configuration.Subjects[0] with {
-                Actions = new Dictionary<string, string> { ["read"] = "deny" } }] }))
+        using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, checkPath)) Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using (var check = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, checkPath, dataAccess: entered)) Assert.Equal(HttpStatusCode.NoContent, check.StatusCode);
+        using (var preview = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get,
+            path.Replace("/history?", "/history/check/preview?", StringComparison.Ordinal), dataAccess: HistoryButton(plan, "output")))
+            Assert.Equal(HttpStatusCode.NoContent, preview.StatusCode);
+        using (var detail = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get,
+            path.Replace("/history?", "/history/check/detail?", StringComparison.Ordinal), dataAccess: HistoryButton(plan, "view")))
+            Assert.Equal(HttpStatusCode.NoContent, detail.StatusCode);
+        var exportPath = path.Replace("/history?", "/history/export?", StringComparison.Ordinal);
+        using (var output = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, exportPath,
+            new ObjectHistoryOutputRequest("all", new()), exported)) Assert.Equal(HttpStatusCode.OK, output.StatusCode);
+        using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, exportPath,
+            new ObjectHistoryOutputRequest("all", new()), HistoryButton(plan, "output"))) Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
+        await Configure(configuration with { Subjects = [configuration.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny" } }] });
+        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, path, dataAccess: list)) Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, exportPath,
+            new ObjectHistoryOutputRequest("all", new()), exported)) Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+
+        async Task Configure(DataScopeObjectDto config)
+        {
+            var manage = Point(fixture, "part.part.authorize");
+            using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+                "/api/part/parts/" + part.Id + "/permissions", config,
+                OwnershipDeclaration(fixture, "part.part.authorization.manage", manage));
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
-        using var denied = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, path);
-        Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+        }
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实三类Workspace目标的声明入口、列表、详情、输出及来源重判，缺失/换绑声明不能免检")]
@@ -85,7 +92,8 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
             var config = new DataScopeObjectDto(resource, target.Id, [new("exits301-" + model, "all", null, 1,
                 new Dictionary<string, string> { ["read"] = "allow" })]);
             using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
-                "/api/workspace/content/" + target.LinkId + "/permissions" + query, config)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+                "/api/workspace/content/" + target.LinkId + "/permissions" + query, config,
+                OwnershipDeclaration(fixture, "workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")))) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
             using (var check = await Send("workspace.history.enter", HttpMethod.Get, basePath + "/check/enter" + query)) Assert.Equal(HttpStatusCode.NoContent, check.StatusCode);
             using var listed = await Send("workspace.history.list", HttpMethod.Get, basePath + query);
             var page = await ReadOkAsync(listed);
@@ -115,10 +123,13 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
 
         async Task<HttpResponseMessage> Send(string execution, HttpMethod method, string path, object? body = null)
         {
-            var requirement = plan.ActionDataAccessCatalog.First(item => item.ModuleId == "Workspace" && item.Execution == execution);
+            var operation = execution[(execution.LastIndexOf('.') + 1)..];
+            var key = operation == "enter" ? "history" : operation == "preview" ? "output" : operation == "detail" ? "view"
+                : operation + (body is ObjectHistoryOutputRequest { Mode: "selected" } ? "Selected" : "All");
+            var requirement = operation == "list" ? plan.ActionDataAccessCatalog.Single(item => item.Execution == execution) : HistoryButton(plan, key);
             using var request = new HttpRequestMessage(method, path);
             request.Headers.Add("X-NewP-Feature", history.Position);
-            request.Headers.Add("X-NewP-Data-Declaration", requirement.Id);
+            request.Headers.Add(requirement.BusinessBinding is null ? "X-NewP-Data-Declaration" : "X-NewP-Button", requirement.Id);
             if (body is not null) request.Content = JsonContent.Create(body);
             return await ordinary.SendAsync(request);
         }
@@ -156,8 +167,8 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
         Assert.Equal(HttpStatusCode.NotFound, wrongPath.StatusCode);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "同一执行关系的合成双按钮声明分别投影read/edit，并由真实HTTP按自身要求裁决")]
-    public async Task SameExecutionDeclarations_KeepIndependentProjectedAndServerDataRequirements()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "同一正式业务的双按钮分别声明实际对象read/edit，并由真实HTTP按自身要求裁决")]
+    public async Task SameBusinessButtons_KeepIndependentProjectedAndServerDataRequirements()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true, configureServices: services =>
         {
@@ -168,13 +179,12 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
                 .SelectMany(reader.ReadBuiltIn).Where(candidate => ids.Contains(candidate.ModuleId)).ToArray();
             var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Workspace");
             var features = candidates[owner].Features.ToArray();
-            var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.Execution == "workspace.history.enter"));
-            var declared = features[index].DataAccess.Single(item => item.Execution == "workspace.history.enter");
+            var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.BusinessBinding == "workspace.folder.history" && item.ActionKey == "history"));
+            var declared = features[index].DataAccess.Single(item => item.BusinessBinding == "workspace.folder.history" && item.ActionKey == "history");
             features[index] = features[index] with { DataAccess = [.. features[index].DataAccess,
-                declared with { ActionKey = "historyWithEdit", AdditionalActions = ["edit"] }] };
-            candidates[owner] = candidates[owner] with { Features = features,
-                DataExecutions = candidates[owner].DataExecutions.Select(contract => contract.Key == "workspace.history.enter"
-                    ? contract with { AllowedAdditionalActions = ["edit"] } : contract).ToArray() };
+                declared with { ViewKey = "workspace.history.withEdit", ObjectRequirements = declared.ObjectRequirements!
+                    .Select(item => item.Object == "Part" ? item with { Actions = ["read", "edit"] } : item).ToArray() }] };
+            candidates[owner] = candidates[owner] with { Features = features };
             var compiled = new CanonicalModulePlanCompiler().Compile("independent-button-requirements", candidates);
             Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
             services.Replace(ServiceDescriptor.Singleton(compiled.Plan!));
@@ -189,10 +199,11 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
         using var ordinary = actor.Client;
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
             "/api/part/parts/" + target.Id + "/permissions", new DataScopeObjectDto("part.part", target.Id,
-                [new("different-buttons301", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" })])))
+                [new("different-buttons301", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" })]),
+            OwnershipDeclaration(fixture, "part.part.authorization.manage", Point(fixture, "part.part.authorize"))))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace" && item.Execution == "workspace.history.enter").ToArray();
+        var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace" && item.BusinessBinding == "workspace.folder.history" && item.ActionKey == "history").ToArray();
         Assert.Equal(2, declarations.Length);
         var manifestText = new ICP.Platform.Kernel.PluginPackages.MetadataRuntimeManifestBuilder().Build(Path.GetDirectoryName(typeof(WorkspaceHistoryDeclarationSqlServerTests).Assembly.Location)!,
             plan.Modules.Select(module => module.ModuleId).ToArray(), plan.Modules.Select(module => module.ModuleId).ToArray(), plan.FeatureCatalog, plan.ActionDataAccessCatalog);
@@ -200,14 +211,20 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
         var frontend = manifest.RootElement.GetProperty("modules").EnumerateArray().Single(item => item.GetProperty("moduleId").GetString() == "Workspace").GetProperty("dataAccess");
         foreach (var declaration in declarations)
         {
-            Assert.Equal(declaration.Actions, frontend.EnumerateArray().Single(item => item.GetProperty("id").GetString() == declaration.Id)
-                .GetProperty("actions").EnumerateArray().Select(item => item.GetString()!));
+            Assert.Equal(declaration.GetObjectRequirements().Single(item => item.Object == "Part").Actions,
+                frontend.EnumerateArray().Single(item => item.GetProperty("id").GetString() == declaration.Id)
+                    .GetProperty("objectRequirements").EnumerateArray().Single(item => item.GetProperty("object").GetString() == "Part")
+                    .GetProperty("actions").EnumerateArray().Select(item => item.GetString()!));
             using var request = new HttpRequestMessage(HttpMethod.Get, "/api/workspace/content/" + target.LinkId + "/history/check/enter?queryScope="
                 + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
             request.Headers.Add("X-NewP-Feature", history.Position);
-            request.Headers.Add("X-NewP-Data-Declaration", declaration.Id);
+            request.Headers.Add("X-NewP-Button", declaration.Id);
             using var response = await ordinary.SendAsync(request);
-            Assert.Equal(declaration.ActionKey == "history" ? HttpStatusCode.NoContent : HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Equal(declaration.ViewKey == "workspace.history.withEdit" ? HttpStatusCode.Forbidden : HttpStatusCode.NoContent, response.StatusCode);
         }
     }
+    private static ActionDataAccessRequirement HistoryButton(CanonicalModulePlan plan, string key) =>
+        Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Workspace"
+            && item.BusinessBinding == "workspace.folder.history" && item.ActionKey == key);
+
 }

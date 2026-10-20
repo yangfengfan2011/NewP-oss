@@ -101,10 +101,10 @@
       }
     ],
     "outputActions": [
-      { "key": "exportSelected", "dataAccess": { "execution": "workspace.history.export", "resources": ["workspace.folder", "part.part", "document.document"] } },
-      { "key": "exportAll", "dataAccess": { "execution": "workspace.history.export", "resources": ["workspace.folder", "part.part", "document.document"] } },
-      { "key": "printSelected", "dataAccess": { "execution": "workspace.history.print", "resources": ["workspace.folder", "part.part", "document.document"] } },
-      { "key": "printAll", "dataAccess": { "execution": "workspace.history.print", "resources": ["workspace.folder", "part.part", "document.document"] } }
+      { "key": "exportSelected", "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ] },
+      { "key": "exportAll", "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ] },
+      { "key": "printSelected", "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ] },
+      { "key": "printAll", "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ] }
     ],
     "pageActions": [
       {
@@ -113,7 +113,7 @@
         "standardAction": "view",
         "handlerKey": "view",
         "inputKey": "objectHistoryOutput",
-        "dataAccess": { "execution": "workspace.history.preview", "resources": ["workspace.folder", "part.part", "document.document"] }
+        "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ]
       }
     ],
     "rowActions": [
@@ -123,7 +123,7 @@
         "standardAction": "view",
         "handlerKey": "view",
         "inputKey": "objectHistoryDetails",
-        "dataAccess": { "execution": "workspace.history.detail", "resources": ["workspace.folder", "part.part", "document.document"] }
+        "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ]
       }
     ]
   }

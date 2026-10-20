@@ -153,11 +153,21 @@ public sealed class ProductionEndpointAccessCoverageTests
         Assert.True(compiled.IsSuccess, System.Text.Json.JsonSerializer.Serialize(compiled.Diagnostics));
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSingleton(compiled.Plan!);
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var persistence = new ICP.Platform.Persistence.Composition.PersistencePlanCompiler(
+            Path.Combine(repository.FullName, "server", "platform-modeling", "metadata", "storage-types.json"))
+            .Compile(compiled.Plan!, ICP.Platform.Persistence.Planning.PersistenceProvider.SqlServer);
+        Assert.True(persistence.IsSuccess, System.Text.Json.JsonSerializer.Serialize(persistence.Diagnostics));
+        builder.Services.AddSingleton(persistence.Plan!);
         // 端点合同复用模块正式装配；新增按钮处理器不能靠测试侧逐路由许可清单登记。
         new ICP.Platform.Modules.Organization.OrganizationModule().ConfigureServices(builder.Services);
         new ICP.Platform.Modules.Identity.IdentityModule().ConfigureServices(builder.Services);
         new ICP.Platform.Modules.Authorization.AuthorizationModule().ConfigureServices(builder.Services);
-        builder.Services.AddScoped<ICP.Platform.Modules.Workspace.WorkspaceReorderHandler>();
+        new ICP.Platform.Modules.Workspace.WorkspaceModule().ConfigureServices(builder.Services);
+        new ICP.Platform.Modules.Part.PartModule().ConfigureServices(builder.Services);
+        new ICP.Platform.Modules.Document.DocumentModule().ConfigureServices(builder.Services);
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(AuthController).Assembly)
             .AddApplicationPart(typeof(AccessLogsController).Assembly)
@@ -173,8 +183,6 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(ExampleModule).Assembly);
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Part.PartCrudDescriptor.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create());
         using var app = builder.Build();
         app.MapControllers();
         app.MapStandardCrudResources();
@@ -190,7 +198,8 @@ public sealed class ProductionEndpointAccessCoverageTests
         foreach (var execution in module.DataExecutions)
         {
             if (execution.Boundary == "entry")
-                Assert.Contains(compiled.Plan.ActionDataAccessCatalog, declaration => declaration.Execution == execution.Key);
+                Assert.Contains(compiled.Plan.ActionDataAccessCatalog, declaration => declaration.Execution == execution.Key
+                    || execution.Provider == "standardCrud.export" && declaration.BusinessBinding == execution.Key && declaration.Surface == "export");
             foreach (var binding in execution.FixedBindings)
             {
                 Assert.Equal(execution.Boundary, binding.Kind);
@@ -223,7 +232,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
         var documentEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
             .Where(endpoint => endpoint.RoutePattern.RawText?.TrimStart('/').StartsWith("api/document/documents", StringComparison.Ordinal) == true).ToArray();
-        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        repository = new DirectoryInfo(AppContext.BaseDirectory);
         while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
         Assert.NotNull(repository);
         var documentRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Document");

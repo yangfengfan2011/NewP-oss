@@ -22,6 +22,15 @@ public sealed class ExampleExecutionEndpointCoverageTests
             .Select(endpoint => endpoint.Metadata.GetMetadata<StandardCrudDataExecutionEndpoint>()).Where(item => item?.ResourceKey == "example.record").ToArray();
         Assert.Equal(new[] { "create", "delete", "export", "list", "read", "update" }, bindings.Select(item => item!.Operation).Order(StringComparer.Ordinal));
         Assert.Contains(bindings.Single(item => item!.Operation == "read")!.Bindings, binding => binding.Execution == "example.record.update" && binding.Stage == "prepare");
+        foreach (var resource in new[] { "example.record", "organization.person" })
+        {
+            var export = Assert.Single(((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints),
+                endpoint => endpoint.Metadata.GetMetadata<StandardCrudDataExecutionEndpoint>() is { Operation: "export" } binding
+                    && binding.ResourceKey == resource);
+            Assert.Equal(typeof(ICP.Platform.Crud.Runtime.StandardCrudExportHandler),
+                export.Metadata.GetMetadata<ICP.Platform.Authorization.Http.ButtonBusinessHandlerAttribute>()?.HandlerType);
+            Assert.Equal(resource + ".export", Assert.Single(export.Metadata.GetMetadata<StandardCrudDataExecutionEndpoint>()!.Bindings).Execution);
+        }
     }
 
     [Theory]
@@ -75,18 +84,27 @@ public sealed class ExampleExecutionEndpointCoverageTests
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSingleton(compiled.Plan!);
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var persistence = new ICP.Platform.Persistence.Composition.PersistencePlanCompiler(
+            Path.Combine(repository.FullName, "server", "platform-modeling", "metadata", "storage-types.json"))
+            .Compile(compiled.Plan!, ICP.Platform.Persistence.Planning.PersistenceProvider.SqlServer);
+        Assert.True(persistence.IsSuccess, System.Text.Json.JsonSerializer.Serialize(persistence.Diagnostics));
+        builder.Services.AddSingleton(persistence.Plan!);
         builder.Services.AddStandardCrudKernel();
         new ICP.Platform.Modules.Organization.OrganizationModule().ConfigureServices(builder.Services);
         new ICP.Platform.Modules.Identity.IdentityModule().ConfigureServices(builder.Services);
         new ICP.Platform.Modules.Authorization.AuthorizationModule().ConfigureServices(builder.Services);
         builder.Services.AddStandardCrudResource(descriptor);
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Part.PartCrudDescriptor.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create());
-        // 完整活动计划含已迁移排序按钮，端点合同fixture也登记其真实处理器；不执行该业务。
-        builder.Services.AddScoped<ICP.Platform.Modules.Workspace.WorkspaceReorderHandler>();
+        new ICP.Platform.Modules.Workspace.WorkspaceModule().ConfigureServices(builder.Services);
+        new ICP.Platform.Modules.Part.PartModule().ConfigureServices(builder.Services);
+        new ICP.Platform.Modules.Document.DocumentModule().ConfigureServices(builder.Services);
         builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Identity.Controllers.IdentityAccountsController).Assembly)
             .AddApplicationPart(typeof(ICP.Platform.Modules.Authorization.Controllers.RoleController).Assembly)
-            .AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceContentsController).Assembly);
+            .AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceContentsController).Assembly)
+            .AddApplicationPart(typeof(ICP.Platform.Modules.Part.PartHistoryController).Assembly)
+            .AddApplicationPart(typeof(ICP.Platform.Modules.Document.DocumentHistoryController).Assembly);
         var app = builder.Build();
         app.MapControllers();
         return app;

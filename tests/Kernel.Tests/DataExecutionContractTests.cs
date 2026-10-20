@@ -15,8 +15,9 @@ public sealed class DataExecutionContractTests
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
         var declarations = compiled.Plan!.ActionDataAccessCatalog.Where(item => item.ModuleId == "Example").ToArray();
         Assert.NotEmpty(declarations);
-        Assert.All(candidates.Single(candidate => candidate.ModuleId == "Example").Features.SelectMany(feature => feature.DataAccess),
-            declaration => Assert.Empty(declaration.Actions));
+        // 旧执行条目不重复provider下限；导出按钮的read由唯一按钮声明拥有。
+        Assert.All(candidates.Single(candidate => candidate.ModuleId == "Example").Features.SelectMany(feature => feature.DataAccess)
+            .Where(declaration => declaration.BusinessBinding is null), declaration => Assert.Empty(declaration.Actions));
         var create = Assert.Single(declarations, item => item.Execution == "example.record.create");
         var candidate = Assert.Single(create.Requirements!);
         Assert.Equal("candidate", candidate.Shape);

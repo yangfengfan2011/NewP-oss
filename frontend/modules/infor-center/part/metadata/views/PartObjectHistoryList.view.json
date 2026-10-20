@@ -103,7 +103,7 @@
     "pageActions": [
       {
         "key": "output",
-        "dataAccess": { "execution": "part.history.preview", "resources": ["part.part"] },
+        "dataAccess": { "object": "Part", "actions": ["read"] },
         "labelKey": "Output",
         "standardAction": "view",
         "handlerKey": "view",
@@ -113,7 +113,7 @@
     "rowActions": [
       {
         "key": "view",
-        "dataAccess": { "execution": "part.history.detail", "resources": ["part.part"] },
+        "dataAccess": { "object": "Part", "actions": ["read"] },
         "labelKey": "View",
         "standardAction": "view",
         "handlerKey": "view",
@@ -121,15 +121,15 @@
       }
     ],
     "outputActions": [
-      { "key": "exportSelected", "dataAccess": { "execution": "part.history.export", "resources": ["part.part"] } },
-      { "key": "exportAll", "dataAccess": { "execution": "part.history.export", "resources": ["part.part"] } },
-      { "key": "printSelected", "dataAccess": { "execution": "part.history.print", "resources": ["part.part"] } },
-      { "key": "printAll", "dataAccess": { "execution": "part.history.print", "resources": ["part.part"] } }
+      { "key": "exportSelected", "dataAccess": { "object": "Part", "actions": ["read"] } },
+      { "key": "exportAll", "dataAccess": { "object": "Part", "actions": ["read"] } },
+      { "key": "printSelected", "dataAccess": { "object": "Part", "actions": ["read"] } },
+      { "key": "printAll", "dataAccess": { "object": "Part", "actions": ["read"] } }
     ],
     "detailContributions": [
       {
         "key": "part.object.history",
-        "dataAccess": { "execution": "part.history.enter", "resources": ["part.part"] },
+        "dataAccess": { "object": "Part", "actions": ["read"] },
         "targetViewKey": "part.part.detail",
         "navigationKey": "part.history",
         "pageRef": {

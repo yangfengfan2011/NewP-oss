@@ -240,7 +240,7 @@
       }
     ],
     "export": {
-      "dataAccess": { "execution": "organization.person.export", "resources": ["organization.person"] },
+      "dataAccess": { "object": "Person", "actions": ["read"] },
       "modes": [
         "current",
         "all"

@@ -2130,7 +2130,7 @@ describe('StandardCrudListPageHost', () => {
     expect(JSON.stringify(body.columns)).not.toContain('CompanyId_DisplayValue');
   });
 
-  it('projects the formal Example user column into the Shell export request as raw authoring', async () => {
+  it.each(['current', 'all'] as const)('projects the formal Example columns and its own button identity into %s export', async mode => {
     const declarations = exampleDataAccess as ActionDataAccessRequirement[];
     const exampleListCatalog = Object.fromEntries(
       Object.entries(exampleRecordListDictionary.ExampleRecordListView)
@@ -2228,7 +2228,7 @@ describe('StandardCrudListPageHost', () => {
 
     await act(async () => {
       const currentPageItem = Array.from(document.body.querySelectorAll('.ant-dropdown-menu-item')).find((item) =>
-        item.textContent?.replace(/\s+/g, '') === '导出当前');
+        item.textContent?.replace(/\s+/g, '') === (mode === 'current' ? '导出当前' : '导出全部'));
       currentPageItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushProTableRequest();
@@ -2237,7 +2237,11 @@ describe('StandardCrudListPageHost', () => {
     const [exportUrl, exportInit] = fetchMock.mock.calls[1];
     expect(exportUrl).toBe('/api/example/records/export');
     const body = JSON.parse(String((exportInit as RequestInit).body));
-    expect(body.mode).toBe('current');
+    expect(body.mode).toBe(mode);
+    const headers = new Headers((exportInit as RequestInit).headers);
+    expect(headers.get('X-NewP-Button')).toBe(formalDataAccessFor('example.record.list', 'export', 'export').id);
+    expect(headers.get('X-NewP-Feature')).toBe('ui-fixture:list:export');
+    expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
     expect(body.columns).toEqual([
       { key: 'code', field: 'ECODE', title: '示例编码' },
       { key: 'name', field: 'ENAME', title: '示例名称' },

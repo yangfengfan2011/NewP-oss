@@ -66,6 +66,22 @@ _Avoid_: 角色详情授权弹窗、角色基础信息编辑、用户角色分�
 
 功能位置的身份、入口依赖和切换边界见 [ADR-0048](../../adr/0048-functional-authorization-uses-entry-positions.md)。
 
+### 按钮动作权限（已确认目标，尚未实施）
+
+本节目标及其与现有执行合同的替代范围见 [ADR-0057](../../adr/0057-buttons-declare-object-actions-and-business-inputs-own-targets.md)。下文执行合同及其采用情况仍描述当前实现。
+
+**按钮动作权限声明（Button Action Permission Declaration）**：
+按钮自身对对象类型及所需动作权限的唯一声明，由平台对本次业务操作的实际目标自动判权。它不重复定义主体授权，也不按业务复杂程度区分按钮类型。
+_Avoid_: 独立执行权限清单、按钮类型模式、客户端允许结果
+
+**正式业务目标（Formal Business Target）**：
+正式业务输入契约明确为本次操作目标的规范对象或对象集合，平台对这些目标逐个检查按钮声明的动作权限，其他对象由业务按需要检查。目标定义属于业务输入契约，不形成独立权限配置，按钮判权与业务执行使用同一目标。
+_Avoid_: 页面展示对象推断、权限专用目标参数、请求中任意同名标识
+
+**业务主动判权（Business-Initiated Permission Check）**：
+业务实现根据自身语义选择是否进行、针对哪些对象和动作、在何时进行的权限检查。它使用通用判权能力，不要求额外的按钮权限声明。
+_Avoid_: 所有业务必须判权、复杂按钮模式、隐式继承按钮允许结果
+
 ### 数据范围授权（已确认目标，按 #227 分片交付）
 
 以下术语属于 [正式规格 #227](https://github.com/yangfengfan2011/NewP/issues/227) 的已确认目标，来源讨论 [#226](https://github.com/yangfengfan2011/NewP/issues/226) 已关闭；职责边界见 [ADR-0052](../../adr/0052-data-scope-authorization-keeps-management-and-action-boundaries.md)。

@@ -16,6 +16,9 @@ public sealed record ActionDataAccessDeclaration(string ModuleId, string ViewKey
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ButtonObjectRequirement>? ObjectRequirements { get; init; }
     public IReadOnlyList<string> AdditionalActions { get; init; } = [];
+    /// <summary>输入仅引用已有读取身份；实际要求仍属于来源合同，保存沿本按钮自身要求。</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? InputReadSourceKey { get; init; }
     public string Id => $"{Uri.EscapeDataString(ModuleId)}/view:{Uri.EscapeDataString(ViewKey)}/{Surface}"
         + (Surface == "read" ? "" : $"/action:{Uri.EscapeDataString(ActionKey)}");
 }
@@ -43,7 +46,7 @@ public sealed record ActionDataAccessRequirement(string Id, string ModuleId, str
 }
 
 /// <summary>从既有功能展开中的直接按钮声明编译数据要求，不增加功能授权点。</summary>
-public static class ActionDataAccessCompiler
+public static partial class ActionDataAccessCompiler
 {
     /// <summary>拒绝动作、身份、归属及资源引用错误，并合并同一 View 的合法功能出现位置。</summary>
     public static IReadOnlyList<ActionDataAccessRequirement> Compile(IReadOnlyList<FeatureDeclaration> features,
@@ -51,6 +54,7 @@ public static class ActionDataAccessCompiler
         IReadOnlyList<DataExecutionProviderContract>? providers = null)
     {
         var contracts = DataExecutionContracts.Compile(DataExecutionProviders.Resolve(executions ?? [], providers ?? []), actions);
+        features = BindInputReadSources(features, contracts);
         var positions = FeatureCatalogCompiler.Compile(features).ToDictionary(point => (point.ModuleId, point.ReferenceKey));
         var resources = features.SelectMany(feature => feature.DataResources).ToHashSet(StringComparer.Ordinal);
         var entries = features.SelectMany(feature => feature.DataAccess.Select(declaration => (feature, declaration))).ToArray();
@@ -109,6 +113,7 @@ public static class ActionDataAccessCompiler
             if (first.BusinessBinding is not null)
             {
                 if (group.Any(entry => entry.declaration.BusinessBinding != first.BusinessBinding || entry.declaration.Object != first.Object
+                    || entry.declaration.InputReadSourceKey != first.InputReadSourceKey
                     || !entry.declaration.Actions.SequenceEqual(first.Actions) || !entry.declaration.Resources.SequenceEqual(first.Resources)
                     || !SameObjects(entry.declaration.ObjectRequirements, first.ObjectRequirements)))
                     throw new InvalidOperationException("ACTION_DATA_ACCESS_IDENTITY_CONFLICT");

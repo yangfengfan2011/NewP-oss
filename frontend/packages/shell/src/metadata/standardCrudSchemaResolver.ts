@@ -51,6 +51,7 @@ export interface StandardCrudRuntimeActionSchema {
   navigationTargetKey?: string;
   handlerKey?: string;
   inputKey?: string;
+  inputReadSourceKey?: string;
   visibleWhen?: StandardCrudRowActionVisibilitySchema;
   disabledWhen?: StandardCrudRowActionDisabledSchema;
   dataDependency?: StandardCrudActionDataDependencySchema;
@@ -195,6 +196,7 @@ function readActionVisibility(value: unknown): StandardCrudRowActionVisibilitySc
 
 function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
   if (value.requiresSelection !== undefined && typeof value.requiresSelection !== 'boolean') throw new Error('requiresSelection must be a boolean');
+  if (value.inputReadSourceKey !== undefined && (typeof value.inputReadSourceKey !== 'string' || !value.inputReadSourceKey.trim())) throw new Error('INPUT_READ_SOURCE_INVALID');
   const standardAction = readString(value.standardAction);
   const variant = readString(value.variant);
   const confirmMessageKey = readString(value.confirmMessageKey);
@@ -230,6 +232,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     ...(handlerKey.length > 0 ? { handlerKey } : {}),
     ...(readString(value.navigationTargetKey) ? { navigationTargetKey: readString(value.navigationTargetKey) } : {}),
     ...(inputKey.length > 0 ? { inputKey } : {}),
+    ...(typeof value.inputReadSourceKey === 'string' ? { inputReadSourceKey: value.inputReadSourceKey } : {}),
     ...(visibleWhen ? { visibleWhen } : {}),
     ...(disabledWhen ? { disabledWhen } : {}),
     ...(dataDependency ? { dataDependency } : {}),

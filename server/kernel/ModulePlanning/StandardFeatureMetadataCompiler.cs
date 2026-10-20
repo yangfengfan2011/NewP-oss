@@ -294,6 +294,8 @@ public static class StandardFeatureMetadataCompiler
             var index = result.FindIndex(feature => (feature.ReferenceKey ?? feature.Key) == owner);
             if (index < 0) throw new InvalidOperationException("数据声明缺少合法功能归属。");
             var node = result[index];
+            var inputReadSource = action.TryGetProperty("inputReadSourceKey", out _)
+                ? Optional(action, "inputReadSourceKey") ?? throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID") : null;
             if (isButton && (!hasDataAccess || declared.ValueKind == JsonValueKind.Array
                 || declared.ValueKind == JsonValueKind.Object && declared.TryGetProperty("object", out _)))
             {
@@ -313,11 +315,13 @@ public static class StandardFeatureMetadataCompiler
                 var button = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, "",
                     !hasDataAccess ? [Text(view, "resourceKey")] : requirements.Select(entry => entry.ResourceKey).Distinct(StringComparer.Ordinal).ToArray(),
                     multiple || !hasDataAccess ? [] : requirements[0].Actions)
-                { Object = multiple || !hasDataAccess ? null : requirements[0].Object, ObjectRequirements = multiple ? requirements : null, BusinessBinding = node.BehaviorKey };
+                { Object = multiple || !hasDataAccess ? null : requirements[0].Object, ObjectRequirements = multiple ? requirements : null,
+                    BusinessBinding = node.BehaviorKey, InputReadSourceKey = inputReadSource };
                 if (!node.DataAccess.Any(item => item.Id == button.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, button] };
                 return;
             }
             if (!hasDataAccess) return;
+            if (inputReadSource is not null) throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID");
             if (declared.EnumerateObject().Any(property => property.Name is not ("execution" or "resources" or "additionalActions")))
                 throw new InvalidOperationException("ACTION_DATA_ACCESS_DECLARATION_INVALID");
             var declaration = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, Text(declared, "execution"),

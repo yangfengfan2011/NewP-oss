@@ -220,11 +220,12 @@ function QualifiedAction<TDetail, TRow>({ action, context, featurePosition, reso
 }) {
   const { t } = useLocalization();
   const query = usePlatformQuery<StandardCrudActionState>({
-    key: ['standard-crud-action-eligibility', resourceKey ?? '', context.id ?? '', action.key, action.dataAccess?.id ?? '', featurePosition, epoch,
+    key: ['standard-crud-action-eligibility', resourceKey ?? '', context.id ?? '', action.key, action.dataAccess?.id ?? '', action.inputReadSourceKey ?? '', featurePosition, epoch,
       actionInstanceQueryIdentity(context.instance), JSON.stringify([context.queryScope ?? null, context.row ?? null, context.detail ?? null])],
     enabled: context.instance?.active !== false,
     load: ({ signal }) => resolver({ id: context.id, detail: context.detail, row: context.row,
-      queryScope: context.queryScope, instance: context.instance, action, dataAccess: action.dataAccess, featurePosition, signal }),
+      queryScope: context.queryScope, instance: context.instance, action, dataAccess: action.dataAccess,
+      dataAccessDeclarations: context.dataAccessDeclarations, featurePosition, signal }),
   });
   if (query.status === 'error') return <span role="alert">{t('Platform.EligibilityUnavailable', '对象动作资格暂时无法判定。')}</span>;
   if (query.status !== 'success' || !query.data) return null;

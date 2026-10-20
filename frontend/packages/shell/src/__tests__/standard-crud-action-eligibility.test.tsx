@@ -9,7 +9,7 @@ import { companyStandardCrudResource } from '../../../../modules/platform/organi
 import { platformTestCatalogs } from './localizationTestCatalogs';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 import compiledRequirements from '../../../../../tests/Kernel.Tests/Fixtures/ExampleCrudDataAccess.contract.json';
-import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
+import { standardCrudInputReadSource, type ActionDataAccessRequirement } from '@icp-platform/sdk';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | undefined;
@@ -93,6 +93,27 @@ it('hides a functionally granted action after its object eligibility is denied',
     id: 'Person_1', featurePosition: 'person-authorize', action: expect.objectContaining({ key: 'authorize' }),
   }));
   expect(document.body.textContent).not.toContain('人员对象授权');
+});
+
+it('passes the explicit read directory to real eligibility and input without replacing the save action', async () => {
+  const source: ActionDataAccessRequirement = { id: 'page/read', moduleId: 'Test', viewKey: 'permissions', surface: 'read', actionKey: '',
+    execution: 'permissions.view', actions: ['read'], resources: ['test.item'], featurePositions: ['item-authorize'],
+    requirements: [{ role: 'view', stage: 'prepare', shape: 'object', resources: ['test.item'], anyOf: [['read']], minimumCount: 1, maximumCount: 1 }] };
+  const seen = vi.fn();
+  const eligibility = vi.fn(async context => { expect(standardCrudInputReadSource(context)).toBe(source); return { visible: true, available: true }; });
+  const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+  await act(async () => root!.render(<PlatformQueryProvider scopeKey="input-read-source"><StandardCrudActions
+    actions={[{ key: 'authorize', labelKey: '编辑权限', inputKey: 'permissions', inputReadSourceKey: source.viewKey }]}
+    featureResolutionForAction={() => ({ kind: 'allowed', position: 'item-authorize' })}
+    actionEligibilityResolvers={{ authorize: eligibility }}
+    actionInputs={{ permissions: context => { seen(standardCrudInputReadSource(context)); return <span>读取原权限页</span>; } }}
+    handlers={{ authorize: vi.fn() }} refresh={vi.fn()} context={{ id: 'item-1', dataAccessDeclarations: [source] }}
+  /></PlatformQueryProvider>));
+  await vi.waitFor(() => expect(container.querySelector('button')?.disabled).toBe(false));
+  await act(async () => container.querySelector('button')!.click());
+  await vi.waitFor(() => expect(seen).toHaveBeenCalledWith(source));
+  expect(eligibility).toHaveBeenCalledTimes(1);
+  expect(document.body.textContent).toContain('读取原权限页');
 });
 
 it('protects an edited object authorization draft when closing the shared action modal', async () => {

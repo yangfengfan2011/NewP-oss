@@ -51,6 +51,15 @@ public static class DataExecutionContracts
             if (item.GetProperty("provider").GetString() is "entityOwnership.transfer" or "entityOwnership.initialize")
             {
                 var ownershipProvider = item.GetProperty("provider").GetString()!;
+                // 已迁移输入仅保留原query/read来源；旧按钮混合写合同仍按原短声明读取。
+                if (ownershipProvider == "entityOwnership.initialize" && item.TryGetProperty("requirements", out _))
+                {
+                    var readSource = item.Deserialize<DataExecutionContract>(options)
+                        ?? throw new InvalidOperationException("DATA_EXECUTION_CONTRACT_INVALID");
+                    if (readSource.ModuleId != moduleId || !IsReadQuery(readSource.Requirements))
+                        throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
+                    return readSource;
+                }
                 if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resources"))
                     || item.GetProperty("moduleId").GetString() != moduleId)
                     throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
@@ -139,7 +148,8 @@ public static class DataExecutionContracts
             if ((contract.Provider is "entityOwnership.transfer" or "entityOwnership.initialize")
                 && (contract.AllowedAdditionalActions.Count != 0 || contract.Branches.Count != 0
                     || contract.TargetResource is not null || contract.TargetResources is not null || contract.ProviderModuleId is not null
-                    || JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(OwnershipRequirements(contract.Provider, contract.Requirements[0].Resources))
+                    || !(contract.Provider == "entityOwnership.initialize" && contract.Boundary == "entry" && IsReadQuery(contract.Requirements))
+                        && JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(OwnershipRequirements(contract.Provider, contract.Requirements[0].Resources))
                     || !actions.Any(action => action.Key == "edit" && action.RequiresRead)))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
         }
@@ -149,6 +159,13 @@ public static class DataExecutionContracts
     // 固定中央能力不归某个业务backend；模块不能注册同名provider替换共享下限。
     internal static bool IsBuiltInProvider(string provider) => provider.StartsWith("standardCrud.", StringComparison.Ordinal)
         || provider is "entityOwnership.transfer" or "entityOwnership.initialize";
+
+    // 原候选查询只保留query/read的SQL计划合同，不能夹带写入、分支或额外要求。
+    internal static bool IsReadQuery(IReadOnlyList<DataExecutionRequirement> requirements) => requirements is [var query]
+        && query.Role == "query" && query.Stage == "read" && query.Shape == "query"
+        && query.MinimumCount == 0 && query.MaximumCount is null && query.Branch is null
+        && query.ReadResolverKey is null && query.ResourceAnyOf is null
+        && query.AnyOf is [var branch] && branch is not null && branch.SequenceEqual(["read"]);
 
     // 转交沿原edit读取依赖；维护保留原显式read404、edit403两个位置，不合并或新增读取。
     private static IReadOnlyList<DataExecutionRequirement> OwnershipRequirements(string provider, IReadOnlyList<string> resources)

@@ -209,6 +209,7 @@ export {
   standardCrudRequestHeaders,
 } from './standardCrudRest';
 export type { StandardCrudFieldErrorFact, StandardCrudProblemFact } from './standardCrudRest';
+export { standardCrudInputReadSource } from './standardCrudInputReadSource';
 
 export interface I18nResource {
   locale: string;

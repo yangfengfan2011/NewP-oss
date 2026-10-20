@@ -225,6 +225,8 @@ export interface StandardCrudActionDefinition {
   requiresSelection?: boolean;
   handlerKey?: string;
   inputKey?: string;
+  /** 仅引用已有输入读取来源；不替代当前按钮的数据要求或保存身份。 */
+  inputReadSourceKey?: string;
 }
 
 export interface ActionDataAccessRequirement {
@@ -302,7 +304,7 @@ export type StandardCrudActionStateResolver<TDetail = unknown, TRow = unknown> =
 
 /** 异步对象资格由资源 owner 按正式功能位置读取；明确拒绝可隐藏动作，依赖故障必须传播。 */
 export type StandardCrudActionEligibilityResolver<TDetail = unknown, TRow = unknown> = (
-  context: Pick<StandardCrudActionContext<TDetail, TRow>, 'id' | 'detail' | 'row' | 'queryScope' | 'instance' | 'dataAccess'> &
+  context: Pick<StandardCrudActionContext<TDetail, TRow>, 'id' | 'detail' | 'row' | 'queryScope' | 'instance' | 'dataAccess' | 'dataAccessDeclarations'> &
     { action: StandardCrudActionDefinition; featurePosition: string; signal: AbortSignal },
 ) => Promise<StandardCrudActionState>;
 

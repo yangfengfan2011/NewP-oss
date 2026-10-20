@@ -900,6 +900,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     return dataAccess ? [[key, dataAccess]] : [];
   })), [view.lookupBindings]);
   const dataAccessDeclarations = view.dataAccess ? runtimeMetadata?.manifest.modules.flatMap(module => module.dataAccess ?? []).filter(item => item.viewKey === view.key) : undefined;
+  // 输入按显式source key读取正式目录；列表查询仍只使用本View的原来源集合。
+  const inputReadDeclarations = runtimeMetadata?.manifest.modules.flatMap(module => module.dataAccess ?? []);
   const [runtimeColumnGeneration, setRuntimeColumnGeneration] = useState<StandardCrudRuntimeColumnGeneration | null>(null);
   const resolvedColumns = useMemo<ResolvedStandardCrudListColumn[]>(() => (
     schema.columnSource === 'runtime'
@@ -1937,9 +1939,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ...item,
           eligibility: { resourceKey: registration.resourceKey, objectId: rowId,
             featurePosition: position,
-            sourceKey: JSON.stringify([actionInstanceQueryIdentity(actionInstance), action.dataAccess?.id, host.input.queryScope, row]),
+            sourceKey: JSON.stringify([actionInstanceQueryIdentity(actionInstance), action.dataAccess?.id, action.inputReadSourceKey, host.input.queryScope, row]),
             resolve: (signal: AbortSignal) => resolver({ id: rowId, row, queryScope: host.input.queryScope,
-              instance: actionInstance, action, dataAccess: action.dataAccess, featurePosition: position, signal }) },
+              instance: actionInstance, action, dataAccess: action.dataAccess, dataAccessDeclarations: inputReadDeclarations, featurePosition: position, signal }) },
         } : item;
       });
   }
@@ -2530,7 +2532,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       {rowInputAction?.action.inputKey && registration.actionInputRenderers?.[rowInputAction.action.inputKey] ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingActionConfirmation', '正在加载操作确认…')}</div>}>
           <StandardCrudActionReviewDialog
-            dataAccessDeclarations={dataAccessDeclarations}
+            dataAccessDeclarations={inputReadDeclarations}
             open={host.lifecycle.active}
             action={{ ...rowInputAction.action,
               confirmLabel: rowInputAction.action.confirmLabelKey

@@ -14,7 +14,7 @@ namespace ICP.Platform.Acceptance.Tests;
 [Collection(AcceptanceGateCollection.Name)]
 public sealed class AcceptanceGateTests
 {
-    /// <summary>岗位列表与查看Drawer共用正式编辑按钮；只证明真实控件到API的最短接线。</summary>
+    /// <summary>岗位列表与查看Drawer各自使用正式编辑按钮；只证明真实控件到API的最短接线。</summary>
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "岗位列表编辑与详情进入编辑消费按钮唯一声明")]
     public async Task PositionButtonExecution_UsesFormalListAndDetailDriver()
     {
@@ -38,7 +38,8 @@ public sealed class AcceptanceGateTests
                 row = await driver.WaitForRowAsync(name + " 列表编辑");
                 await row.GetByRole(AriaRole.Button, new() { Name = name + " 列表编辑", Exact = true }).ClickAsync();
                 var detail = await driver.WaitForVisibleDrawerAsync("岗位详情");
-                await detail.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
+                // 沿driver既有的两汉字空白规则匹配AntD可访问名称，仍限定当前详情Drawer。
+                await detail.GetByRole(AriaRole.Button, new() { NameRegex = new System.Text.RegularExpressions.Regex(@"^编\s*辑$") }).ClickAsync();
                 edit = await driver.WaitForVisibleDrawerAsync("岗位详情进入编辑");
                 await StandardCrudPageDriver.FillDrawerFieldAsync(edit, "岗位名称", name + " 详情编辑");
                 await driver.SaveChangesAsync(edit, new("PUT", "/api/organization/positions/", 200, "岗位详情编辑", PathIsPrefix: true));

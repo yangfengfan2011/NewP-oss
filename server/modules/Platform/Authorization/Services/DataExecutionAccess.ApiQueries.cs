@@ -27,8 +27,8 @@ public sealed partial class DataExecutionAccess
     {
         var request = http.HttpContext ?? throw new ActionDataAccessException(400, "ActionDataAccess.ContextRequired");
         if (request.User.Identity?.IsAuthenticated != true) throw new ActionDataAccessException(401, "ActionDataAccess.SubjectRequired");
-        // 此纯固定API不开放客户端声明选择；拒绝foreign头，不将entry缺声明请求导向该方法。
-        if (request.Request.Headers.ContainsKey("X-NewP-Data-Declaration") || binding is null
+        // 此纯固定API不开放客户端按钮或声明选择；空白头同样拒绝，不将entry缺身份请求导向该方法。
+        if (request.Request.Headers.ContainsKey("X-NewP-Button") || request.Request.Headers.ContainsKey("X-NewP-Data-Declaration") || binding is null
             || binding.Branch is not null || string.IsNullOrWhiteSpace(identity)
             || request.GetEndpoint() is not RouteEndpoint endpoint || string.IsNullOrWhiteSpace(endpoint.RoutePattern.RawText))
             throw ApiBindingInvalid();

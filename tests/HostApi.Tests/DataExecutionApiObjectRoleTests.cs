@@ -24,6 +24,10 @@ public sealed partial class DataExecutionQueryRoleTests
     [InlineData("identity")]
     [InlineData("resource")]
     [InlineData("view-header")]
+    [InlineData("button-header")]
+    [InlineData("blank-button-header")]
+    [InlineData("blank-view-header")]
+    [InlineData("mixed-headers")]
     [InlineData("role")]
     [InlineData("binding-stage")]
     [InlineData("query-shape")]
@@ -42,6 +46,12 @@ public sealed partial class DataExecutionQueryRoleTests
             case "identity": context = context with { Identity = "foreign-api" }; break;
             case "resource": resource = "part.part"; break;
             case "view-header": http.Request.Headers["X-NewP-Data-Declaration"] = "foreign-entry"; break;
+            case "button-header": http.Request.Headers["X-NewP-Button"] = "foreign-button"; break;
+            case "blank-button-header": http.Request.Headers["X-NewP-Button"] = ""; break;
+            case "blank-view-header": http.Request.Headers["X-NewP-Data-Declaration"] = ""; break;
+            case "mixed-headers":
+                http.Request.Headers["X-NewP-Button"] = "foreign-button";
+                http.Request.Headers["X-NewP-Data-Declaration"] = "foreign-entry"; break;
             case "role": context = context with { Role = "query" }; break;
             case "binding-stage": context = context with { Binding = context.Binding with { Stage = "submit" } }; break;
         }

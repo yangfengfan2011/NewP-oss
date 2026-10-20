@@ -49,6 +49,10 @@ public sealed partial class DataExecutionQueryRoleTests
     [InlineData("entry")]
     [InlineData("internal")]
     [InlineData("view-header")]
+    [InlineData("button-header")]
+    [InlineData("blank-button-header")]
+    [InlineData("blank-view-header")]
+    [InlineData("mixed-headers")]
     [InlineData("role")]
     [InlineData("binding-stage")]
     [InlineData("shape")]
@@ -70,6 +74,12 @@ public sealed partial class DataExecutionQueryRoleTests
             case "entry": context = context with { Binding = new("workspace.history.enter", "workspace.backend", "read") }; break;
             case "internal": context = context with { Binding = new("workspace.properties.detail", "workspace.backend", "read") }; break;
             case "view-header": http.Request.Headers["X-NewP-Data-Declaration"] = "foreign-view-declaration"; break;
+            case "button-header": http.Request.Headers["X-NewP-Button"] = "foreign-button"; break;
+            case "blank-button-header": http.Request.Headers["X-NewP-Button"] = ""; break;
+            case "blank-view-header": http.Request.Headers["X-NewP-Data-Declaration"] = ""; break;
+            case "mixed-headers":
+                http.Request.Headers["X-NewP-Button"] = "foreign-button";
+                http.Request.Headers["X-NewP-Data-Declaration"] = "foreign-entry"; break;
             case "role": context = context with { Role = "target" }; break;
             case "binding-stage": context = context with { Binding = context.Binding with { Stage = "submit" } }; break;
         }

@@ -35,6 +35,10 @@ public sealed partial class DataExecutionQueryRoleTests
     [InlineData("method")]
     [InlineData("owner")]
     [InlineData("header")]
+    [InlineData("button-header")]
+    [InlineData("blank-button-header")]
+    [InlineData("blank-view-header")]
+    [InlineData("mixed-headers")]
     [InlineData("resource")]
     [InlineData("role")]
     [InlineData("shape")]
@@ -56,6 +60,11 @@ public sealed partial class DataExecutionQueryRoleTests
             _ => source
         };
         if (mismatch == "header") http.Request.Headers["X-NewP-Data-Declaration"] = "foreign-entry";
+        if (mismatch == "button-header") http.Request.Headers["X-NewP-Button"] = "foreign-button";
+        if (mismatch == "blank-button-header") http.Request.Headers["X-NewP-Button"] = "";
+        if (mismatch == "blank-view-header") http.Request.Headers["X-NewP-Data-Declaration"] = "";
+        if (mismatch == "mixed-headers")
+        { http.Request.Headers["X-NewP-Button"] = "foreign-button"; http.Request.Headers["X-NewP-Data-Declaration"] = "foreign-entry"; }
         await Assert.ThrowsAsync<ActionDataAccessException>(() => access.EvaluateApiObjectAsync(source, role, new(resource, "actual-eid")));
         Assert.Equal(0, counts.Resolved); Assert.Empty(counts.Actions); Assert.Equal(0, counts.UnresolvedReads);
     }

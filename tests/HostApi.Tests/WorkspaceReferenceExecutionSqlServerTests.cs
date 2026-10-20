@@ -39,12 +39,14 @@ public sealed class WorkspaceReferenceExecutionSqlServerTests
         var parentLink = await links.AsNoTracking().Where(row => EF.Property<string>(row, "CEID") == parent)
             .Select(row => EF.Property<string>(row, "LID")).SingleAsync();
         var before = await links.CountAsync();
+        var auditBefore = await db.Set<Dictionary<string, object?>>("BusinessChange").CountAsync();
         var position = new { rootPosition.spaceId, rootPosition.rootFolderId, linkIds = new[] { parentLink } };
         // 来源是实际存在的create声明，但此固定API不开放客户端声明选择。
         using var crossed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.add"), HttpMethod.Post,
             "/api/workspace/content/references", new { position, target = new { modelKey = "WorkspaceFolder", id = target } }, declaration);
         Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);
         Assert.Equal(before, await links.CountAsync());
+        Assert.Equal(auditBefore, await db.Set<Dictionary<string, object?>>("BusinessChange").CountAsync());
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "无头固定API保原功能门、父edit与目标read，不要求引用copy或目标edit")]

@@ -1,3 +1,6 @@
+using ICP.Platform.Kernel.Extensions;
+using ICP.Platform.HostApi.Extensions;
+using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Testing.Authorization;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
@@ -35,8 +38,15 @@ using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class ProductionEndpointAccessCoverageTests
+public sealed class ProductionEndpointAccessCoverageTests : IDisposable
 {
+    private readonly string _storageRoot = Path.Combine(Path.GetTempPath(), "newp-endpoint-production-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_storageRoot)) Directory.Delete(_storageRoot, recursive: true);
+    }
+
     [Fact]
     public void WorkspaceSourceProperties_RequiresTheWorkspaceReadFeatureOnItsExactReadOnlyRoute()
     {
@@ -148,26 +158,43 @@ public sealed class ProductionEndpointAccessCoverageTests
     [Fact, Trait("Category", "ModuleMetadataConsumer")]
     public void Compile_AllCurrentProductionControllersPersonCrudAndPluginManifests_HaveTerminalRules()
     {
+        var source = ICP.Platform.Testing.StandardDataReadFixtureCatalog.Source();
         var compiled = new CanonicalModulePlanCompiler().Compile("production-endpoint-coverage",
-            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+            new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source), source.PlatformCompositionModuleId);
         Assert.True(compiled.IsSuccess, System.Text.Json.JsonSerializer.Serialize(compiled.Diagnostics));
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSingleton(compiled.Plan!);
-        var repository = new DirectoryInfo(AppContext.BaseDirectory);
-        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
-        Assert.NotNull(repository);
         var persistence = new ICP.Platform.Persistence.Composition.PersistencePlanCompiler(
-            Path.Combine(repository.FullName, "server", "platform-modeling", "metadata", "storage-types.json"))
-            .Compile(compiled.Plan!, ICP.Platform.Persistence.Planning.PersistenceProvider.SqlServer);
+            Path.Combine(source.DistributionRoot, "server", "platform-modeling", "metadata", "storage-types.json"))
+            .Compile(compiled.Plan!, ICP.Platform.Persistence.PersistenceProvider.SqlServer);
         Assert.True(persistence.IsSuccess, System.Text.Json.JsonSerializer.Serialize(persistence.Diagnostics));
-        builder.Services.AddSingleton(persistence.Plan!);
+        // 只编译端点，不启动Host或连接数据库；基础设施仍沿正式组合注册，不替换业务/判权实现。
+        builder.Configuration["Authentication:Sessions:DefaultTimeZoneId"] = "Asia/Shanghai";
+        builder.Configuration["Files:StorageRoot"] = _storageRoot;
+        builder.Configuration["Persistence:Provider"] = "SqlServer";
+        builder.Configuration["ConnectionStrings:SqlServer"] = "Server=invalid;Database=never-connect;Integrated Security=True";
+        builder.Services.AddPlatformPersistence(builder.Configuration, persistence.Plan!);
+        builder.Services.AddRelationTrees(compiled.Plan!);
+        builder.Services.AddPlatformAuthorization();
+        // 与真实Workspace Host同一基础模块集合；认证会话和文件契约随实际依赖装配，不逐处理器补许可。
+        var moduleAssemblies = new[]
+        {
+            typeof(ICP.Platform.Modules.Identity.IdentityModule).Assembly,
+            typeof(ICP.Platform.Modules.Authentication.AuthenticationModule).Assembly,
+            typeof(ICP.Platform.Modules.Authorization.AuthorizationModule).Assembly,
+            typeof(ICP.Platform.Modules.Audit.AuditModule).Assembly,
+            typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly,
+            typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly,
+            typeof(ICP.Platform.Modules.Part.PartModule).Assembly,
+            typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly,
+            typeof(ICP.Platform.Modules.Files.FilesModule).Assembly
+        };
+        builder.Services.AddModuleSystem(options => options.Assemblies.AddRange(moduleAssemblies));
+        builder.Services.AddSingleton<ICP.Platform.Presentation.IRuntimeTextCatalog>(ICP.Platform.Presentation.RuntimeTextCatalog.Parse(
+            new ICP.Platform.Kernel.PluginPackages.LocalizationRuntimeManifestBuilder().Build(source.DistributionRoot)));
+        builder.Services.AddScoped<ICP.Platform.Presentation.IRequestPresentationContextAccessor,
+            ICP.Platform.HostApi.Presentation.HttpRequestPresentationContextAccessor>();
         // 端点合同复用模块正式装配；新增按钮处理器不能靠测试侧逐路由许可清单登记。
-        new ICP.Platform.Modules.Organization.OrganizationModule().ConfigureServices(builder.Services);
-        new ICP.Platform.Modules.Identity.IdentityModule().ConfigureServices(builder.Services);
-        new ICP.Platform.Modules.Authorization.AuthorizationModule().ConfigureServices(builder.Services);
-        new ICP.Platform.Modules.Workspace.WorkspaceModule().ConfigureServices(builder.Services);
-        new ICP.Platform.Modules.Part.PartModule().ConfigureServices(builder.Services);
-        new ICP.Platform.Modules.Document.DocumentModule().ConfigureServices(builder.Services);
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(AuthController).Assembly)
             .AddApplicationPart(typeof(AccessLogsController).Assembly)
@@ -179,6 +206,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(IdentityAccountsController).Assembly)
             .AddApplicationPart(typeof(PersonOrganizationLookupsController).Assembly)
             .AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceSpacesController).Assembly)
+            .AddApplicationPart(typeof(ICP.Platform.Modules.Part.PartHistoryController).Assembly)
             .AddApplicationPart(typeof(ICP.Platform.Modules.Document.DocumentFilesController).Assembly)
             .AddApplicationPart(typeof(ExampleModule).Assembly);
         builder.Services.AddStandardCrudKernel();
@@ -232,7 +260,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
         var documentEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
             .Where(endpoint => endpoint.RoutePattern.RawText?.TrimStart('/').StartsWith("api/document/documents", StringComparison.Ordinal) == true).ToArray();
-        repository = new DirectoryInfo(AppContext.BaseDirectory);
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
         while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
         Assert.NotNull(repository);
         var documentRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Document");

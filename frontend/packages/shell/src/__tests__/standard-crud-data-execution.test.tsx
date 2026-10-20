@@ -228,7 +228,7 @@ it.each(['current', 'all'] as const)('exports %s through the real PageEntry with
   const exportPosition = exportRequirement.featurePositions[0];
   const user = { id: 'export-reader', ecode: 'export-reader', ename: '导出读者', revision: 1, mustChangePassword: false,
     isLocalAdministrator: false, featurePositions: [entryPosition, exportPosition], timeZoneId: 'UTC' };
-  const requests: Array<{ path: string; declaration: string | null; position: string | null; body?: unknown }> = [];
+  const requests: Array<{ path: string; button: string | null; declaration: string | null; position: string | null; body?: unknown }> = [];
   const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
   const createUrl = vi.fn(() => 'blob:compiled-export');
   const revokeUrl = vi.fn();
@@ -241,12 +241,13 @@ it.each(['current', 'all'] as const)('exports %s through the real PageEntry with
     if (path.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (path.endsWith('current-user')) return json(user);
     const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+    const button = headers.get('X-NewP-Button');
     const declaration = headers.get('X-NewP-Data-Declaration');
     const position = headers.get('X-NewP-Feature');
     const body = path.endsWith('/export') ? input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)) : undefined;
-    requests.push({ path, declaration, position, body });
+    requests.push({ path, button, declaration, position, body });
     if (path.startsWith('/api/example/records?')) return json({ items: [], total: 0, page: 1, pageSize: 20 });
-    if (path !== '/api/example/records/export' || declaration !== exportRequirement.id || position !== exportPosition)
+    if (path !== '/api/example/records/export' || button !== exportRequirement.id || declaration !== null || position !== exportPosition)
       return json({ code: 'DECLARATION_MISMATCH' }, 400);
     if (denied) return json({ code: 'DATA_ACTION_DENIED' }, 403);
     return new Response(new Uint8Array([80, 75]), { headers: { 'Content-Disposition': 'attachment; filename="compiled-example.xlsx"' } });
@@ -276,7 +277,7 @@ it.each(['current', 'all'] as const)('exports %s through the real PageEntry with
   };
   await requestExport();
   await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1));
-  expect(requests.find(request => request.path.endsWith('/export'))).toMatchObject({ declaration: exportRequirement.id,
+  expect(requests.find(request => request.path.endsWith('/export'))).toMatchObject({ button: exportRequirement.id, declaration: null,
     position: exportPosition, body: { mode, query: { pageIndex: 1, pageSize: 20 } } });
   expect(exportPosition).not.toBe(entryPosition);
   expect(createUrl).toHaveBeenCalledTimes(1); expect(revokeUrl).toHaveBeenCalledWith('blob:compiled-export');

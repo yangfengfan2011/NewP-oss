@@ -66,7 +66,7 @@ public sealed class EntityOwnershipTransferSqlServerHttpApiTests
             var failure = await Record.ExceptionAsync(async () =>
             {
                 using var failed = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post,
-                    "/api/workspace/ownership/transfer", input);
+                    "/api/workspace/ownership/transfer", input, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer));
                 Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
             });
             if (failure is not null)
@@ -80,7 +80,7 @@ public sealed class EntityOwnershipTransferSqlServerHttpApiTests
         Assert.Equal("[]", await SnapshotAsync(fixture, "WorkspaceTransferNotification"));
 
         using (var succeeded = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post,
-                   "/api/workspace/ownership/transfer", input))
+                   "/api/workspace/ownership/transfer", input, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
         {
             var receipt = await ReadOkAsync(succeeded);
             Assert.True(receipt.GetProperty("succeeded").GetBoolean());

@@ -14,6 +14,10 @@ Workspace 拥有公共空间、当前账号个人空间及其根文件夹。入�
 
 ### 对象归属（创建、补齐与转交）
 
+维护和转交各自绑定正式动作声明，不能串用普通列表读取。`workspace.folder.initializeOwnership` 是本 owner 的有限合同：待补齐 query/read 在原 Link 查询点消费，单项和批次 target/edit 在原判权点消费，完整位置及端点读取仍由既有固定内部 Link 读取独立完成，不增加逐对象 read。管理员资格及专属账号候选保持原守卫。转交复用中央 `entityOwnership.transfer` 的 prepare/submit 下限，仍重验当前所属人，不增加源父 edit 或接收人对象 read。
+
+转交通知继续按可信 RecipientId 分页，不登记通知 ACL 或新增客户端声明；目标名称和发送者可见性在原分组、100 项读取点使用 Workspace 登记的固定内部来源。公共显示 helper 不依赖 Workspace 业务名，通用账号／部门目录保留自己的原读取边界。
+
 **创建人（Creator）**：最初创建对象的人。转交不改变创建人。
 
 **所属人（Object Owner）**：对象当前归属的人，新建时默认为创建人，转交后变为接收人。

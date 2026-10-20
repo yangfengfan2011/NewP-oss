@@ -37,6 +37,11 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         IReadOnlyList<PlatformQueryCondition> conditions, CancellationToken token = default) =>
         ReadAsync(resourceKey, request, false, false, InternalReadSource(resourceKey), token, conditions);
 
+    /// <summary>专属正式入口的条件查询在同一SQL计划点消费显式来源，不扩展通用view读取声明集合。</summary>
+    public Task<LinkQueryResult> QueryWithConditionsAsync(string resourceKey, LinkQueryRequest request,
+        IReadOnlyList<PlatformQueryCondition> conditions, LinkReadSource.Entry source, CancellationToken token = default) =>
+        ReadAsync(resourceKey, request, false, false, source, token, conditions);
+
     /// <summary>可信显式关系集合复用同一来源、端点、投影、筛选与分页；空集合保持空结果。</summary>
     public Task<LinkQueryResult> QuerySelectedAsync(string resourceKey, LinkQueryRequest request,
         IReadOnlyCollection<string> linkIds, IReadOnlyList<PlatformQueryCondition>? conditions = null, CancellationToken token = default)

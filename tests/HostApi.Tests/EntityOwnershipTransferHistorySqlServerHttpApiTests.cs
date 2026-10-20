@@ -42,7 +42,7 @@ public sealed class EntityOwnershipTransferHistorySqlServerHttpApiTests
             Assert.True(configured.StatusCode == HttpStatusCode.NoContent, await configured.Content.ReadAsStringAsync());
         }
         using (var transferred = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer",
-                   new { position, linkIds = targets.Select(target => target.LinkId).ToArray(), recipientId = recipient.AccountId }))
+                   new { position, linkIds = targets.Select(target => target.LinkId).ToArray(), recipientId = recipient.AccountId }, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             Assert.Equal(3, (await ReadOkAsync(transferred)).GetProperty("changed").GetInt32());
         var notifications = await FeatureHttpTestRequests.ReadAsync(recipientClient, notices, "/api/workspace/transfers/notifications");
         var locations = notifications.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("location").Clone()).ToArray();

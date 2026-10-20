@@ -24,6 +24,10 @@ ENTITY 的可选归属字段由公共 Model projector 提供：`OwnerId` 引用�
 
 受控归属补齐在真实 owner 的入口重验来源及 read/edit，公共内核只对选中模型的缺失列更新，不更新四个旧审计字段、不更改完整归属。实际 diff 与对象变化在同一事务登记到 Audit；未解析、无变化、失败或提交前取消不生成成功记录。停用维护入口可以停止新补齐，但回退不得删除新增列、已提交归属或历史；已升级数据库仍需兼容该前沿的 Host。
 
+中央固定提供者 `entityOwnership.transfer` 只接受资源短引用，准备与提交均在原所属人检查之后消费 `target/edit`；`edit.RequiresRead` 的既有完整读取依赖不能被消费者关闭，也不另加一轮 read。`entityOwnership.initialize` 固定待补齐 query/read，以及单项和批次的 visibility/read、target/edit，沿原 404/403 时点执行。资格与专属账号候选仍保留原管理员或当前所属人守卫，不能把准备结果缓存为提交许可。各业务 owner 的位置解析和独立读取仍由自己履行；不能选择中央合同后跳过必需角色。
+
+共享归属输入从正式动作透传声明引用；草稿、在途请求和提交身份包含该声明 ID。切换来源取消旧读取并丢弃旧选择，声明不进入业务载荷，缺失来源也不能回退为内部或旧执行。
+
 Part、Document 的运行时字段策略和复制字段分类消费同一 `CompiledPersistencePlan`：持久化编译器保留本候选已验证的 authoring 投影供字段策略使用，分类读取该计划的模型。authoring 投影只在内存中存在，不进入存储计划摘要、部署状态或迁移历史；缺失或 owner 不匹配时拒绝注册，不向工作树、Host 同名目录或安装路径回退读取。资源工厂在候选计划可解析后构造 descriptor，仍执行统一校验及资源/路由唯一性检查；无参 metadata provider 只用于显式设计时输入。
 
 ## Language

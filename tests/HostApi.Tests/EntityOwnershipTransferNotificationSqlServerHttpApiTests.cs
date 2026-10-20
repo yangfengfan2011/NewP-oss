@@ -25,7 +25,7 @@ public sealed class EntityOwnershipTransferNotificationSqlServerHttpApiTests
         using var ownerClient = owner.Client; using var recipientClient = recipient.Client;
         var target = await CreateAsync(fixture, ownerClient, position, "WorkspaceFolder", "folders", "create", "NOTIFY-PRIVATE-TARGET");
         using (var transferred = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer",
-                   new { position, linkIds = new[] { target.LinkId }, recipientId = recipient.AccountId }))
+                   new { position, linkIds = new[] { target.LinkId }, recipientId = recipient.AccountId }, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             Assert.Equal(1, (await ReadOkAsync(transferred)).GetProperty("changed").GetInt32());
         var received = await FeatureHttpTestRequests.ReadAsync(recipientClient, notifications, "/api/workspace/transfers/notifications");
         var notification = Assert.Single(received.GetProperty("items").EnumerateArray());

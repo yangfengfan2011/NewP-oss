@@ -57,7 +57,7 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
         var before = new Dictionary<string, Dictionary<string, object?>>();
         foreach (var target in targets) before[target.Id] = await RowAsync(fixture, target);
         var ownership = Point(fixture, "workspace.folder.initializeOwnership");
-        using var pending = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Get, PendingUrl(position, pageSize: 2));
+        using var pending = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Get, PendingUrl(position, pageSize: 2), dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
         var page = await ReadOkAsync(pending);
         Assert.Equal(9, page.GetProperty("total").GetInt32());
         Assert.Equal(2, page.GetProperty("items").GetArrayLength());
@@ -66,18 +66,18 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
         {
             var slug = model.ToLowerInvariant();
             using var ownerPending = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, $"{slug}.{slug}.initializeOwnership"), HttpMethod.Get,
-                $"/api/{slug}/{(model == "Part" ? "parts" : "documents")}/ownership/pending?page=1&pageSize=2");
+                $"/api/{slug}/{(model == "Part" ? "parts" : "documents")}/ownership/pending?page=1&pageSize=2", dataAccess: OwnershipDeclaration(fixture, $"{slug}.{slug}.initializeOwnership", Point(fixture, $"{slug}.{slug}.initializeOwnership")));
             var ownPage = await ReadOkAsync(ownerPending);
             Assert.Equal(3, ownPage.GetProperty("total").GetInt32());
             Assert.Equal(2, ownPage.GetProperty("items").GetArrayLength());
         }
         var selected = targets.Where(target => !target.Name.EndsWith("complete", StringComparison.Ordinal)).ToArray();
         var batchBody = new { position, linkIds = selected.Select(target => target.LinkId).ToArray() };
-        using var batch = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Post, "/api/workspace/ownership/initialize", batchBody);
+        using var batch = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Post, "/api/workspace/ownership/initialize", batchBody, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
         var receipt = await ReadOkAsync(batch);
         Assert.Equal(6, receipt.GetProperty("changed").GetInt32());
         Assert.Equal(3, receipt.GetProperty("unresolved").GetInt32());
-        using var retry = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Post, "/api/workspace/ownership/initialize", batchBody);
+        using var retry = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Post, "/api/workspace/ownership/initialize", batchBody, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
         Assert.Equal(0, (await ReadOkAsync(retry)).GetProperty("changed").GetInt32());
         foreach (var target in targets)
         {
@@ -87,10 +87,10 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
             {
                 Assert.Null(current["OwnerId"]);
                 using var automatic = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Post,
-                    $"/api/workspace/content/{target.LinkId}/ownership", new { position });
+                    $"/api/workspace/content/{target.LinkId}/ownership", new { position }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
                 Assert.Equal(HttpStatusCode.Conflict, automatic.StatusCode);
                 using var manual = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Post,
-                    $"/api/workspace/content/{target.LinkId}/ownership", new { position, accountId = fixture.ActorId });
+                    $"/api/workspace/content/{target.LinkId}/ownership", new { position, accountId = fixture.ActorId }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
                 Assert.True((await ReadOkAsync(manual)).GetProperty("changed").GetBoolean());
                 Assert.Equal("missing-account", (await RowAsync(fixture, target))["CreatedBy"]);
             }
@@ -100,7 +100,7 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
                 Assert.Equal(department, current["OwnerDepartmentId"]);
             }
         }
-        using var finalPending = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Get, PendingUrl(position));
+        using var finalPending = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Get, PendingUrl(position), dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
         Assert.Equal(0, (await ReadOkAsync(finalPending)).GetProperty("total").GetInt32());
         using var finalScope = fixture.Services.CreateScope();
         var changes = await finalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("BusinessChange")
@@ -122,6 +122,9 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
     internal sealed record Position(string SpaceId, string RootFolderId, string[] LinkIds);
     internal sealed record Target(string Model, string Id, string LinkId, string Name);
     internal static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => fixture.FeatureCatalog.First(point => point.BehaviorKey == behavior);
+    // 正常业务消费者显式指定执行及已有功能来源；缺失/串用反例继续直接发送，不按URL补头。
+    internal static ActionDataAccessRequirement OwnershipDeclaration(BusinessAuditHostFixture fixture, string execution, FeaturePoint point) =>
+        new FeatureHttpTestRequests(fixture).Declaration(execution, point);
     internal static async Task<JsonElement> ReadOkAsync(HttpResponseMessage response)
     {
         var text = await response.Content.ReadAsStringAsync();

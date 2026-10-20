@@ -22,6 +22,7 @@ public sealed class EntityOwnershipTransferReceivingSqlServerHttpApiTests
         using var admin = await fixture.LoginAdministratorAsync();
         await InitializeAsync(fixture, admin);
         var read = Point(fixture, "workspace.spaces.access"); var transfer = Point(fixture, "workspace.folder.transfer");
+        var folderRead = OwnershipDeclaration(fixture, "workspace.folder.read", read);
         var notices = Point(fixture, "workspace.transfers.read");
         var manage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Workspace" && point.Key == "authorizeContent" && point.ActionScope == "list.rowActions");
         var owner = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PrivateTransferOwner", "私人转交人",
@@ -33,7 +34,7 @@ public sealed class EntityOwnershipTransferReceivingSqlServerHttpApiTests
         var first = await CreateAsync(fixture, ownerClient, position, "WorkspaceFolder", "folders", "create", "PRIVATE-RECEIVED-ORIGINAL");
         var second = await CreateAsync(fixture, ownerClient, position, "WorkspaceFolder", "folders", "create", "PRIVATE-UNCHANGED");
         await ConfigureAsync(first, "allow"); await ConfigureAsync(second, "allow");
-        using (var hidden = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, "/api/workspace/folders/" + first.Id))
+        using (var hidden = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, "/api/workspace/folders/" + first.Id, dataAccess: folderRead))
             Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
         var models = new[] { "WorkspaceSpace", "WorkspaceFolder", "WorkspaceFolderContent", "WorkspaceTransferNotification", "BusinessChange" };
         var beforeInvalid = await SnapshotAsync(fixture, models);
@@ -58,9 +59,9 @@ public sealed class EntityOwnershipTransferReceivingSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.Forbidden, mixedOwner.StatusCode);
         Assert.Equal(beforeOwnerMismatch, await SnapshotAsync(fixture, models));
         // 同一EID在新的普通边可达；原私人位置仍然不是接收人的可用来源。
-        using (var reached = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, "/api/workspace/folders/" + first.Id))
+        using (var reached = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, "/api/workspace/folders/" + first.Id, dataAccess: folderRead))
             Assert.Equal(first.Id, (await ReadOkAsync(reached)).GetProperty("id").GetString());
-        using (var originalPrivate = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, Properties(position, first.LinkId)))
+        using (var originalPrivate = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, Properties(position, first.LinkId), dataAccess: folderRead))
             Assert.Equal(HttpStatusCode.NotFound, originalPrivate.StatusCode);
         var page = await FeatureHttpTestRequests.ReadAsync(recipientClient, notices, "/api/workspace/transfers/notifications");
         var location = Assert.Single(page.GetProperty("items").EnumerateArray()).GetProperty("location");
@@ -70,7 +71,7 @@ public sealed class EntityOwnershipTransferReceivingSqlServerHttpApiTests
         var link = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync(row => EF.Property<string>(row, "LID") == linkId);
         Assert.Equal(false, link["IsScopeNeutral"]); Assert.Equal(first.Id, link["CEID"]);
         await ConfigureAsync(first, "allow", recipient.AccountId);
-        using (var denied = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, "/api/workspace/folders/" + first.Id))
+        using (var denied = await FeatureHttpTestRequests.SendAsync(recipientClient, read, HttpMethod.Get, "/api/workspace/folders/" + first.Id, dataAccess: folderRead))
             Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
         var hiddenPage = await FeatureHttpTestRequests.ReadAsync(recipientClient, notices, "/api/workspace/transfers/notifications");
         var hiddenItem = Assert.Single(hiddenPage.GetProperty("items").EnumerateArray());
@@ -150,7 +151,7 @@ public sealed class EntityOwnershipTransferReceivingSqlServerHttpApiTests
         return new(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
     }
     private static Task<HttpResponseMessage> TransferAsync(BusinessAuditHostFixture fixture, HttpClient client, Position position, string[] linkIds, string recipientId) =>
-        FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.transfer"), HttpMethod.Post, "/api/workspace/ownership/transfer", new { position, linkIds, recipientId });
+        FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.transfer"), HttpMethod.Post, "/api/workspace/ownership/transfer", new { position, linkIds, recipientId }, OwnershipDeclaration(fixture, "workspace.folder.transfer", Point(fixture, "workspace.folder.transfer")));
     private static string Properties(Position position, string linkId) => "/api/workspace/content/" + linkId + "/properties?queryScope="
         + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     private static string Permissions(Position position, string linkId) => Properties(position, linkId).Replace("/properties?", "/permissions?", StringComparison.Ordinal);

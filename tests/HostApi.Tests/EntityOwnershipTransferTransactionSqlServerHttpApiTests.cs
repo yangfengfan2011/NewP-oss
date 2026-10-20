@@ -54,6 +54,7 @@ public sealed class EntityOwnershipTransferTransactionSqlServerHttpApiTests(ITes
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/transfer") { Content = JsonContent.Create(input) };
                 request.Headers.Add("X-NewP-Feature", transfer.Position);
+                request.Headers.Add("X-NewP-Data-Declaration", OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer).Id);
                 if (mode == "cancel")
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => admin.SendAsync(request, cancellation.Token));
                 else
@@ -76,7 +77,7 @@ public sealed class EntityOwnershipTransferTransactionSqlServerHttpApiTests(ITes
             output.WriteLine($"transfer rollback mode={mode} models=3 notificationSqlCompleted={writes.NotificationSqlCompleted} elapsedMs={elapsed.Elapsed.TotalMilliseconds:F2}");
         }
 
-        using (var succeeded = await FeatureHttpTestRequests.SendAsync(admin, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input))
+        using (var succeeded = await FeatureHttpTestRequests.SendAsync(admin, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             Assert.True((await ReadOkAsync(succeeded)).GetProperty("succeeded").GetBoolean());
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();

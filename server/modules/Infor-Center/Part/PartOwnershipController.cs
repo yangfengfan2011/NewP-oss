@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
@@ -24,8 +25,9 @@ public sealed class PartOwnershipController(EntityOwnershipMaintenance maintenan
     [HttpPost("initialize"), RequireFeature("part.part.initializeOwnership")]
     public async Task<IResult> InitializeBatch(InitializeBatchInput input, CancellationToken token)
     {
-        try { return Results.Ok(await maintenance.InitializeManyAsync(resources.FindByResourceKey("part.part")!, input.Ids ?? [], token)); }
+        try { return Results.Ok(await maintenance.InitializeManyAsync(resources.FindByResourceKey("part.part")!, input.Ids ?? [], Source("submit"), token)); }
         catch (EntityOwnershipException exception) { return Failure(exception); }
+        catch (ActionDataAccessException exception) { return DeclarationFailure(exception); }
     }
     /// <summary>受控维护资格只向管理员成立，不由普通功能授权提升身份。</summary>
     [HttpGet("eligibility"), RequireFeature("part.part.initializeOwnership")]
@@ -34,8 +36,9 @@ public sealed class PartOwnershipController(EntityOwnershipMaintenance maintenan
     [HttpGet("pending"), RequireFeature("part.part.initializeOwnership")]
     public async Task<IResult> Pending([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? query = null, CancellationToken token = default)
     {
-        try { return Results.Ok(await maintenance.PendingAsync(resources.FindByResourceKey("part.part")!, page, pageSize, query, token)); }
+        try { return Results.Ok(await maintenance.PendingAsync(resources.FindByResourceKey("part.part")!, page, pageSize, query, Source("read"), token)); }
         catch (EntityOwnershipException exception) { return Failure(exception); }
+        catch (ActionDataAccessException exception) { return DeclarationFailure(exception); }
     }
 
     /// <summary>人工补齐仅查询最小账号候选，人员档案不因本入口扩大读取权限。</summary>
@@ -46,17 +49,26 @@ public sealed class PartOwnershipController(EntityOwnershipMaintenance maintenan
     [HttpGet("{id}/status"), RequireFeature("part.part.initializeOwnership")]
     public async Task<IResult> Status(string id, CancellationToken token)
     {
-        try { return Results.Ok(await maintenance.ReadAsync(resources.FindByResourceKey("part.part")!, id, token)); }
+        try { return Results.Ok(await maintenance.ReadAsync(resources.FindByResourceKey("part.part")!, id, Source("prepare"), token)); }
         catch (EntityOwnershipException exception) { return Failure(exception); }
+        catch (ActionDataAccessException exception) { return DeclarationFailure(exception); }
     }
 
     /// <summary>仅初始化NULL归属，完整对象无变化不记成功事件，事务失败全部回滚。</summary>
     [HttpPost("{id}"), RequireFeature("part.part.initializeOwnership")]
     public async Task<IResult> Initialize(string id, InitializeInput input, CancellationToken token)
     {
-        try { return Results.Ok(new { succeeded = true, changed = await maintenance.InitializeAsync(resources.FindByResourceKey("part.part")!, id, input.AccountId, token) }); }
+        try { return Results.Ok(new { succeeded = true, changed = await maintenance.InitializeAsync(resources.FindByResourceKey("part.part")!, id, input.AccountId, Source("submit"), token) }); }
         catch (EntityOwnershipException exception) { return Failure(exception); }
+        catch (ActionDataAccessException exception) { return DeclarationFailure(exception); }
     }
+
+    // 维护端点固定自己的读取/准备/提交来源，资格及账号候选不新增对象裁决。
+    private static DataExecutionBindingReference Source(string stage) => new("part.part.initializeOwnership", "entityOwnership.initialize", stage);
+
+    // 只翻译正式来源错误，不捕获事务、取消或持久化故障。
+    private static IResult DeclarationFailure(ActionDataAccessException exception) => Results.Problem(statusCode: exception.Status, title: exception.Code,
+        extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
 
     // 稳定业务失败沿平台Problem Details，不返回隐藏对象或原始持久化内容。
     private static IResult Failure(EntityOwnershipException exception) =>

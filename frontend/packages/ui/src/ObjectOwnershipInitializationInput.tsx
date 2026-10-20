@@ -2,26 +2,20 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Radio, Select, Space, Table } from 'antd';
 import { formatRequestError, platformFetch, useLocalization } from '@icp-platform/core';
 import { readStandardCrudRequestError, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
+import { ownershipInitializationHeaders, ownershipInitializationSource, type ObjectOwnershipInitializationTarget, type OwnershipInitializationDraft } from './ownershipInitializationRequest';
+export type { ObjectOwnershipInitializationTarget, OwnershipInitializationDraft } from './ownershipInitializationRequest';
 
-export interface ObjectOwnershipInitializationTarget {
-  initialId?: string;
-  pendingPath: string;
-  statusPath: string;
-  savePath: string;
-  accountsPath: string;
-  eligibilityPath: string;
-  batchPath: string;
-  batchIdField?: 'ids' | 'linkIds';
-  body?: Record<string, unknown>;
-}
 interface Candidate { accountId: string; code: string; name: string; departmentId: string | null }
 interface PendingItem { id: string; name: string }
-export interface OwnershipInitializationDraft { targetId?: string; targetIds?: string[]; accountId?: string }
 
 /** 拥有者提供真实端点与上下文；共享输入管理显式批次、人工单选、候选和可取消请求。 */
-export default function ObjectOwnershipInitializationInput({ target, featurePosition, value, onChange, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext & { target: ObjectOwnershipInitializationTarget }) {
+export default function ObjectOwnershipInitializationInput({ target, featurePosition, action, dataAccess, value, onChange: updateDraft, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext & { target: ObjectOwnershipInitializationTarget }) {
   const { t } = useLocalization();
-  const draft = typeof value === 'object' && value !== null ? value as Partial<OwnershipInitializationDraft> : {};
+  const binding = action.dataAccess ?? dataAccess;
+  const source = ownershipInitializationSource(target, featurePosition, binding);
+  const saved = typeof value === 'object' && value !== null ? value as Partial<OwnershipInitializationDraft> : {};
+  const draft = saved.source === source ? saved : {};
+  const onChange = (next: Omit<OwnershipInitializationDraft, 'source'>) => updateDraft({ ...next, source });
   const selectedId = target.initialId ?? draft.targetId ?? '';
   const [missing, setMissing] = useState<boolean | null>(null);
   const [failure, setFailure] = useState<{ error: unknown } | null>(null);
@@ -37,7 +31,7 @@ export default function ObjectOwnershipInitializationInput({ target, featurePosi
       try {
         const response = await platformFetch(`${target.pendingPath}${target.pendingPath.includes('?') ? '&' : '?'}page=${page}&pageSize=20`, {
           method: 'GET', signal: controller.signal,
-          headers: featurePosition ? { 'X-NewP-Feature': featurePosition } : {},
+          headers: ownershipInitializationHeaders(featurePosition, binding),
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         const loaded = await response.json() as { items: PendingItem[]; total: number };
@@ -45,14 +39,14 @@ export default function ObjectOwnershipInitializationInput({ target, featurePosi
       } catch (error) { if (!controller.signal.aborted) setFailure({ error }); }
     })();
     return () => controller.abort();
-  }, [selectedId, target.pendingPath, page, featurePosition]);
+  }, [selectedId, target.pendingPath, page, featurePosition, binding]);
   useEffect(() => {
     if (!selectedId) { setMissing(null); return; }
     const controller = new AbortController(); setMissing(null); setFailure(null);
     void (async () => {
       try {
         const response = await platformFetch(target.statusPath.replace('{id}', encodeURIComponent(selectedId)), {
-          method: 'GET', signal: controller.signal, headers: featurePosition ? { 'X-NewP-Feature': featurePosition } : {},
+          method: 'GET', signal: controller.signal, headers: ownershipInitializationHeaders(featurePosition, binding),
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         const status = await response.json() as { missing: boolean };
@@ -60,14 +54,14 @@ export default function ObjectOwnershipInitializationInput({ target, featurePosi
       } catch (error) { if (!controller.signal.aborted) setFailure({ error }); }
     })();
     return () => controller.abort();
-  }, [selectedId, target.statusPath, featurePosition]);
+  }, [selectedId, target.statusPath, featurePosition, binding]);
   useEffect(() => {
     if (!manual || !missing) return;
     const controller = new AbortController();
     void (async () => {
       try {
         const response = await platformFetch(`${target.accountsPath}?query=${encodeURIComponent(query)}`, {
-          signal: controller.signal, headers: featurePosition ? { 'X-NewP-Feature': featurePosition } : {},
+          signal: controller.signal, headers: ownershipInitializationHeaders(featurePosition, binding),
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         const items = await response.json() as Candidate[];
@@ -75,11 +69,11 @@ export default function ObjectOwnershipInitializationInput({ target, featurePosi
       } catch (error) { if (!controller.signal.aborted) setFailure({ error }); }
     })();
     return () => controller.abort();
-  }, [manual, missing, query, target.accountsPath, featurePosition]);
+  }, [manual, missing, query, target.accountsPath, featurePosition, binding]);
   const ready = selectedId ? missing === true && (!manual || !!draft.accountId) : (draft.targetIds?.length ?? 0) > 0;
   useEffect(() => { onDraftStateChange?.({ dirty: ready, ready: ready && !submitting && !failure }); }, [ready, submitting, failure, onDraftStateChange]);
   // 初始行身份也写入草稿，提交handler随后核对所属页面的固定目标，不接受换对象重用。
-  useEffect(() => { if (target.initialId && draft.targetId !== target.initialId) onChange({ targetId: target.initialId }); }, [target.initialId, draft.targetId, onChange]);
+  useEffect(() => { if (target.initialId && draft.targetId !== target.initialId) updateDraft({ targetId: target.initialId, source }); }, [target.initialId, draft.targetId, updateDraft, source]);
   return <Space direction="vertical" style={{ width: '100%' }}>
     <Alert type="info" message={t('Platform.OwnershipBackfillExplanation', '仅补齐缺失归属；默认使用创建账号及其当前部门，不代表创建时的历史部门。此操作仅供管理员维护。')} />
     {failure && <div role="alert">{formatRequestError(failure.error, t)}</div>}

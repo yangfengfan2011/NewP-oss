@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createObjectOwnershipTransferActions } from '../../../ui/src/objectOwnershipTransferActions';
 import { ownershipTransferSource } from '../../../ui/src/ObjectOwnershipTransferInput';
 import { ActionInstanceScope } from '../composition/ActionInstanceScope';
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
+import declarations from '../../../../../tests/Kernel.Tests/Fixtures/OwnershipDataAccess.contract.json';
 
 let instance: ActionInstanceScope;
 let deactivate: () => void;
@@ -36,4 +38,19 @@ it('does not replay an unknown submission even before the input can render the f
   await expect(actions.actionHandlers.transfer(context)).rejects.toThrow('connection ended after send');
   await expect(actions.actionHandlers.transfer(context)).rejects.toMatchObject({ code: 'Platform.MutationOutcomeUnknown' });
   expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('isolates the draft and submission by the bound declaration even when the target and feature stay the same', async () => {
+  const selected = ["Part", "Document"].map(moduleId => (declarations as ActionDataAccessRequirement[]).filter(item => item.moduleId === moduleId && item.provider === "entityOwnership.transfer" && item.surface === "rowActions" && item.actionKey === "transfer"));
+  selected.forEach(items => expect(items).toHaveLength(1));
+  const [original, changed] = selected.map(items => items[0]);
+  expect(original.id).not.toBe(changed.id);
+  const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ succeeded: true, changed: 0 })));
+  const actions = createObjectOwnershipTransferActions(() => target, fetcher);
+  const draft = { recipientId: 'recipient', source: ownershipTransferSource(target, 'transfer', instance, original) };
+  await expect(actions.actionHandlers.transfer({ instance, featurePosition: 'transfer', action: { key: 'transfer', labelKey: '转交', dataAccess: changed },
+    input: draft })).rejects.toMatchObject({ status: 409 });
+  expect(fetcher).not.toHaveBeenCalled();
+  await actions.actionHandlers.transfer({ instance, featurePosition: 'transfer', action: { key: 'transfer', labelKey: '转交', dataAccess: original }, input: draft });
+  expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-NewP-Data-Declaration')).toBe(original.id);
 });

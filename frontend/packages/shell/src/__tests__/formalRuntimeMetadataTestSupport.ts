@@ -11,12 +11,14 @@ import workspaceHistory from '../../../../../tests/Kernel.Tests/Fixtures/Workspa
 import documentFiles from '../../../../../tests/Kernel.Tests/Fixtures/DocumentFileDataAccess.contract.json';
 import clipboard from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 import authorizationManagement from '../../../../../tests/Kernel.Tests/Fixtures/AuthorizationManagementRuntime.contract.json';
+import ownership from '../../../../../tests/Kernel.Tests/Fixtures/OwnershipDataAccess.contract.json';
 
 const declarations = uniqueDeclarations([...(standardRead as ActionDataAccessRequirement[]), ...(organization as ActionDataAccessRequirement[]), ...(example as ActionDataAccessRequirement[]),
   ...(partWrite as ActionDataAccessRequirement[]), ...(partHistory as ActionDataAccessRequirement[]), ...(documentHistory as ActionDataAccessRequirement[]),
   ...(documentFiles.dataAccess as ActionDataAccessRequirement[]),
   ...(workspaceHistory as ActionDataAccessRequirement[]), ...(clipboard.declarations as ActionDataAccessRequirement[]),
-  ...(authorizationManagement.dataAccess as ActionDataAccessRequirement[]), ...(authorizationManagement.identityDataAccess as ActionDataAccessRequirement[])]);
+  ...(authorizationManagement.dataAccess as ActionDataAccessRequirement[]), ...(authorizationManagement.identityDataAccess as ActionDataAccessRequirement[]),
+  ...(ownership as ActionDataAccessRequirement[])]);
 
 function uniqueDeclarations(items: readonly ActionDataAccessRequirement[]) {
   const byId = new Map<string, ActionDataAccessRequirement>();

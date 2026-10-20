@@ -25,9 +25,20 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddSingleton(new DataScopeObjectInitializationLegacyBinding(ModuleId, "workspace.folder", WorkspaceFolderExecutions.CopyCaller(false)));
         services.AddSingleton(new DataScopeObjectInitializationLegacyBinding(ModuleId, "workspace.folder", WorkspaceFolderExecutions.CopyCaller(true)));
         services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransfer>();
-        services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay>();
+        services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay>(provider => new(
+            provider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(),
+            provider.GetRequiredService<IDataScopeResourceCatalog>(),
+            provider.GetRequiredService<ICP.Platform.Crud.Abstractions.IStandardCrudResourceRegistry>(),
+            OwnershipReads(provider, "workspace.ownership.display.targets", typeof(ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay),
+                nameof(ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay.FindNamesAsync)),
+            provider.GetRequiredService<IDataScopeObjectAccess>()));
         services.AddScoped<ICP.Platform.Crud.Ownership.IEntityOwnershipTransferReceiver, WorkspaceOwnershipTransferReceiver>();
-        services.AddScoped<WorkspaceTransferNotifications>();
+        services.AddScoped<WorkspaceTransferNotifications>(provider => new(
+            provider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(),
+            provider.GetRequiredService<ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay>(),
+            provider.GetRequiredService<ICP.Platform.Presentation.IUserDisplayNameDirectory>(),
+            OwnershipReads(provider, "workspace.ownership.display.senders", typeof(WorkspaceTransferNotifications), nameof(WorkspaceTransferNotifications.ListAsync)),
+            provider.GetRequiredService<WorkspaceContents>()));
         services.AddScoped<WorkspaceReferenceAudit>();
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, WorkspaceFolderAuditNames>();
         RegisterHistory(services);
@@ -59,6 +70,10 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddSingleton<WorkspaceFolderReadDescriptor>();
         services.AddSingleton(new DataScopeResource("workspace.folder", ModuleId, "WorkspaceFolder", "EID", "workspace.folder.scope"));
     }
+
+    // 只有通知真正读取名称时才解析执行器，避免读取约束、内容服务与显示投影构造闭环。
+    private static IDataScopeReadableIds OwnershipReads(IServiceProvider provider, string execution, Type caller, string member) =>
+        new DataExecutionReadableIds(() => provider.GetRequiredService<IDataExecutionAccess>(), new(execution, "workspace.backend", caller, member));
 
     // 只将本owner真实writer的固定schema映射到规范对象；LID始终是记录事实，不变成授权目标。
     private void RegisterHistory(IServiceCollection services)

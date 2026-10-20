@@ -3,6 +3,7 @@ using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Crud.Ownership;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Presentation;
+using ICP.Platform.Authorization.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Workspace;
@@ -11,30 +12,43 @@ public sealed partial class WorkspaceContents
 {
     /// <summary>锁内重解完整来源后，以规范对象身份执行整批转交；不要求源父 edit 或接收者 read。</summary>
     public ValueTask<EntityOwnershipTransferResult> TransferOwnershipAsync(string actor, WorkspacePosition position, string[] linkIds,
-        string recipientId, EntityOwnershipTransfer transfer, CancellationToken token) => transactions.ExecuteAsync<EntityOwnershipTransferResult>(async cancellation =>
+        string recipientId, EntityOwnershipTransfer transfer, CancellationToken token)
     {
-        if (linkIds.Length == 0 || linkIds.Any(string.IsNullOrWhiteSpace)) throw new LinkQueryException(400, "Workspace.InvalidSelection");
-        await LockGraphAsync(cancellation);
-        var path = await positions.ResolveAsync(actor, position, cancellation);
-        var targets = await ResolveOwnershipTargetsAsync(path.FolderId, linkIds.Distinct(StringComparer.Ordinal).ToArray(), cancellation);
-        try { return await transfer.TransferAsync(targets.Select(target => new EntityOwnershipTransferTarget(Resource(target.ModelKey), target.Id)).ToArray(), recipientId, cancellation); }
-        catch (EntityOwnershipException exception) { throw new LinkQueryException(exception.StatusCode, exception.Code); }
-    }, token);
+        var source = OwnershipTransferSource("submit");
+        return transactions.ExecuteAsync<EntityOwnershipTransferResult>(async cancellation =>
+        {
+            if (linkIds.Length == 0 || linkIds.Any(string.IsNullOrWhiteSpace)) throw new LinkQueryException(400, "Workspace.InvalidSelection");
+            await LockGraphAsync(cancellation);
+            var path = await positions.ResolveAsync(actor, position, cancellation);
+            var targets = await ResolveOwnershipTargetsAsync(path.FolderId, linkIds.Distinct(StringComparer.Ordinal).ToArray(), source, cancellation);
+            try { return await transfer.TransferAsync(targets.Select(target => new EntityOwnershipTransferTarget(Resource(target.ModelKey), target.Id)).ToArray(), recipientId, source, cancellation); }
+            catch (EntityOwnershipException exception) { throw new LinkQueryException(exception.StatusCode, exception.Code); }
+        }, token);
+    }
 
     /// <summary>候选查询先按完整来源核整批当前资格，不因普通功能或管理员身份公开账号目录。</summary>
     public async ValueTask CheckOwnershipTransferAsync(string actor, WorkspacePosition position, string[] linkIds,
         EntityOwnershipTransfer transfer, CancellationToken token)
     {
+        var source = OwnershipTransferSource("prepare");
         await transactions.ExecuteAsync<bool>(async cancellation =>
         {
             if (linkIds.Length == 0 || linkIds.Any(string.IsNullOrWhiteSpace)) throw new LinkQueryException(400, "Workspace.InvalidSelection");
             await LockGraphAsync(cancellation);
             var path = await positions.ResolveAsync(actor, position, cancellation);
-            var targets = await ResolveOwnershipTargetsAsync(path.FolderId, linkIds.Distinct(StringComparer.Ordinal).ToArray(), cancellation);
-            try { await transfer.CheckAsync(targets.Select(target => new EntityOwnershipTransferTarget(Resource(target.ModelKey), target.Id)).ToArray(), cancellation); }
+            var targets = await ResolveOwnershipTargetsAsync(path.FolderId, linkIds.Distinct(StringComparer.Ordinal).ToArray(), source, cancellation);
+            try { await transfer.CheckAsync(targets.Select(target => new EntityOwnershipTransferTarget(Resource(target.ModelKey), target.Id)).ToArray(), source, cancellation); }
             catch (EntityOwnershipException exception) { throw new LinkQueryException(exception.StatusCode, exception.Code); }
             return true;
         }, token);
+    }
+
+    // 转交入口独立于维护与普通读取，准备和锁后提交均从本次真实HTTP来源解析。
+    private DataExecutionBindingReference OwnershipTransferSource(string stage)
+    {
+        var source = new DataExecutionBindingReference("workspace.folder.transfer", "entityOwnership.transfer", stage);
+        executionAccess.Validate([source], "workspace.folder");
+        return source;
     }
 
     // 通知来源仅在当前真实根链可读且仍指向接收目录时投影；失效不恢复裸对象入口。

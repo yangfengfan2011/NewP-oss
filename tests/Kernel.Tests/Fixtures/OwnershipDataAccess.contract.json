@@ -1,0 +1,1012 @@
+[
+  {
+    "id": "Document/view:document.document.list/featureActions/action:initializeOwnership",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "featureActions",
+    "actionKey": "initializeOwnership",
+    "execution": "document.document.initializeOwnership",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.initialize"
+  },
+  {
+    "id": "Document/view:document.document.list/pageActions/action:initializeOwnershipPending",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "pageActions",
+    "actionKey": "initializeOwnershipPending",
+    "execution": "document.document.initializeOwnership",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.initialize"
+  },
+  {
+    "id": "Document/view:document.document.list/rowActions/action:initializeOwnership",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "rowActions",
+    "actionKey": "initializeOwnership",
+    "execution": "document.document.initializeOwnership",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.initialize"
+  },
+  {
+    "id": "Document/view:document.document.list/rowActions/action:transfer",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "rowActions",
+    "actionKey": "transfer",
+    "execution": "document.document.transfer",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:transfer"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.transfer"
+  },
+  {
+    "id": "Part/view:part.part.list/featureActions/action:initializeOwnership",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "featureActions",
+    "actionKey": "initializeOwnership",
+    "execution": "part.part.initializeOwnership",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.custom/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.initialize"
+  },
+  {
+    "id": "Part/view:part.part.list/pageActions/action:initializeOwnershipPending",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "pageActions",
+    "actionKey": "initializeOwnershipPending",
+    "execution": "part.part.initializeOwnership",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.pageActions/action:initializeOwnershipPending"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.initialize"
+  },
+  {
+    "id": "Part/view:part.part.list/rowActions/action:initializeOwnership",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "rowActions",
+    "actionKey": "initializeOwnership",
+    "execution": "part.part.initializeOwnership",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "visibility",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.initialize"
+  },
+  {
+    "id": "Part/view:part.part.list/rowActions/action:transfer",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "rowActions",
+    "actionKey": "transfer",
+    "execution": "part.part.transfer",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:transfer"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.transfer"
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/featureActions/action:initializeOwnership",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "featureActions",
+    "actionKey": "initializeOwnership",
+    "execution": "workspace.folder.initializeOwnership",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "workspace.backend"
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/pageActions/action:initializeOwnershipPending",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "pageActions",
+    "actionKey": "initializeOwnershipPending",
+    "execution": "workspace.folder.initializeOwnership",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:initializeOwnershipPending"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "workspace.backend"
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/pageActions/action:transferSelected",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "pageActions",
+    "actionKey": "transferSelected",
+    "execution": "workspace.folder.transfer",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:transferSelected"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.transfer"
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/rowActions/action:initializeOwnership",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "rowActions",
+    "actionKey": "initializeOwnership",
+    "execution": "workspace.folder.initializeOwnership",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "workspace.backend"
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/rowActions/action:transfer",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "rowActions",
+    "actionKey": "transfer",
+    "execution": "workspace.folder.transfer",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:transfer"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "objects",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.transfer"
+  }
+]

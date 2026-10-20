@@ -38,7 +38,7 @@ public sealed class EntityOwnershipTransferRecipientSqlServerHttpApiTests
         var models = new[] { "Part", "WorkspaceSpace", "WorkspaceFolder", "WorkspaceFolderContent", "WorkspaceTransferNotification" };
         var before = await SnapshotAsync(fixture, models);
         var pending = FeatureHttpTestRequests.SendAsync(client, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer",
-            new { position, linkIds = new[] { target.LinkId }, recipientId });
+            new { position, linkIds = new[] { target.LinkId }, recipientId }, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer));
         try
         {
             await probe.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
@@ -95,7 +95,7 @@ public sealed class EntityOwnershipTransferRecipientSqlServerHttpApiTests
         Assert.NotEqual(oldDepartment, newDepartment);
         probe.Arm(accountTable, recipient.AccountId);
         var pending = FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer",
-            new { position, linkIds = new[] { target.LinkId }, recipientId = recipient.AccountId });
+            new { position, linkIds = new[] { target.LinkId }, recipientId = recipient.AccountId }, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer));
         try
         {
             await probe.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));

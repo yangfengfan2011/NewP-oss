@@ -5,6 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { invalidatePlatformAntiforgeryToken, LocalizationProvider } from '@icp-platform/core';
 import ObjectOwnershipTransferInput, { ownershipTransferSource } from '../../../ui/src/ObjectOwnershipTransferInput';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
+import declarations from '../../../../../tests/Kernel.Tests/Fixtures/OwnershipDataAccess.contract.json';
 import { ActionInstanceScope } from '../composition/ActionInstanceScope';
 
 vi.unmock('@icp-platform/core');
@@ -147,15 +149,21 @@ it('keeps a definite permission denial separate from an unknown outcome and bloc
   expect(document.body.textContent).not.toContain('转交结果未知');
 });
 
-it('aborts the old source read and discards its late candidates after the complete selection changes', async () => {
+it.each(['target', 'declaration'] as const)('aborts the old read and discards late candidates when the %s changes', async boundary => {
+  const selected = ["Part", "Document"].map(moduleId => (declarations as ActionDataAccessRequirement[]).filter(item => item.moduleId === moduleId && item.provider === "entityOwnership.transfer" && item.surface === "rowActions" && item.actionKey === "transfer"));
+  selected.forEach(items => expect(items).toHaveLength(1));
+  const [original, changed] = selected.map(items => items[0]);
   let release: (response: Response) => void = () => {};
   let oldRequest: Request | undefined;
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init);
     const path = new URL(request.url).pathname;
     if (path.endsWith('/eligibility')) return json({ allowed: true });
-    if (path === '/old/accounts') { oldRequest = request; return new Promise<Response>(resolve => { release = resolve; }); }
-    if (path === '/current/accounts') return json([{ accountId: 'current', code: 'current', name: '当前候选', departmentId: null }]);
+    if (path.endsWith('/accounts') && (boundary === 'target' ? path === '/old/accounts'
+      : request.headers.get('X-NewP-Data-Declaration') === original.id)) {
+      oldRequest = request; return new Promise<Response>(resolve => { release = resolve; });
+    }
+    if (path.endsWith('/accounts')) return json([{ accountId: 'current', code: 'current', name: '当前候选', departmentId: null }]);
     throw new Error('Unexpected transfer query ' + request.url);
   }));
   deactivate = instance.activate();
@@ -163,8 +171,9 @@ it('aborts the old source read and discards its late candidates after the comple
   function Harness() {
     const [source, setSource] = useState('old');
     changeSource = () => setSource('current');
-    return <ObjectOwnershipTransferInput action={{ key: 'transfer', labelKey: '转交' }} instance={instance} featurePosition="transfer"
-      target={{ savePath: '/' + source, eligibilityPath: '/' + source + '/eligibility', accountsPath: '/' + source + '/accounts' }}
+    const path = boundary === 'target' ? '/' + source : '/same-target';
+    return <ObjectOwnershipTransferInput action={{ key: 'transfer', labelKey: '转交', dataAccess: source === 'old' ? original : changed }} instance={instance} featurePosition="transfer"
+      target={{ savePath: path, eligibilityPath: path + '/eligibility', accountsPath: path + '/accounts' }}
       value={undefined} onChange={() => {}} />;
   }
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);

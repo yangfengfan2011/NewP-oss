@@ -52,6 +52,7 @@ public sealed class EntityOwnershipTransferCapacitySqlServerHttpApiTests(ITestOu
     public async Task ThreeModels_Transfer3And103RecordsCosts_AndLateCancellationRollsBackTheWholeLargeBatch()
     {
         using var observation = new TransferCostObservation();
+        using var measurement = new OwnershipReadPlanDiagnostics(output, "transfer");
         var commands = new EfCommands(observation);
         var cancellationProbe = new EntityOwnershipTransferTransactionSqlServerHttpApiTests.NotificationWriteProbe();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
@@ -64,12 +65,18 @@ public sealed class EntityOwnershipTransferCapacitySqlServerHttpApiTests(ITestOu
             "capacity-transfer-owner", "容量转交人", read, transfer, Point(fixture, "workspace.folder.create"),
             Point(fixture, "workspace.folder.createPart"), Point(fixture, "workspace.folder.createDocument"));
         using var ownerClient = owner.Client;
+        string diagnosticConnection;
         using (var setup = fixture.Services.CreateScope())
-            observation.Database = setup.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.GetDbConnection().Database;
+        {
+            var db = setup.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            observation.Database = db.Database.GetDbConnection().Database;
+            diagnosticConnection = db.Database.GetConnectionString()!;
+        }
+        measurement.Database = observation.Database;
         foreach (var size in new[] { 3, 103 })
         {
             var recipient = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "CapacityTransferRecipient" + size, "容量接收人",
-                "capacity-transfer-recipient-" + size, "容量接收人", read, transfer);
+                "capacity-transfer-recipient-" + size, "容量接收人", measurement.Enabled ? [read, transfer, Point(fixture, "workspace.transfers.read")] : [read, transfer]);
             using var recipientClient = recipient.Client;
             // 正式API准备原对象；准备耗时及空间/角色建立不计入下方转交请求窗口。
             var targets = new List<Target>();
@@ -89,9 +96,11 @@ public sealed class EntityOwnershipTransferCapacitySqlServerHttpApiTests(ITestOu
             using var process = Process.GetCurrentProcess(); process.Refresh();
             var workingSet = process.WorkingSet64; var allocated = GC.GetTotalAllocatedBytes();
             commands.Reset(); observation.Begin();
-            using var response = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input);
+            measurement.Begin("transfer-" + size);
+            using var response = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer));
             var receipt = await ReadOkAsync(response);
             var cost = observation.End(); process.Refresh();
+            await measurement.EndAsync(Encoding.UTF8.GetByteCount(receipt.GetRawText()), observation.CommandCount, diagnosticConnection);
             output.WriteLine(JsonSerializer.Serialize(new { scenario = "ordinary transfer", objects = size, folders = 1, documents = 1, parts = size - 2,
                 depth = position.LinkIds.Length, authorizationRows, previousHistory, requestBytes = Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(input)),
                 responseBytes = Encoding.UTF8.GetByteCount(receipt.GetRawText()), allocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
@@ -112,6 +121,24 @@ public sealed class EntityOwnershipTransferCapacitySqlServerHttpApiTests(ITestOu
                 }
             }
             if (size != 103) continue;
+            if (measurement.Enabled)
+            {
+                var notifications = Point(fixture, "workspace.transfers.read");
+                const string path = "/api/workspace/transfers/notifications?page=1&pageSize=100";
+                using (var warm = await FeatureHttpTestRequests.SendAsync(recipientClient, notifications, HttpMethod.Get, path))
+                    await ReadOkAsync(warm);
+                observation.Begin(); measurement.Begin("notifications-100", currentReadOnly: true);
+                using var page = await FeatureHttpTestRequests.SendAsync(recipientClient, notifications, HttpMethod.Get, path);
+                var received = await ReadOkAsync(page);
+                Assert.Equal(103, received.GetProperty("total").GetInt32());
+                Assert.Equal(100, received.GetProperty("items").GetArrayLength());
+                using var scope = fixture.Services.CreateScope();
+                var connection = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.GetConnectionString()!;
+                var notificationCost = observation.End();
+                await measurement.EndAsync(Encoding.UTF8.GetByteCount(received.GetRawText()), observation.CommandCount, connection);
+                output.WriteLine(JsonSerializer.Serialize(new { scenario = "notification cost observer calibration", cost = notificationCost }));
+                continue;
+            }
             var snapshotModels = new[] { "WorkspaceSpace", "WorkspaceFolder", "WorkspaceFolderContent", "Part", "Document", "BusinessChange", "WorkspaceTransferNotification" };
             var beforeCancel = await SnapshotAsync(fixture, snapshotModels);
             using var cancellation = new CancellationTokenSource();
@@ -122,6 +149,7 @@ public sealed class EntityOwnershipTransferCapacitySqlServerHttpApiTests(ITestOu
                 using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/transfer")
                 { Content = JsonContent.Create(new { position, linkIds = input.linkIds, recipientId = owner.AccountId }) };
                 request.Headers.Add("X-NewP-Feature", transfer.Position);
+                request.Headers.Add("X-NewP-Data-Declaration", OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer).Id);
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => recipientClient.SendAsync(request, cancellation.Token));
                 Assert.True(cancellationProbe.NotificationSqlCompleted); Assert.Equal(size, cancellationProbe.SavedNotifications);
             }
@@ -136,7 +164,7 @@ public sealed class EntityOwnershipTransferCapacitySqlServerHttpApiTests(ITestOu
     }
 
     // 与既有归属成本资产相同的SqlClient诊断入口，覆盖EF及原生图/权限SQL；不输出SQL参数或连接凭据。
-    private sealed class TransferCostObservation : DbTransactionInterceptor, IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
+    internal sealed class TransferCostObservation : DbTransactionInterceptor, IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
     {
         private readonly List<IDisposable> subscriptions = [];
         private readonly ConcurrentQueue<string> commands = new();

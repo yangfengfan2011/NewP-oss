@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ICP.Platform.Persistence.Ownership;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.LinkQueries;
@@ -28,6 +29,7 @@ public sealed partial class WorkspaceContentsController
         }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidSelection")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }
     }
 
     /// <summary>候选只是当前可引用账号片段；本源整批资格不满足时不返回账号或组织事实。</summary>
@@ -43,6 +45,7 @@ public sealed partial class WorkspaceContentsController
         }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidSelection")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }
     }
 
     // 只允许完整父位置、JSON选择数组及可选搜索字串；拒绝重复参数或裸EID降级。
@@ -67,5 +70,6 @@ public sealed partial class WorkspaceContentsController
             return Results.Ok(await contents.TransferOwnershipAsync(Actor(), input.Position, input.LinkIds, input.RecipientId, transfer, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }
     }
 }

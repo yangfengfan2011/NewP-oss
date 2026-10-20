@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { platformFetch } from '@icp-platform/core';
 import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionContext, type StandardCrudActionInputRenderContext,
   type StandardCrudActionEligibilityResolver } from '@icp-platform/sdk';
-import { ownershipTransferSource, ownershipTransferSubmission, ownershipTransferOutcomeUnknown, type ObjectOwnershipTransferTarget, type OwnershipTransferDraft } from './ownershipTransferRequest';
+import { ownershipTransferSource, ownershipTransferSubmission, ownershipTransferOutcomeUnknown, ownershipTransferHeaders, type ObjectOwnershipTransferTarget, type OwnershipTransferDraft } from './ownershipTransferRequest';
 
 const Input = lazy(() => import('./ObjectOwnershipTransferInput'));
 type TargetContext = Pick<StandardCrudActionContext, 'id' | 'row' | 'detail' | 'selectedRows' | 'queryScope' | 'instance'>;
@@ -15,7 +15,7 @@ export function createObjectOwnershipTransferActions(getTarget: (context: Target
     if (!context.id) return { visible: true, available: true };
     const target = getTarget(context);
     const response = await fetcher(target.eligibilityPath, { method: 'GET', signal: context.signal,
-      headers: { 'X-NewP-Feature': context.featurePosition } });
+      headers: ownershipTransferHeaders(context.featurePosition, context.action.dataAccess ?? context.dataAccess) });
     if ([403, 404, 503].includes(response.status)) return { visible: false, available: false };
     if (!response.ok) throw await readStandardCrudRequestError(response);
     const result = await response.json() as { allowed: boolean };
@@ -27,7 +27,8 @@ export function createObjectOwnershipTransferActions(getTarget: (context: Target
       <Suspense fallback={null}><Input {...context} target={getTarget(context)} /></Suspense> },
     actionHandlers: { transfer: Object.assign(async (context: StandardCrudActionContext) => {
       const target = getTarget(context);
-      const source = ownershipTransferSource(target, context.featurePosition, context.instance);
+      const dataAccess = context.action?.dataAccess ?? context.dataAccess;
+      const source = ownershipTransferSource(target, context.featurePosition, context.instance, dataAccess);
       const draft = context.input as OwnershipTransferDraft | undefined;
       if (!context.featurePosition || !context.instance?.active || !draft?.recipientId || draft.source !== source)
         throw new StandardCrudRequestError('转交对象或来源已变化，请重新选择。', 409, {}, { reasonKey: 'Platform.TransferSourceChanged' });
@@ -35,7 +36,7 @@ export function createObjectOwnershipTransferActions(getTarget: (context: Target
         throw new StandardCrudRequestError('转交结果未知，不能重复提交。', 0, {}, { code: 'Platform.MutationOutcomeUnknown', reasonKey: 'Platform.TransferOutcomeUnknown' });
       let receipt: { succeeded?: boolean; changed?: number };
       try {
-        const response = await fetcher(target.savePath, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': context.featurePosition },
+        const response = await fetcher(target.savePath, { method: 'POST', headers: { 'Content-Type': 'application/json', ...ownershipTransferHeaders(context.featurePosition, dataAccess) },
           body: JSON.stringify({ ...target.body, recipientId: draft.recipientId }) });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         receipt = await response.json() as { succeeded?: boolean; changed?: number };

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.LinkQueries;
@@ -20,23 +21,33 @@ public sealed class PartOwnershipTransferController(EntityOwnershipTransfer tran
     [HttpGet("eligibility"), RequireFeature("part.part.transfer")]
     public async Task<IResult> Eligibility(string objectId, CancellationToken token)
     {
-        try { await transfer.CheckAsync([new("part.part", objectId)], token); return Results.Ok(new { allowed = true }); }
+        try { await transfer.CheckAsync([new("part.part", objectId)], Source("prepare"), token); return Results.Ok(new { allowed = true }); }
         catch (EntityOwnershipException exception) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(exception.StatusCode, exception.Code)); }
+        catch (ActionDataAccessException exception) { return DeclarationProblem(exception); }
     }
 
     /// <summary>只有当前可转交此对象的所属人可搜索账号片段，停用及空部门不成为额外资格。</summary>
     [HttpGet("accounts"), RequireFeature("part.part.transfer")]
     public async Task<IResult> Accounts(string objectId, [FromQuery] string? query, [FromServices] IAccountOwnershipDirectory directory, CancellationToken token)
     {
-        try { await transfer.CheckAsync([new("part.part", objectId)], token); return Results.Ok(await directory.SearchAsync(query, token)); }
+        try { await transfer.CheckAsync([new("part.part", objectId)], Source("prepare"), token); return Results.Ok(await directory.SearchAsync(query, token)); }
         catch (EntityOwnershipException exception) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(exception.StatusCode, exception.Code)); }
+        catch (ActionDataAccessException exception) { return DeclarationProblem(exception); }
     }
 
     /// <summary>服务端从当前对象核所属人及 edit，只消费接收账号，不接受客户端部门或 ACL。</summary>
     [HttpPost, RequireFeature("part.part.transfer")]
     public async Task<IResult> Transfer(string objectId, PartOwnershipTransferInput input, CancellationToken token)
     {
-        try { return Results.Ok(await transfer.TransferAsync([new("part.part", objectId)], input.RecipientId ?? "", token)); }
+        try { return Results.Ok(await transfer.TransferAsync([new("part.part", objectId)], input.RecipientId ?? "", Source("submit"), token)); }
         catch (EntityOwnershipException exception) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(exception.StatusCode, exception.Code)); }
+        catch (ActionDataAccessException exception) { return DeclarationProblem(exception); }
     }
+
+    // 只翻译正式来源错误，原持久化/取消异常不吞掉。
+    private static IResult DeclarationProblem(ActionDataAccessException exception) => Results.Problem(statusCode: exception.Status, title: exception.Code,
+        extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+
+    // 来源属于当前真实Part入口；不是客户端可写的provider或角色参数。
+    private static DataExecutionBindingReference Source(string stage) => new("part.part.transfer", "entityOwnership.transfer", stage);
 }

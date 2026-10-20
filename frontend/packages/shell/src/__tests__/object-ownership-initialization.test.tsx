@@ -4,9 +4,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { invalidatePlatformAntiforgeryToken, LocalizationProvider } from '@icp-platform/core';
-import type { StandardCrudOperationResult } from '@icp-platform/sdk';
+import type { ActionDataAccessRequirement, StandardCrudOperationResult } from '@icp-platform/sdk';
 import { createObjectOwnershipActions } from '../../../ui/src/objectOwnershipActions';
 import type { ObjectOwnershipInitializationTarget } from '../../../ui/src/ObjectOwnershipInitializationInput';
+import { ownershipInitializationSource } from '../../../ui/src/ownershipInitializationRequest';
+import requirements from '../../../../../tests/Kernel.Tests/Fixtures/OwnershipDataAccess.contract.json';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -41,6 +43,7 @@ let requests: Request[] = [];
 let nextUser = user;
 let refreshIdentity: () => Promise<void>;
 let changeTarget: (value: ObjectOwnershipInitializationTarget) => void;
+let changeBinding: (value: ActionDataAccessRequirement) => void;
 let results: StandardCrudOperationResult[] = [];
 const refresh = vi.fn();
 
@@ -72,14 +75,15 @@ function installFetch(responses: Responses = {}) {
   }));
 }
 
-async function mount(initialTarget: ObjectOwnershipInitializationTarget = target, responses: Responses = {}) {
+async function mount(initialTarget: ObjectOwnershipInitializationTarget = target, responses: Responses = {}, binding?: ActionDataAccessRequirement) {
   installFetch(responses);
   function Consumer() {
     refreshIdentity = useAuth().retrySessionValidation;
     const [currentTarget, setTarget] = useState(initialTarget); changeTarget = setTarget;
+    const [currentBinding, setBinding] = useState(binding); changeBinding = setBinding;
     const registration = createObjectOwnershipActions(() => currentTarget, currentTarget.eligibilityPath);
     return <StandardCrudActions actions={[{ key: 'initializeOwnership', labelKey: '归属补齐',
-      inputKey: 'initializeOwnership', confirmLabel: '确认补齐' }]}
+      inputKey: 'initializeOwnership', confirmLabel: '确认补齐', dataAccess: currentBinding }]}
       featureResolutionForAction={() => ({ kind: 'allowed', position: 'ownership' })}
       handlers={registration.actionHandlers} actionInputs={registration.actionInputRenderers}
       actionEligibilityResolvers={registration.actionEligibilityResolvers} context={{ id: currentTarget.initialId }}
@@ -265,7 +269,8 @@ it('drops the old account selection and ignores a late candidate result when the
 it('rejects a single-object draft whose identity no longer matches the owning page', async () => {
   installFetch();
   const registration = createObjectOwnershipActions(() => ({ ...target, initialId: 'fixed' }), target.eligibilityPath);
-  await expect(registration.actionHandlers.initializeOwnership({ input: { targetId: 'another', accountId: 'valid' } }))
+  await expect(registration.actionHandlers.initializeOwnership({ input: { targetId: 'another', accountId: 'valid',
+    source: ownershipInitializationSource({ ...target, initialId: 'fixed' }) } }))
     .rejects.toMatchObject({ status: 409, reasonKey: 'Platform.OwnershipTargetChanged' });
   expect(requests).toHaveLength(0);
 });
@@ -273,7 +278,8 @@ it('rejects a single-object draft whose identity no longer matches the owning pa
 it.each(['ids', 'linkIds'] as const)('sends only the chosen %s batch with the owner-provided position and returns its receipt', async batchIdField => {
   installFetch({ save: () => json({ changed: 2, unresolved: 1 }) });
   const registration = createObjectOwnershipActions(() => ({ ...target, batchIdField }), target.eligibilityPath);
-  const result = await registration.actionHandlers.initializeOwnership({ featurePosition: 'ownership', input: { targetIds: ['one', 'two'] } });
+  const result = await registration.actionHandlers.initializeOwnership({ featurePosition: 'ownership', input: {
+    targetIds: ['one', 'two'], source: ownershipInitializationSource({ ...target, batchIdField }, 'ownership') } });
   await expect(writes()[0].clone().json()).resolves.toEqual({ position, [batchIdField]: ['one', 'two'] });
   expect(result).toMatchObject({ operation: 'action', payload: { changed: 2, unresolved: 1 },
     notice: { reasonKey: 'Platform.OwnershipBatchCompleted', args: { changed: 2, unresolved: 1 } } });
@@ -282,7 +288,8 @@ it.each(['ids', 'linkIds'] as const)('sends only the chosen %s batch with the ow
 it('returns the unchanged receipt without manufacturing an object change', async () => {
   installFetch({ save: () => json({ changed: false }) });
   const registration = createObjectOwnershipActions(() => ({ ...target, initialId: 'one' }), target.eligibilityPath);
-  const result = await registration.actionHandlers.initializeOwnership({ input: { targetId: 'one' } });
+  const result = await registration.actionHandlers.initializeOwnership({ input: { targetId: 'one',
+    source: ownershipInitializationSource({ ...target, initialId: 'one' }) } });
   expect(result).toMatchObject({ noChange: true, notice: { reasonKey: 'Platform.OwnershipComplete' } });
   expect(result).not.toHaveProperty('change');
 });
@@ -290,7 +297,39 @@ it('returns the unchanged receipt without manufacturing an object change', async
 it('preserves an unknown mutation outcome and never automatically replays the business request', async () => {
   installFetch({ save: () => { throw new TypeError('connection lost after send'); } });
   const registration = createObjectOwnershipActions(() => ({ ...target, initialId: 'one' }), target.eligibilityPath);
-  await expect(registration.actionHandlers.initializeOwnership({ input: { targetId: 'one' } }))
+  await expect(registration.actionHandlers.initializeOwnership({ input: { targetId: 'one',
+    source: ownershipInitializationSource({ ...target, initialId: 'one' }) } }))
     .rejects.toMatchObject({ reasonKey: 'Platform.MutationOutcomeUnknown' });
   expect(writes()).toHaveLength(1);
+});
+
+it('aborts the old pending request and clears selection when the formal initialization binding changes', async () => {
+  const binding = (surface: string) => {
+    const matches = (requirements as ActionDataAccessRequirement[]).filter(item => item.viewKey === 'part.part.list'
+      && item.execution === 'part.part.initializeOwnership' && item.surface === surface);
+    expect(matches).toHaveLength(1);
+    return matches[0];
+  };
+  const original = binding('pageActions');
+  const replacement = binding('featureActions');
+  let finish!: (response: Response) => void;
+  let pendingCalls = 0;
+  await mount(target, { pending: () => ++pendingCalls === 1 ? new Promise<Response>(resolve => { finish = resolve; })
+    : json({ items: [{ id: 'fresh', name: '新来源对象' }], total: 1 }) }, original);
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  const obsolete = requests.find(request => new URL(request.url).pathname.endsWith('/pending'))!;
+  expect(obsolete.headers.get('X-NewP-Data-Declaration')).toBe(original.id);
+  await act(async () => changeBinding(replacement));
+  await vi.waitFor(() => expect(document.body.textContent).toContain('新来源对象'));
+  expect(obsolete.signal.aborted).toBe(true);
+  await act(async () => finish(json({ items: [{ id: 'obsolete', name: '旧来源对象' }], total: 1 })));
+  expect(document.body.textContent).not.toContain('旧来源对象');
+  expect(button('确认补齐')?.disabled).toBe(true);
+  expect(requests.filter(request => new URL(request.url).pathname.endsWith('/pending')).at(-1)!
+    .headers.get('X-NewP-Data-Declaration')).toBe(replacement.id);
+  const registration = createObjectOwnershipActions(() => target, target.eligibilityPath);
+  await expect(registration.actionHandlers.initializeOwnership({ featurePosition: 'ownership', dataAccess: replacement,
+    input: { targetIds: ['obsolete'], source: ownershipInitializationSource(target, 'ownership', original) } }))
+    .rejects.toMatchObject({ status: 409 });
+  expect(writes()).toHaveLength(0);
 });

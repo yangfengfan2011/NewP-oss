@@ -196,6 +196,30 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "固定发行的管理员从真实待补齐页选择当前页并提交一次正式归属初始化")]
+    public async Task OwnershipInitialization_UsesFormalBoundAction()
+    {
+        var (root, runId) = PrepareRun("ownership-initialization-execution");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            prepareJourney: (_, _, _, token) => fixture.PrepareOwnershipLegacyRowsAsync(token),
+            browserJourney: async (page, token) =>
+            {
+                var crud = new StandardCrudPageDriver(page);
+                var driver = new WorkspacePageDriver(page);
+                await driver.OpenAsync();
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                var dialog = await driver.OpenOwnershipInitializationAsync();
+                var select = dialog.GetByRole(AriaRole.Button, new() { Name = "选择当前许可页", Exact = true });
+                await Assertions.Expect(select).ToBeEnabledAsync();
+                await select.ClickAsync();
+                await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/ownership/initialize", 200, "正式归属初始化"));
+                await crud.WaitForRowAsync(fixture.ExistingName);
+                token.ThrowIfCancellationRequested();
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "管理员显式组织初始化及三模型缺失归属的正式页面、批次和人工补齐最短路径")]
     public async Task NativeWorkspaceOwnership_UsesFormalDriver()
     {

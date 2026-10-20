@@ -15,13 +15,21 @@ public sealed record EntityOwnershipTransferResult(bool Succeeded, int Changed);
 
 /// <summary>规范对象转交只改变归属；接收、记录与结果共享原数据库事务。</summary>
 public sealed class EntityOwnershipTransfer(EfPlatformDbContext db, IPlatformTransactionExecutor transactions,
-    IEntityAuditValueProvider audit, IDataScopeObjectDecisionProvider decisions, IStandardCrudResourceRegistry registry,
+    IEntityAuditValueProvider audit, IDataExecutionAccess executions, IStandardCrudResourceRegistry registry,
     IEnumerable<DataScopeResource> declaredResources,
     IEnumerable<IEntityOwnershipTransferReceiver> receivers, IBusinessAuditRecorder recorder, ITransactionalAccountOwnershipDirectory? accounts = null)
 {
-    /// <summary>锁后重验当前所属人与 edit；不以接收者的任何对象读取资格为前置。</summary>
+    /// <summary>正式入口传入固定submit来源，锁后仍在原owner/edit位置独立裁决。</summary>
     public async ValueTask<EntityOwnershipTransferResult> TransferAsync(IReadOnlyCollection<EntityOwnershipTransferTarget> targets,
-        string recipientId, CancellationToken token = default)
+        string recipientId, DataExecutionBindingReference source, CancellationToken token = default)
+    {
+        ValidateTransferSource(source, "submit", targets);
+        return await TransferCoreAsync(targets, recipientId, (resource, id, cancellation) => BoundEditAsync(source, resource, id, cancellation), token);
+    }
+
+    // 原锁序、当前旧行、接收、审计与整批事务共用；只替换原edit时点的正式来源。
+    private async ValueTask<EntityOwnershipTransferResult> TransferCoreAsync(IReadOnlyCollection<EntityOwnershipTransferTarget> targets,
+        string recipientId, Func<string, string, CancellationToken, Task<bool>> mayEdit, CancellationToken token)
     {
         if (targets.Count == 0 || targets.Any(target => string.IsNullOrWhiteSpace(target.ResourceKey) || string.IsNullOrWhiteSpace(target.ObjectId))
             || string.IsNullOrWhiteSpace(recipientId)) throw new EntityOwnershipException(400, "EntityOwnership.InvalidTransfer");
@@ -48,7 +56,7 @@ public sealed class EntityOwnershipTransfer(EfPlatformDbContext db, IPlatformTra
                     {
                         var row = rows[item.Target.ObjectId];
                         if (!Equals(row.GetValueOrDefault(EntityOwnershipFields.OwnerId), stamp.ActorId)
-                            || !await decisions.IsAllowedAsync(item.Target.ResourceKey, item.Target.ObjectId, "edit", cancellation))
+                            || !await mayEdit(item.Target.ResourceKey, item.Target.ObjectId, cancellation))
                             throw new EntityOwnershipException(403, "EntityOwnership.TransferDenied");
                         current.Add((item.Target, item.Model, row));
                     }
@@ -76,8 +84,17 @@ public sealed class EntityOwnershipTransfer(EfPlatformDbContext db, IPlatformTra
         }, token);
     }
 
-    /// <summary>准备查询只核当前所属人与 edit，不生成接收事实；提交仍在对象锁后独立重验。</summary>
-    public async ValueTask CheckAsync(IReadOnlyCollection<EntityOwnershipTransferTarget> targets, CancellationToken token = default)
+    /// <summary>正式准备入口核固定prepare来源；后续submit不消费本次允许结果。</summary>
+    public async ValueTask CheckAsync(IReadOnlyCollection<EntityOwnershipTransferTarget> targets,
+        DataExecutionBindingReference source, CancellationToken token = default)
+    {
+        ValidateTransferSource(source, "prepare", targets);
+        await CheckCoreAsync(targets, (resource, id, cancellation) => BoundEditAsync(source, resource, id, cancellation), token);
+    }
+
+    // 规范目标与原owner拒绝先后不变；读取依赖由同一个edit裁决引擎完成。
+    private async ValueTask CheckCoreAsync(IReadOnlyCollection<EntityOwnershipTransferTarget> targets,
+        Func<string, string, CancellationToken, Task<bool>> mayEdit, CancellationToken token)
     {
         if (targets.Count == 0 || targets.Any(target => string.IsNullOrWhiteSpace(target.ResourceKey) || string.IsNullOrWhiteSpace(target.ObjectId)))
             throw new EntityOwnershipException(400, "EntityOwnership.InvalidTransfer");
@@ -93,10 +110,26 @@ public sealed class EntityOwnershipTransfer(EfPlatformDbContext db, IPlatformTra
                 foreach (var item in batch)
                 {
                     if (!owners.TryGetValue(item.Target.ObjectId, out var row)) throw new EntityOwnershipException(404, "EntityOwnership.TargetUnavailable");
-                    if (row.Owner != actor || !await decisions.IsAllowedAsync(item.Target.ResourceKey, item.Target.ObjectId, "edit", token))
+                    if (row.Owner != actor || !await mayEdit(item.Target.ResourceKey, item.Target.ObjectId, token))
                         throw new EntityOwnershipException(403, "EntityOwnership.TransferDenied");
                 }
             }
+    }
+
+    // 来源固定于执行端，真实对象仍在原时点传入共同对象角色执行器。
+    private async Task<bool> BoundEditAsync(DataExecutionBindingReference source, string resource, string id, CancellationToken token)
+    {
+        await foreach (var decision in executions.EvaluateObjectsAsync(source, "target", [new(resource, id)], token))
+            return decision.Decision == DataExecutionDecision.Allowed;
+        throw new InvalidOperationException("Transfer target evaluation returned no decision.");
+    }
+
+    // 核实际HTTP声明及资源；prepare/submit由真实方法选择，客户端不能指定另一执行或阶段。
+    private void ValidateTransferSource(DataExecutionBindingReference source, string stage, IReadOnlyCollection<EntityOwnershipTransferTarget> targets)
+    {
+        if (source.Provider != "entityOwnership.transfer" || source.Stage != stage)
+            throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
+        foreach (var resource in targets.Select(target => target.ResourceKey).Distinct(StringComparer.Ordinal)) executions.Validate([source], resource);
     }
 
     // 只消费真实 owner 已登记的规范资源；选用归属字段的模型才可转交，不引入业务模块白名单。

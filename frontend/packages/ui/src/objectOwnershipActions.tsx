@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { platformFetch } from '@icp-platform/core';
 import { StandardCrudRequestError, readStandardCrudRequestError, type StandardCrudActionContext, type StandardCrudActionInputRenderContext, type StandardCrudActionEligibilityResolver } from '@icp-platform/sdk';
-import type { ObjectOwnershipInitializationTarget, OwnershipInitializationDraft } from './ObjectOwnershipInitializationInput';
+import { ownershipInitializationHeaders, ownershipInitializationSource, type ObjectOwnershipInitializationTarget, type OwnershipInitializationDraft } from './ownershipInitializationRequest';
 
 const Input = lazy(() => import('./ObjectOwnershipInitializationInput'));
 
@@ -9,7 +9,7 @@ const Input = lazy(() => import('./ObjectOwnershipInitializationInput'));
 export function createObjectOwnershipActions(getTarget: (context: StandardCrudActionContext) => ObjectOwnershipInitializationTarget, eligibilityPath: string) {
   const eligibility: StandardCrudActionEligibilityResolver = async context => {
     const response = await platformFetch(eligibilityPath, {
-      signal: context.signal, headers: context.featurePosition ? { 'X-NewP-Feature': context.featurePosition } : {},
+      signal: context.signal, headers: ownershipInitializationHeaders(context.featurePosition, context.dataAccess),
     });
     if (response.status === 403) return { visible: false, available: false };
     if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -19,17 +19,19 @@ export function createObjectOwnershipActions(getTarget: (context: StandardCrudAc
     actionEligibilityResolvers: { initializeOwnership: eligibility, initializeOwnershipPending: eligibility },
     actionInputRenderers: { initializeOwnership: (context: StandardCrudActionInputRenderContext) => {
       const target = getTarget(context);
-      return <Suspense fallback={null}><Input key={JSON.stringify([target.initialId, target.pendingPath, target.body, context.featurePosition])} {...context} target={target} /></Suspense>;
+      return <Suspense fallback={null}><Input key={ownershipInitializationSource(target, context.featurePosition, context.action.dataAccess ?? context.dataAccess)} {...context} target={target} /></Suspense>;
     } },
     actionHandlers: {
       initializeOwnership: Object.assign(async (context: StandardCrudActionContext) => {
         const target = getTarget(context);
+        const binding = context.action?.dataAccess ?? context.dataAccess;
         const input = context.input as OwnershipInitializationDraft | undefined;
         const batch = !target.initialId && (input?.targetIds?.length ?? 0) > 0;
-        if (!input || !batch && (!input.targetId || target.initialId && target.initialId !== input.targetId))
+        if (!input || input.source !== ownershipInitializationSource(target, context.featurePosition, binding)
+          || !batch && (!input.targetId || target.initialId && target.initialId !== input.targetId))
           throw new StandardCrudRequestError('归属补齐对象已变化，请重新选择。', 409, {}, { reasonKey: 'Platform.OwnershipTargetChanged' });
         const response = await platformFetch(batch ? target.batchPath : target.savePath.replace('{id}', encodeURIComponent(input.targetId!)), {
-          method: 'POST', headers: { 'Content-Type': 'application/json', ...(context.featurePosition ? { 'X-NewP-Feature': context.featurePosition } : {}) },
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...ownershipInitializationHeaders(context.featurePosition, binding) },
           body: JSON.stringify({ ...target.body, ...(batch ? { [target.batchIdField ?? 'ids']: input.targetIds } : { accountId: input.accountId ?? null }) }),
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);

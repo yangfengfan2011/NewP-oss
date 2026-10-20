@@ -1,9 +1,5 @@
 {
   "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateResolvedObjectsAsync.lambda[0] -> IsAllowedAsync": "公共角色执行器仅消费正式装配的当前阶段common/按资源AnyOf要求；真身份来自当前owner解析器，业务调用者不传动作或允许结果。",
-  "ICP.Platform.Crud.Ownership.EntityOwnershipMaintenance.RequireAccessAsync[0] -> IsAllowedAsync": "现有所有权owner的read/edit和业务维护要求；后续所有权切片迁移，#321核清。",
-  "ICP.Platform.Crud.Ownership.EntityOwnershipMaintenance.RequireAccessAsync[1] -> IsAllowedAsync": "现有所有权owner的read/edit和业务维护要求；后续所有权切片迁移，#321核清。",
-  "ICP.Platform.Crud.Ownership.EntityOwnershipTransfer.CheckAsync[0] -> IsAllowedAsync": "现有所有权owner的read/edit和业务维护要求；后续所有权切片迁移，#321核清。",
-  "ICP.Platform.Crud.Ownership.EntityOwnershipTransfer.TransferAsync.lambda[0] -> IsAllowedAsync": "现有所有权owner的read/edit和业务维护要求；后续所有权切片迁移，#321核清。",
   "ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter.CheckExistingScopeAsync[0] -> IsAllowedAsync": "明确LegacyDataExecutions或逐caller/action的LegacyObjectOperationBindings隔离的尚未迁移执行；来源独立于Values，迁移目标缺source拒绝；#321删除。 动作来源为显式旧路径的固定read。",
   "ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter.CheckExistingScopeAsync[1] -> IsAllowedAsync": "明确LegacyDataExecutions或逐caller/action的LegacyObjectOperationBindings隔离的尚未迁移执行；来源独立于Values，迁移目标缺source拒绝；#321删除。 动作来源为调用者固定edit/delete，先核具体legacy操作。",
   "ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter.PrepareCreateCandidateAsync[0] -> IsCandidateAllowedAsync": "明确LegacyDataExecutions或逐caller/action的LegacyObjectOperationBindings隔离的尚未迁移执行；来源独立于Values，迁移目标缺source拒绝；#321删除。",
@@ -28,7 +24,6 @@
   "ICP.Platform.Modules.Workspace.WorkspaceContents.RequireDocumentSourcesAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
   "ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveDeferredClipboardTargetsAsync[0] -> IsAllowedAsync": "显式FolderPreparation/FolderCopy/FolderStructure旧执行边界保留引用copy；Document旧提交仅共用读取解析。正式clipboard各mode已迁移，后续副本切片迁移此槽。",
   "ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveObjectCopySourceAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveOwnershipTargetsAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
   "ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveTargetsAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
   "ICP.Platform.Modules.Workspace.WorkspaceContents.WritablePositionAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。"
 }

@@ -34,19 +34,19 @@ public sealed class EntityOwnershipAccessSqlServerHttpApiTests
         var point = Point(fixture, "workspace.folder.initializeOwnership");
         var input = new { position, linkIds = targets.Select(target => target.LinkId).ToArray() };
         access.HiddenId = targets[1].Id;
-        using var pending = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position));
+        using var pending = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position), dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         Assert.Equal(2, (await ReadOkAsync(pending)).GetProperty("total").GetInt32());
-        using var unreadable = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", input);
+        using var unreadable = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", input, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
         await AssertMissingAsync();
         access.HiddenId = null;
         access.EditDeniedId = targets[2].Id;
-        using var denied = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", input);
+        using var denied = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", input, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         await AssertMissingAsync();
         Assert.Contains(targets[2].Id, access.EditedIds);
         access.EditDeniedId = null;
-        using var allowed = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", input);
+        using var allowed = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", input, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         Assert.Equal(3, (await ReadOkAsync(allowed)).GetProperty("changed").GetInt32());
 
         async Task AssertMissingAsync()
@@ -110,23 +110,23 @@ public sealed class EntityOwnershipAccessSqlServerHttpApiTests
         foreach (var target in targets)
         {
             using var forbidden = await FeatureHttpTestRequests.SendAsync(ordinary, maintenance, HttpMethod.Post,
-                $"/api/workspace/content/{target.LinkId}/ownership", new { position, accountId = fixture.ActorId });
+                $"/api/workspace/content/{target.LinkId}/ownership", new { position, accountId = fixture.ActorId }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance));
             Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
             using var privateSource = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Post,
-                $"/api/workspace/content/{target.LinkId}/ownership", new { position });
+                $"/api/workspace/content/{target.LinkId}/ownership", new { position }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance));
             Assert.Equal(HttpStatusCode.NotFound, privateSource.StatusCode);
             Assert.DoesNotContain(target.Name, await privateSource.Content.ReadAsStringAsync(), StringComparison.Ordinal);
             using var fakePublicSource = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Post,
-                $"/api/workspace/content/{target.LinkId}/ownership", new { position = publicPosition });
+                $"/api/workspace/content/{target.LinkId}/ownership", new { position = publicPosition }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance));
             Assert.Equal(HttpStatusCode.NotFound, fakePublicSource.StatusCode);
             using var bareId = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Post,
-                $"/api/workspace/content/{target.Id}/ownership", new { position = publicPosition });
+                $"/api/workspace/content/{target.Id}/ownership", new { position = publicPosition }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance));
             Assert.Equal(HttpStatusCode.NotFound, bareId.StatusCode);
             if (target.Model == "WorkspaceFolder") continue;
             var slug = target.Model.ToLowerInvariant();
             var route = $"/api/{slug}/{(target.Model == "Part" ? "parts" : "documents")}/ownership";
             var point = Point(fixture, $"{slug}.{slug}.initializeOwnership");
-            using var ownerForbidden = await FeatureHttpTestRequests.SendAsync(ordinary, point, HttpMethod.Post, $"{route}/{target.Id}", new { });
+            using var ownerForbidden = await FeatureHttpTestRequests.SendAsync(ordinary, point, HttpMethod.Post, $"{route}/{target.Id}", new { }, OwnershipDeclaration(fixture, $"{slug}.{slug}.initializeOwnership", point));
             Assert.Equal(HttpStatusCode.Forbidden, ownerForbidden.StatusCode);
         }
         var visible = await CreateAsync(fixture, admin, publicPosition, "WorkspaceFolder", "folders", "create", "已移除来源");
@@ -135,7 +135,7 @@ public sealed class EntityOwnershipAccessSqlServerHttpApiTests
             "/api/workspace/content/references/remove", new { position = publicPosition, linkIds = new[] { visible.LinkId } }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.removeSelected")));
         await ReadOkAsync(removed);
         using var stale = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Post,
-            $"/api/workspace/content/{visible.LinkId}/ownership", new { position = publicPosition });
+            $"/api/workspace/content/{visible.LinkId}/ownership", new { position = publicPosition }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance));
         Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);
         foreach (var target in targets.Append(visible))
         {

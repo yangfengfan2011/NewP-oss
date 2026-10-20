@@ -40,7 +40,7 @@ public sealed class EntityOwnershipFailureSqlServerHttpApiTests(ITestOutputHelpe
                 // 入口只翻译归属业务失败；真实基础设施故障保持原异常，不伪装为成功或拒绝。
                 var failure = await Record.ExceptionAsync(async () =>
                 {
-                    using var response = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", body);
+                    using var response = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", body, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
                     Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
                 });
                 if (failure is not null) Assert.StartsWith("injected ", Assert.IsType<InvalidOperationException>(failure).Message, StringComparison.Ordinal);
@@ -62,13 +62,14 @@ public sealed class EntityOwnershipFailureSqlServerHttpApiTests(ITestOutputHelpe
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/initialize") { Content = JsonContent.Create(body) };
             request.Headers.Add("X-NewP-Feature", point.Position);
+            request.Headers.Add("X-NewP-Data-Declaration", OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point).Id);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => admin.SendAsync(request, cancellation.Token));
         }
         finally { fixture.Fault.AfterRegister = null; }
         Assert.Equal(2, registrations);
         await AssertUnchangedAsync(fixture, targets, before);
         output.WriteLine($"ownership cancellation objects=3 updatedBeforeCancellation=2 elapsedMs={cancelElapsed.Elapsed.TotalMilliseconds:F2}");
-        using var retry = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", body);
+        using var retry = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", body, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         Assert.Equal(3, (await ReadOkAsync(retry)).GetProperty("changed").GetInt32());
     }
 

@@ -457,10 +457,10 @@ public sealed class CanonicalModulePlanCompiler
                 if (candidate.DataActions.Any(action => action.ModuleId != candidate.ModuleId))
                     throw new InvalidOperationException("数据动作声明不能跨模块冒领归属。");
                 if (candidate.DataExecutions.Any(execution => execution.ModuleId != candidate.ModuleId
-                    || !execution.Provider.StartsWith("standardCrud.", StringComparison.Ordinal) && execution.Provider != candidate.BackendBehaviorKey && !candidates.SelectMany(owner => owner.DataExecutionProviders).Any(provider => provider.Key == execution.Provider)))
+                    || !DataExecutionContracts.IsBuiltInProvider(execution.Provider) && execution.Provider != candidate.BackendBehaviorKey && !candidates.SelectMany(owner => owner.DataExecutionProviders).Any(provider => provider.Key == execution.Provider)))
                     throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_OWNER_INVALID");
                 if (candidate.DataExecutionProviders.Any(provider => provider.ModuleId != candidate.ModuleId || provider.BackendBehaviorKey != candidate.BackendBehaviorKey
-                    || provider.ConsumerBinding != "resource-owner" || string.IsNullOrWhiteSpace(provider.Key) || provider.Key.StartsWith("standardCrud.", StringComparison.Ordinal)
+                    || provider.ConsumerBinding != "resource-owner" || string.IsNullOrWhiteSpace(provider.Key) || DataExecutionContracts.IsBuiltInProvider(provider.Key)
                     || provider.Requirements is not { Count: > 0 }))
                     throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_OWNER_INVALID");
                 DataActionCatalogCompiler.Compile(candidate.DataActions);

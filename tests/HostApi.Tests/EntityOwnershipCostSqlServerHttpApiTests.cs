@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.Ownership;
@@ -20,16 +21,18 @@ public sealed class EntityOwnershipCostSqlServerHttpApiTests(ITestOutputHelper o
     [EnvironmentGatedFact("NEWP_RUN_ENTITY_OWNERSHIP_SQLSERVER_CAPACITY", "显式101个真实旧Folder跨内部批次补齐，记录SQL、分配、锁区间及分页成本")]
     public async Task SelectedLegacyObjects_CrossIoBatchWithoutBusinessLimit_RecordsActualCosts()
     {
+        using var measurement = new OwnershipReadPlanDiagnostics(output, "maintenance");
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var position = await ContainerAsync(fixture, admin);
         var seed = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "容量旧对象原型");
         var ids = new List<string>();
-        string database;
+        string database; string diagnosticConnection;
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             database = db.Database.GetDbConnection().Database;
+            diagnosticConnection = db.Database.GetConnectionString()!;
             var folders = db.Set<Dictionary<string, object?>>("WorkspaceFolder");
             var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             var row = await folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == seed.Id);
@@ -53,50 +56,59 @@ public sealed class EntityOwnershipCostSqlServerHttpApiTests(ITestOutputHelper o
             Assert.False(string.IsNullOrWhiteSpace(accounts[fixture.ActorId].DepartmentId));
         }
         using var observation = new SqlObservation(database);
+        measurement.Database = database;
         var point = Point(fixture, "workspace.folder.initializeOwnership");
         var allocated = GC.GetTotalAllocatedBytes();
         observation.Begin();
-        using var pending = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position));
+        measurement.Begin("pending-100-of-101", currentReadOnly: true);
+        using var pending = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position, pageSize: measurement.Enabled ? 100 : 20), dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         var page = await ReadOkAsync(pending);
         var pendingCost = observation.End();
+        await measurement.EndAsync(Encoding.UTF8.GetByteCount(page.GetRawText()), observation.CommandCount, diagnosticConnection);
         Assert.Equal(101, page.GetProperty("total").GetInt32());
-        Assert.Equal(20, page.GetProperty("items").GetArrayLength());
+        Assert.Equal(measurement.Enabled ? 100 : 20, page.GetProperty("items").GetArrayLength());
         output.WriteLine(JsonSerializer.Serialize(new { scenario = "ownership pending", objects = 101, depth = 2, actors = 1, configuredRules = 0,
             responseBytes = System.Text.Encoding.UTF8.GetByteCount(page.GetRawText()), allocatedBytes = GC.GetTotalAllocatedBytes() - allocated, cost = pendingCost }));
-        using var cancellation = new CancellationTokenSource();
-        var registrations = 0;
-        fixture.Fault.AfterRegister = async (change, token) =>
+        if (!measurement.Enabled)
         {
-            if (change.EventType != "entity.ownership.backfilled" || ++registrations != 3) return;
-            cancellation.Cancel();
-            await Task.Delay(Timeout.InfiniteTimeSpan, token);
-        };
+            using var cancellation = new CancellationTokenSource();
+            var registrations = 0;
+            fixture.Fault.AfterRegister = async (change, token) =>
+            {
+                if (change.EventType != "entity.ownership.backfilled" || ++registrations != 3) return;
+                cancellation.Cancel();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            };
+            allocated = GC.GetTotalAllocatedBytes();
+            observation.Begin();
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/initialize") { Content = JsonContent.Create(new { position, linkIds = ids }) };
+                request.Headers.Add("X-NewP-Feature", point.Position);
+                request.Headers.Add("X-NewP-Data-Declaration", OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point).Id);
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => admin.SendAsync(request, cancellation.Token));
+            }
+            finally { fixture.Fault.AfterRegister = null; }
+            var cancelCost = observation.End();
+            Assert.Equal(3, registrations);
+            using (var checkScope = fixture.Services.CreateScope())
+            {
+                var check = checkScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+                Assert.Equal(101, await check.Set<Dictionary<string, object?>>("WorkspaceFolder")
+                    .CountAsync(row => EF.Property<string?>(row, "OwnerId") == null));
+                Assert.False(await check.Set<Dictionary<string, object?>>("BusinessChange")
+                    .AnyAsync(row => EF.Property<string>(row, "EventType") == "entity.ownership.backfilled"));
+            }
+            output.WriteLine(JsonSerializer.Serialize(new { scenario = "ownership cancellation rollback", objects = 101, updatedBeforeCancellation = 3,
+                allocatedBytes = GC.GetTotalAllocatedBytes() - allocated, cost = cancelCost }));
+        }
         allocated = GC.GetTotalAllocatedBytes();
         observation.Begin();
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/initialize") { Content = JsonContent.Create(new { position, linkIds = ids }) };
-            request.Headers.Add("X-NewP-Feature", point.Position);
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => admin.SendAsync(request, cancellation.Token));
-        }
-        finally { fixture.Fault.AfterRegister = null; }
-        var cancelCost = observation.End();
-        Assert.Equal(3, registrations);
-        using (var checkScope = fixture.Services.CreateScope())
-        {
-            var check = checkScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            Assert.Equal(101, await check.Set<Dictionary<string, object?>>("WorkspaceFolder")
-                .CountAsync(row => EF.Property<string?>(row, "OwnerId") == null));
-            Assert.False(await check.Set<Dictionary<string, object?>>("BusinessChange")
-                .AnyAsync(row => EF.Property<string>(row, "EventType") == "entity.ownership.backfilled"));
-        }
-        output.WriteLine(JsonSerializer.Serialize(new { scenario = "ownership cancellation rollback", objects = 101, updatedBeforeCancellation = 3,
-            allocatedBytes = GC.GetTotalAllocatedBytes() - allocated, cost = cancelCost }));
-        allocated = GC.GetTotalAllocatedBytes();
-        observation.Begin();
-        using var initialized = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", new { position, linkIds = ids });
+        measurement.Begin("initialize-101");
+        using var initialized = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", new { position, linkIds = ids }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         var receipt = await ReadOkAsync(initialized);
         var cost = observation.End();
+        await measurement.EndAsync(Encoding.UTF8.GetByteCount(receipt.GetRawText()), observation.CommandCount, diagnosticConnection);
         Assert.Equal(101, receipt.GetProperty("changed").GetInt32());
         Assert.True(observation.CommandCount > 0);
         Assert.True(observation.ObservedLock);

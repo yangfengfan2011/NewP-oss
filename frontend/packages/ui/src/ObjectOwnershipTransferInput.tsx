@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ownershipTransferOutcomeUnknown, ownershipTransferSubmission, ownershipTransferSource, type ObjectOwnershipTransferTarget, type OwnershipTransferDraft } from './ownershipTransferRequest';
+import { ownershipTransferOutcomeUnknown, ownershipTransferSubmission, ownershipTransferSource, ownershipTransferHeaders, type ObjectOwnershipTransferTarget, type OwnershipTransferDraft } from './ownershipTransferRequest';
 import { Alert, Select, Space } from 'antd';
 import { formatRequestError, platformFetch, useLocalization } from '@icp-platform/core';
 import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
@@ -12,13 +12,14 @@ const noUnknown = () => false;
 
 /** 标准动作宿主持有草稿和提交；本输入只读取当前资格与最小账号候选，不推断接收者 read。 */
 export default function ObjectOwnershipTransferInput(context: StandardCrudActionInputRenderContext & { target: ObjectOwnershipTransferTarget }) {
-  const source = ownershipTransferSource(context.target, context.featurePosition, context.instance);
+  const source = ownershipTransferSource(context.target, context.featurePosition, context.instance, context.action.dataAccess ?? context.dataAccess);
   return <TransferSession key={source} {...context} source={source} />;
 }
 
-function TransferSession({ target, source, featurePosition, value, onChange, onDraftStateChange, submitting, instance, submissionFailure }:
+function TransferSession({ target, source, action, dataAccess, featurePosition, value, onChange, onDraftStateChange, submitting, instance, submissionFailure }:
   StandardCrudActionInputRenderContext & { target: ObjectOwnershipTransferTarget; source: string }) {
   const { t } = useLocalization();
+  const binding = action.dataAccess ?? dataAccess;
   const submission = ownershipTransferSubmission(instance, source);
   const unknown = ownershipTransferOutcomeUnknown(submissionFailure);
   const accessDenied = submissionFailure instanceof StandardCrudRequestError && [401, 403, 404].includes(submissionFailure.status);
@@ -39,7 +40,7 @@ function TransferSession({ target, source, featurePosition, value, onChange, onD
     setSearching(true); setFailure(undefined); setCandidates([]);
     void (async () => {
       try {
-        const headers = { 'X-NewP-Feature': featurePosition };
+        const headers = ownershipTransferHeaders(featurePosition, binding);
         const eligible = await platformFetch(target.eligibilityPath, { method: 'GET', signal: controller.signal, headers });
         if (!eligible.ok) throw await readStandardCrudRequestError(eligible);
         const eligibility = await eligible.json() as { allowed: boolean };
@@ -53,7 +54,7 @@ function TransferSession({ target, source, featurePosition, value, onChange, onD
       finally { if (!controller.signal.aborted && instance.active) { setLoading(false); setSearching(false); } }
     })();
     return () => controller.abort();
-  }, [target.eligibilityPath, target.accountsPath, query, featurePosition, instance]);
+  }, [target.eligibilityPath, target.accountsPath, query, featurePosition, instance, binding]);
   useEffect(() => {
     onDraftStateChange?.({ dirty: !!recipientId, ready: !!recipientId && allowed && !loading && !searching && !failure && !submitting && !frozen && !accessDenied && !!instance?.active });
   }, [recipientId, allowed, loading, searching, failure, submitting, frozen, accessDenied, instance, onDraftStateChange]);

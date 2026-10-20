@@ -1,4 +1,4 @@
-import { StandardCrudRequestError, type StandardCrudActionInstance } from '@icp-platform/sdk';
+import { StandardCrudRequestError, type StandardCrudActionInstance, type ActionDataAccessRequirement } from '@icp-platform/sdk';
 
 export interface ObjectOwnershipTransferTarget {
   savePath: string;
@@ -10,11 +10,17 @@ export interface OwnershipTransferDraft { recipientId: string; source: string }
 
 /** 来源只固定当前动作草稿，不能代替服务端在提交事务中重验所属人及 edit。 */
 const sourceOwner = Symbol('ownership-transfer-source-instance');
-export function ownershipTransferSource(target: ObjectOwnershipTransferTarget, featurePosition?: string, instance?: StandardCrudActionInstance): string {
+export function ownershipTransferSource(target: ObjectOwnershipTransferTarget, featurePosition?: string, instance?: StandardCrudActionInstance,
+  dataAccess?: ActionDataAccessRequirement): string {
   const lifecycle = instance?.active ? instance.getOrCreate(sourceOwner, () => crypto.randomUUID(), () => {}) : null;
-  return JSON.stringify([target.savePath, target.eligibilityPath, target.accountsPath, target.body, featurePosition, lifecycle]);
+  return JSON.stringify([target.savePath, target.eligibilityPath, target.accountsPath, target.body, featurePosition, dataAccess?.id, lifecycle]);
 }
 
+/** 准备、候选与提交消费同一正式来源，声明只传引用，不进入业务载荷。 */
+export function ownershipTransferHeaders(featurePosition?: string, dataAccess?: ActionDataAccessRequirement): Record<string, string> {
+  return { ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
+    ...(dataAccess?.id ? { 'X-NewP-Data-Declaration': dataAccess.id } : {}) };
+}
 
 class TransferSubmission {
   private frozen = false;

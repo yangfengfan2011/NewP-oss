@@ -37,32 +37,32 @@ public sealed class EntityOwnershipTransferPreparationSqlServerHttpApiTests
         var ids = Uri.EscapeDataString(JsonSerializer.Serialize(new[] { target.LinkId }));
         var candidateUrl = $"/api/workspace/ownership/transfer/accounts?queryScope={scope}&selectedIds={ids}&query=prepare-disabled-recipient";
         using (var prepared = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Get,
-                   $"/api/workspace/ownership/transfer/eligibility?queryScope={scope}&selectedIds={ids}"))
+                   $"/api/workspace/ownership/transfer/eligibility?queryScope={scope}&selectedIds={ids}", dataAccess: OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             Assert.True((await ReadOkAsync(prepared)).GetProperty("allowed").GetBoolean());
-        using (var candidates = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Get, candidateUrl))
+        using (var candidates = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Get, candidateUrl, dataAccess: OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             AssertCandidate(await ReadOkAsync(candidates), recipientId);
         using (var candidates = await FeatureHttpTestRequests.SendAsync(ownerClient, independent, HttpMethod.Get,
-                   $"/api/part/parts/{target.Id}/transfer/accounts?query=prepare-disabled-recipient"))
+                   $"/api/part/parts/{target.Id}/transfer/accounts?query=prepare-disabled-recipient", dataAccess: OwnershipDeclaration(fixture, "part.part.transfer", independent)))
             AssertCandidate(await ReadOkAsync(candidates), recipientId);
-        using (var denied = await FeatureHttpTestRequests.SendAsync(admin, transfer, HttpMethod.Get, candidateUrl))
+        using (var denied = await FeatureHttpTestRequests.SendAsync(admin, transfer, HttpMethod.Get, candidateUrl, dataAccess: OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
         {
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
             Assert.DoesNotContain(recipientId, await denied.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         }
         var input = new { position, linkIds = new[] { target.LinkId }, recipientId };
-        using (var substitute = await FeatureHttpTestRequests.SendAsync(admin, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input))
+        using (var substitute = await FeatureHttpTestRequests.SendAsync(admin, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             Assert.Equal(HttpStatusCode.Forbidden, substitute.StatusCode);
         var manage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Part" && point.Key == "authorize" && point.ActionScope == "list.rowActions");
         await SetOwnerEditAsync("deny");
         var models = new[] { "Part", "WorkspaceSpace", "WorkspaceFolder", "WorkspaceFolderContent", "BusinessChange", "WorkspaceTransferNotification" };
         var before = await SnapshotAsync(fixture, models);
-        using (var stale = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input))
+        using (var stale = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             Assert.Equal(HttpStatusCode.Forbidden, stale.StatusCode);
-        using (var denied = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Get, candidateUrl))
+        using (var denied = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Get, candidateUrl, dataAccess: OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         Assert.Equal(before, await SnapshotAsync(fixture, models));
         await SetOwnerEditAsync("allow");
-        using (var success = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input))
+        using (var success = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input, OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer)))
             Assert.Equal(1, (await ReadOkAsync(success)).GetProperty("changed").GetInt32());
         var row = await RowAsync(fixture, target);
         Assert.Equal(recipientId, row["OwnerId"]);

@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.LinkQueries;
@@ -22,6 +23,7 @@ public sealed partial class WorkspaceContentsController
     {
         try { return Results.Ok(await contents.InitializeOwnershipManyAsync(Actor(), RequireOwnershipPosition(input.Position), input.LinkIds ?? [], backfill, token)); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }
     }
 
     /// <summary>普通功能授权不能提升为存量补齐维护身份，页面可安全隐藏管理员入口。</summary>
@@ -35,6 +37,7 @@ public sealed partial class WorkspaceContentsController
         try { return Results.Ok(await contents.PendingOwnershipAsync(Actor(), ReadOwnershipPosition(queryScope, paging: true), page, pageSize, token)); }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }
     }
 
     /// <summary>受控补齐先读取真实缺失状态；不以裸对象ID或调用方所称模型旁路来源。</summary>
@@ -47,6 +50,7 @@ public sealed partial class WorkspaceContentsController
         }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }
     }
 
     /// <summary>缺失旧对象的归属可由管理员显式初始化；已完整对象保持不变，不成为代转入口。</summary>
@@ -59,7 +63,12 @@ public sealed partial class WorkspaceContentsController
             return Results.Ok(new { succeeded = true, changed });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }
     }
+
+    // 只翻译本域正式声明错误；事务与取消保持原异常，不扩大HTTP协议。
+    private static IResult OwnershipDeclarationFailure(ActionDataAccessException exception) => Results.Problem(statusCode: exception.Status, title: exception.Code,
+        extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
 
     // 缺少来源不能降级为对象ID或公共根，保持与普通对象动作同一请求失败外观。
     private static WorkspacePosition RequireOwnershipPosition(WorkspacePosition? position) => position

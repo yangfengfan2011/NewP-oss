@@ -43,6 +43,16 @@ public static class DataExecutionContracts
         { UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow };
         return executions.EnumerateArray().Select(item =>
         {
+            if (item.GetProperty("provider").GetString() is "entityOwnership.transfer" or "entityOwnership.initialize")
+            {
+                var ownershipProvider = item.GetProperty("provider").GetString()!;
+                if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resources"))
+                    || item.GetProperty("moduleId").GetString() != moduleId)
+                    throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
+                return new DataExecutionContract(item.GetProperty("key").GetString()!, moduleId, ownershipProvider,
+                    item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!,
+                    OwnershipRequirements(ownershipProvider, item.GetProperty("resources").Deserialize<string[]>()!));
+            }
             if (item.TryGetProperty("resourceKey", out var resource) && !item.GetProperty("provider").GetString()!.StartsWith("standardCrud.", StringComparison.Ordinal))
             {
                 if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey" or "fixedBindings"))
@@ -115,8 +125,36 @@ public static class DataExecutionContracts
                 && (contract.LegacyActions || contract.Requirements[0].Resources.Count != 1
                     || JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(StandardCrudRequirements(contract.Provider, contract.Requirements[0].Resources[0]))))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
+            if ((contract.Provider is "entityOwnership.transfer" or "entityOwnership.initialize")
+                && (contract.LegacyActions || contract.AllowedAdditionalActions.Count != 0 || contract.Branches.Count != 0
+                    || contract.TargetResource is not null || contract.ProviderModuleId is not null
+                    || JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(OwnershipRequirements(contract.Provider, contract.Requirements[0].Resources))
+                    || !actions.Any(action => action.Key == "edit" && action.RequiresRead)))
+                throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
         }
         return contracts.ToDictionary(contract => contract.Key, StringComparer.Ordinal);
+    }
+
+    // 固定中央能力不归某个业务backend；模块不能注册同名provider替换共享下限。
+    internal static bool IsBuiltInProvider(string provider) => provider.StartsWith("standardCrud.", StringComparison.Ordinal)
+        || provider is "entityOwnership.transfer" or "entityOwnership.initialize";
+
+    // 转交沿原edit读取依赖；维护保留原显式read404、edit403两个位置，不合并或新增读取。
+    private static IReadOnlyList<DataExecutionRequirement> OwnershipRequirements(string provider, IReadOnlyList<string> resources)
+    {
+        if (resources.Count == 0 || resources.Any(string.IsNullOrWhiteSpace) || resources.Distinct(StringComparer.Ordinal).Count() != resources.Count)
+            throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
+        return provider switch
+        {
+            "entityOwnership.transfer" => [new("target", "prepare", "objects", resources, [["edit"]], 1, null),
+                new("target", "submit", "objects", resources, [["edit"]], 1, null)],
+            "entityOwnership.initialize" => [new("query", "read", "query", resources, [["read"]], 0, null),
+                new("visibility", "prepare", "objects", resources, [["read"]], 1, null),
+                new("target", "prepare", "objects", resources, [["edit"]], 1, null),
+                new("visibility", "submit", "objects", resources, [["read"]], 1, null),
+                new("target", "submit", "objects", resources, [["edit"]], 1, null)],
+            _ => throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID")
+        };
     }
 
     /// <summary>模板与内建读取注册复用同一固定下限，调用方仅提供真实owner、资源和既有list/read操作。</summary>

@@ -160,7 +160,8 @@ public sealed class EntityOwnershipMigrationSqlServerTests(ITestOutputHelper out
         var departmentId = organization.GetProperty("departmentId").GetString()!;
         var initialize = new { position, linkIds = samples.Select(sample => sample.LinkId).ToArray() };
         timer.Restart();
-        var receipt = await PostAsync(fixture, admin, "workspace.folder.initializeOwnership", "/api/workspace/ownership/initialize", initialize);
+        var receipt = await PostAsync(fixture, admin, "workspace.folder.initializeOwnership", "/api/workspace/ownership/initialize", initialize,
+            execution: "workspace.folder.initializeOwnership");
         Assert.Equal(3, receipt.GetProperty("changed").GetInt32());
         Assert.Equal(0, receipt.GetProperty("unresolved").GetInt32());
         output.WriteLine("three legacy object backfill elapsedMs={0:F2}", timer.Elapsed.TotalMilliseconds);
@@ -176,7 +177,8 @@ public sealed class EntityOwnershipMigrationSqlServerTests(ITestOutputHelper out
         await fixture.StopAsync();
         await fixture.StartAsync();
         using var restarted = await fixture.LoginAsync("admin", fixture.AdministratorPassword + "-ready");
-        var retry = await PostAsync(fixture, restarted, "workspace.folder.initializeOwnership", "/api/workspace/ownership/initialize", initialize);
+        var retry = await PostAsync(fixture, restarted, "workspace.folder.initializeOwnership", "/api/workspace/ownership/initialize", initialize,
+            execution: "workspace.folder.initializeOwnership");
         Assert.Equal(0, retry.GetProperty("changed").GetInt32());
         Assert.Equal(0, retry.GetProperty("unresolved").GetInt32());
         foreach (var sample in samples) await AssertNullableOwnershipAsync(fixture, sample, departmentId);
@@ -850,7 +852,7 @@ public sealed class EntityOwnershipMigrationSqlServerTests(ITestOutputHelper out
         Assert.Single(upgradedEf.Rows, row => row.GetProperty("MigrationId").GetString() == tail);
         Assert.Single(upgradedUnified.Rows, row => row.GetProperty("OwnerModuleId").GetString() == "Workspace" && row.GetProperty("MigrationId").GetString() == tail);
         var receipt = await PostAsync(fixture, fixture.Administrator, "workspace.folder.transfer", "/api/workspace/ownership/transfer",
-            new { position, linkIds = targets.Select(target => target.LinkId).ToArray(), recipientId });
+            new { position, linkIds = targets.Select(target => target.LinkId).ToArray(), recipientId }, execution: "workspace.folder.transfer");
         Assert.Equal(3, receipt.GetProperty("changed").GetInt32());
         notifications = await ReadSnapshotAsync(fixture, "WorkspaceTransferNotification");
         Assert.Equal(3, notifications.Rows.Length);
@@ -1130,10 +1132,14 @@ public sealed class EntityOwnershipMigrationSqlServerTests(ITestOutputHelper out
         }
     }
 
-    private static async Task<JsonElement> PostAsync(FeatureCatalogHostFixture fixture, HttpClient client, string behavior, string path, object? input = null)
+    private static async Task<JsonElement> PostAsync(FeatureCatalogHostFixture fixture, HttpClient client, string behavior, string path,
+        object? input = null, string? execution = null)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        using var response = await FeatureHttpTestRequests.SendAsync(client, fixture.Catalog.First(point => point.BehaviorKey == behavior), HttpMethod.Post, path, input);
+        var point = fixture.Catalog.First(point => point.BehaviorKey == behavior);
+        // 仅升级后明确采用当前执行的调用读取当前正式目录；旧冻结Host准备不借缺声明回退。
+        var declaration = execution is null ? null : (await FeatureHttpTestRequests.LoadAsync(client)).Declaration(execution, point);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, path, input, declaration);
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

@@ -14,6 +14,40 @@ namespace ICP.Platform.Acceptance.Tests;
 [Collection(AcceptanceGateCollection.Name)]
 public sealed class AcceptanceGateTests
 {
+    /// <summary>岗位列表与查看Drawer共用正式编辑按钮；只证明真实控件到API的最短接线。</summary>
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "岗位列表编辑与详情进入编辑消费按钮唯一声明")]
+    public async Task PositionButtonExecution_UsesFormalListAndDetailDriver()
+    {
+        var (root, runId) = PrepareRun("position-button-execution");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new StandardCrudPageDriver(page);
+                var name = "按钮岗位 " + runId[..8];
+                await driver.OpenOrganizationTabAsync("岗位", "positions");
+                var create = await driver.OpenCreateDrawerAsync("新建岗位");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(create, "岗位名称", name);
+                await driver.SaveAndCloseAsync(create, new("POST", "/api/organization/positions", 201, "岗位准备"));
+                var row = await driver.WaitForRowAsync(name);
+                await row.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
+                var edit = await driver.WaitForVisibleDrawerAsync("岗位列表编辑");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(edit, "岗位名称", name + " 列表编辑");
+                await driver.SaveChangesAsync(edit, new("PUT", "/api/organization/positions/", 200, "岗位列表编辑", PathIsPrefix: true));
+                row = await driver.WaitForRowAsync(name + " 列表编辑");
+                await row.GetByRole(AriaRole.Button, new() { Name = name + " 列表编辑", Exact = true }).ClickAsync();
+                var detail = await driver.WaitForVisibleDrawerAsync("岗位详情");
+                await detail.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
+                edit = await driver.WaitForVisibleDrawerAsync("岗位详情进入编辑");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(edit, "岗位名称", name + " 详情编辑");
+                await driver.SaveChangesAsync(edit, new("PUT", "/api/organization/positions/", 200, "岗位详情编辑", PathIsPrefix: true));
+                await driver.WaitForRowAsync(name + " 详情编辑");
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "position-buttons.png"));
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, journey = "position-button-execution" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     /// <summary>真实普通管理主体从当前Workspace混合行选择进入标准批量Review并保存一次。</summary>
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通Workspace管理主体在混合Part/Document上打开批量授权、编辑主体并一次保存")]
     public async Task NativeWorkspaceBatchAuthorization_UsesFormalDriver()

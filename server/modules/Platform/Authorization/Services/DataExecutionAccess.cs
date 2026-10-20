@@ -169,6 +169,8 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
     // 执行提供者由真实执行端限定；即使引用同一模块其他合法声明也不能串用。
     private ActionDataAccessRequirement Resolve(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey)
     {
+        if (http.HttpContext?.Request.Headers.ContainsKey("X-NewP-Button") == true)
+            throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
         if (bindings is not { Count: > 0 } || bindings.Any(binding => binding is null))
             throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
         var context = http.HttpContext ?? throw new ActionDataAccessException(400, "ActionDataAccess.ContextRequired");

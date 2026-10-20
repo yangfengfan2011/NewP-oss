@@ -79,7 +79,8 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
     setPendingKey(key);
     setError(null);
     try {
-      const result = await handler(context);
+      const result = await handler({ ...context,
+        ...(context.action?.buttonId ? { buttonId: context.action.buttonId } : {}) });
       if (result?.navigation) {
         if (!navigateEntry) throw new Error('导航入口运行时不可用。');
         navigateEntry(result.navigation);

@@ -26,7 +26,7 @@ public sealed class DataScopeDecisionBoundaryTests
             .Append(typeof(StandardCrudDefaultWriter).Assembly).Distinct().ToArray();
         var calls = FindCalls(assemblies).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         Assert.NotEmpty(calls);
-        Assert.All(calls.Where(call => !call.Contains(".DataExecutionAccess.", StringComparison.Ordinal)),
+        Assert.All(calls.Where(call => !call.Contains(".DataExecutionAccess.", StringComparison.Ordinal) && !call.Contains(".ObjectActionAccess.", StringComparison.Ordinal)),
             call => Assert.True(IsReadBoundaryOrigin(call), call));
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;

@@ -254,10 +254,31 @@ public static class StandardFeatureMetadataCompiler
         // 直接要求附在已有功能位置；查看和输出不因此增加可授权动作。
         void DataAccess(JsonElement view, JsonElement action, string surface, string key, string owner, string? sourceKey = null)
         {
-            if (!action.TryGetProperty("dataAccess", out var declared)) return;
+            var hasDataAccess = action.TryGetProperty("dataAccess", out var declared);
+            var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey");
+            var isButton = surface is "pageActions" or "rowActions" or "featureActions" or "outputActions";
+            if (!hasDataAccess && (!isButton || operation is null or "view" or "refresh")) return;
             var index = result.FindIndex(feature => (feature.ReferenceKey ?? feature.Key) == owner);
             if (index < 0) throw new InvalidOperationException("数据声明缺少合法功能归属。");
             var node = result[index];
+            if (isButton && (!hasDataAccess || declared.TryGetProperty("object", out _)))
+            {
+                if (operation is null || hasDataAccess && (declared.ValueKind != JsonValueKind.Object
+                    || declared.EnumerateObject().Any(property => property.Name is not ("object" or "actions"))
+                    || !declared.TryGetProperty("actions", out var actionKeys) || actionKeys.ValueKind != JsonValueKind.Array))
+                    throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
+                var objectName = hasDataAccess ? Text(declared, "object") : null;
+                var model = Optional(view, "model");
+                if (objectName is not null && (objectName != model
+                    || !all.Any(document => document.TryGetProperty(objectName, out var definition) && Optional(definition, "kind") == "Entity")))
+                    throw new InvalidOperationException("BUTTON_DATA_ACCESS_OBJECT_UNKNOWN");
+                var button = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, "",
+                    [Text(view, "resourceKey")], hasDataAccess ? declared.GetProperty("actions").EnumerateArray().Select(item => item.GetString()!).ToArray() : [])
+                { Object = objectName, BusinessBinding = node.BehaviorKey };
+                if (!node.DataAccess.Any(item => item.Id == button.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, button] };
+                return;
+            }
+            if (!hasDataAccess) return;
             if (declared.EnumerateObject().Any(property => property.Name is not ("execution" or "resources" or "additionalActions")))
                 throw new InvalidOperationException("ACTION_DATA_ACCESS_DECLARATION_INVALID");
             var declaration = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, Text(declared, "execution"),

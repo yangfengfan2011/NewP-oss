@@ -210,6 +210,7 @@ export type StandardCrudFormMode = 'create' | 'edit';
 export interface StandardCrudActionDefinition {
   /** 当前正式计划投影；前端仅传声明身份，服务端独立解析要求。 */
   dataAccess?: ActionDataAccessRequirement;
+  buttonId?: string;
   key: string;
   labelKey: string;
   variant?: 'default' | 'primary' | 'danger';
@@ -227,6 +228,8 @@ export interface StandardCrudActionDefinition {
 }
 
 export interface ActionDataAccessRequirement {
+  object?: string;
+  businessBinding?: string;
   id: string;
   moduleId: string;
   viewKey: string;
@@ -347,6 +350,7 @@ export interface StandardCrudSummaryRendererContext<TData = unknown> {
   featureActions?: Readonly<Record<string, { position: string; allowed: boolean; dataAccess?: ActionDataAccessRequirement }>>;
   /** 当前View的正式读取声明；摘要独立读取保持该来源，不另选权限位置。 */
   dataAccess?: ActionDataAccessRequirement;
+  buttonId?: string;
   blockKey: string;
   block: StandardCrudSummaryBlock<TData>;
   title: string;
@@ -448,6 +452,7 @@ export interface StandardCrudListQueryRequest {
 export interface StandardCrudFeatureRequestContext {
   featurePosition?: string;
   dataAccess?: ActionDataAccessRequirement;
+  buttonId?: string;
   dataAccessDeclarations?: readonly ActionDataAccessRequirement[];
 }
 export interface StandardCrudListReadContext extends StandardCrudFeatureRequestContext {

@@ -135,6 +135,11 @@ export function bindActionDataAccess(document: RuntimeViewDocument, requirements
   const bind = (value: Record<string, unknown>, surface: string, actionKey: string) => {
     const matches = requirements.filter(requirement => requirement.viewKey === view.key && requirement.surface === surface && requirement.actionKey === actionKey);
     if (value.dataAccess === undefined && matches.length === 0) return value;
+    if (matches.length === 1 && matches[0].businessBinding) {
+      if ((value.dataAccess !== undefined) !== (matches[0].object !== undefined))
+        throw new Error(`按钮数据声明缺失或冲突：${String(view.key)}/${surface}/${actionKey}`);
+      return { ...value, buttonId: matches[0].id, ...(value.dataAccess ? { dataAccess: matches[0] } : {}) };
+    }
     if (value.dataAccess === undefined) throw new Error(`动作数据声明缺失：${String(view.key)}/${surface}/${actionKey}`);
     if (matches.length !== 1) throw new Error(`动作数据声明缺失或冲突：${String(view.key)}/${surface}/${actionKey}`);
     return { ...value, dataAccess: matches[0] };

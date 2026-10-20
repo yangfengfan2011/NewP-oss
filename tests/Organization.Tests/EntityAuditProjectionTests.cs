@@ -30,7 +30,12 @@ public sealed class EntityAuditProjectionTests
         var models = OrganizationModelDefinitions.All.Where(model => model.Name is "Company" or "Position")
             .Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
         var plan = new CompiledPersistencePlan("candidate", "snapshot", "hash", default, "digest", [], models, []);
-        var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), PositionCrudDescriptorFactory.Create()], plan);
+        // 本用例直接验证公共审计赋值与投影，显式使用测试自己的旧协议来源；
+        // 岗位新按钮、事务与HTTP接线由PositionButtonExecutionSqlServerTests覆盖，不在内存数据库补造HTTP上下文。
+        var auditResources = new[] { CompanyCrudDescriptorFactory.Create(), PositionCrudDescriptorFactory.Create() }
+            .Select(descriptor => descriptor with { DataExecutions = new Dictionary<string, string>(descriptor.DataExecutions)
+                { ["update"] = "tests.auditProjection." + descriptor.ResourceKey + ".update" } });
+        var registry = new StandardCrudResourceRegistry(auditResources, plan);
         var stamp = new FixedStamp();
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options;

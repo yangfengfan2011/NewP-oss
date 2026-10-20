@@ -27,6 +27,7 @@ public sealed class StandardCrudDefaultWriter
     private readonly IPlatformObjectIdGenerator? _objectIds;
     private readonly ICP.Platform.Crud.Ownership.EntityOwnershipValues? _ownership;
     private readonly ICP.Platform.Crud.Ownership.EntityOwnershipAudit? _ownershipAudit;
+    private readonly IButtonExecutionAccess? _buttons;
 
     /// <summary>组合默认写入依赖；事务与审计仍复用平台已有 owner，不依赖查询或展示服务。</summary>
     public StandardCrudDefaultWriter(
@@ -42,7 +43,8 @@ public sealed class StandardCrudDefaultWriter
         IEnumerable<IStandardCrudUpdateRecorder>? updateRecorders = null,
         IPlatformObjectIdGenerator? objectIds = null,
         ICP.Platform.Crud.Ownership.EntityOwnershipValues? ownership = null,
-        ICP.Platform.Crud.Ownership.EntityOwnershipAudit? ownershipAudit = null)
+        ICP.Platform.Crud.Ownership.EntityOwnershipAudit? ownershipAudit = null,
+        IButtonExecutionAccess? buttons = null)
     {
         _repository = repository;
         _deleteGuards = deleteGuards.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
@@ -56,6 +58,7 @@ public sealed class StandardCrudDefaultWriter
         _objectIds = objectIds;
         _ownership = ownership;
         _ownershipAudit = ownershipAudit;
+        _buttons = buttons;
     }
 
     // 来源不进入业务值，正式裁决仍处于原事务和事实保护位置。
@@ -160,7 +163,16 @@ public sealed class StandardCrudDefaultWriter
                 cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
         if (!descriptor.RequiresUpdateRecord)
-            return await UpdateCoreAsync(descriptor, id, values, null, null, source, cancellationToken);
+        {
+            if (source is not ObjectOperationWriteSource.Button)
+                return await UpdateCoreAsync(descriptor, id, values, null, null, source, cancellationToken);
+            if (_transactionExecutor is null || _repository is not IStandardCrudUpdateParticipant protectedUpdate)
+                throw new InvalidOperationException("BUTTON_PROTECTED_UPDATE_REQUIRED");
+            return _transactionExecutor.IsActive
+                ? await UpdateCoreAsync(descriptor, id, values, protectedUpdate, null, source, cancellationToken)
+                : await _transactionExecutor.ExecuteAsync(token => new ValueTask<StandardCrudMutationResult>(
+                    UpdateCoreAsync(descriptor, id, values, protectedUpdate, null, source, token)), cancellationToken);
+        }
         if (!_updateRecorders.TryGetValue(descriptor.ResourceKey, out var recorder)
             || _transactionExecutor is null || _repository is not IStandardCrudUpdateParticipant participant
             || !string.IsNullOrWhiteSpace(descriptor.ConcurrencyRevisionField))
@@ -196,9 +208,25 @@ public sealed class StandardCrudDefaultWriter
             return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
         }
 
+        if (source is ObjectOperationWriteSource.Button button)
+        {
+            if (values.TryGetValue(descriptor.IdField, out var suppliedId) && suppliedId?.ToString() != id)
+                throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
+            return await (_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED")).ExecuteAsync(button.Context,
+                new ButtonExecutionTarget(descriptor.ResourceKey, descriptor.ModelName, id, existing),
+                token => UpdateAuthorizedCoreAsync(descriptor, id, values, existing, participant, recorder, token), cancellationToken);
+        }
         var scopeError = await CheckExistingScopeAsync(descriptor, id, "edit", existing, source, cancellationToken);
         if (scopeError is not null) return StandardCrudMutationResult.Failure(scopeError);
 
+        return await UpdateAuthorizedCoreAsync(descriptor, id, values, existing, participant, recorder, cancellationToken);
+    }
+
+    // 正式目标在外层固定；本方法只更新同一已读取对象，字段不能替换路由身份。
+    private async Task<StandardCrudMutationResult> UpdateAuthorizedCoreAsync(StandardCrudDescriptor descriptor, string id,
+        IReadOnlyDictionary<string, object?> values, IReadOnlyDictionary<string, object?> existing,
+        IStandardCrudUpdateParticipant? participant, IStandardCrudUpdateRecorder? recorder, CancellationToken cancellationToken)
+    {
         long? expectedRevision = null;
         if (!string.IsNullOrWhiteSpace(descriptor.ConcurrencyRevisionField))
         {
@@ -229,7 +257,7 @@ public sealed class StandardCrudDefaultWriter
             if (participant is not null)
             {
                 updated = await participant.RegisterUpdateAsync(descriptor, id, allowed, cancellationToken);
-                await recorder!.RegisterAsync(existing, updated, cancellationToken);
+                if (recorder is not null) await recorder.RegisterAsync(existing, updated, cancellationToken);
             }
             else
             {
@@ -376,6 +404,14 @@ public sealed class StandardCrudDefaultWriter
     // 来源只能是本次正式写；资源、操作和目标必须与实际owner调用完全一致。
     private static void AssertWriteSource(StandardCrudDescriptor descriptor, string operation, string? id, ObjectOperationWriteSource? source)
     {
+        if (source is ObjectOperationWriteSource.Button button)
+        {
+            if (operation != "update" || button.Context.ResourceKey != descriptor.ResourceKey || button.Context.ObjectName != descriptor.ModelName
+                || button.Context.ObjectId != id || button.Context.BusinessBinding != descriptor.ResourceKey + "." + operation
+                || descriptor.DataExecutions.ContainsKey(operation))
+                throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
+            return;
+        }
         if (source is not ObjectOperationWriteSource.Declared declared || declared.Context is null)
             throw new ActionDataAccessException(400, "ActionDataAccess.WriteContextRequired");
         var context = declared.Context;

@@ -33,7 +33,7 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
 
     // 调用方固定实际执行与功能点；不按URL或缺失请求头选择声明，反例仍可直接SendAsync不带声明。
     internal ActionDataAccessRequirement Declaration(string execution, FeaturePoint point) =>
-        _declarations.Single(item => item.Execution == execution && item.FeaturePositions.Contains(point.Position));
+        _declarations.Single(item => (item.Execution == execution || item.BusinessBinding == execution) && item.FeaturePositions.Contains(point.Position));
 
     internal FeaturePoint Organization(string tab, string? action = null, string? surface = null, string? nodeType = null)
     {
@@ -72,7 +72,7 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
     {
         var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-NewP-Feature", point.Position);
-        if (dataAccess is not null) request.Headers.Add("X-NewP-Data-Declaration", dataAccess.Id);
+        if (dataAccess is not null) request.Headers.Add(dataAccess.BusinessBinding is null ? "X-NewP-Data-Declaration" : "X-NewP-Button", dataAccess.Id);
         if (body is not null) request.Content = JsonContent.Create(body, options: new JsonSerializerOptions());
         return SendAndDisposeAsync(client, request);
     }

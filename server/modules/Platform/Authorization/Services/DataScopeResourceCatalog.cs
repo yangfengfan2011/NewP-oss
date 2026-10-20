@@ -69,6 +69,8 @@ public sealed class DataScopeResourceCatalog : IDataScopeResourceCatalog
             {
                 var resource = resources.SingleOrDefault(item => item.ResourceKey == key)
                     ?? throw new InvalidOperationException("ACTION_DATA_ACCESS_RESOURCE_UNKNOWN");
+                if (requirement.Object is not null && requirement.Object != resource.ModelName)
+                    throw new InvalidOperationException("BUTTON_DATA_ACCESS_OBJECT_MISMATCH");
                 var effectiveActions = requirement.Requirements is null ? requirement.Actions : requirement.Requirements
                     .Where(role => role.Resources.Contains(key, StringComparer.Ordinal))
                     .SelectMany(role => role.AnyOf.Concat(role.ResourceAnyOf?.GetValueOrDefault(key) ?? []))

@@ -48,7 +48,7 @@ public sealed class ObjectAuthorizationExecutionContractTests
         Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
         var plan = compiled.Plan!;
         var sources = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace"
-            && item.Provider!.StartsWith("authorization.collection", StringComparison.Ordinal)).ToArray();
+            && item.Provider?.StartsWith("authorization.collection", StringComparison.Ordinal) == true).ToArray();
         Assert.Equal(5, sources.Length);
         Assert.All(sources, source => Assert.Equal(new[] { "workspace.folder", "part.part", "document.document" }, source.Resources));
         var batch = Assert.Single(sources, source => source.Execution == "workspace.content.authorization.batch");
@@ -69,8 +69,8 @@ public sealed class ObjectAuthorizationExecutionContractTests
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "ICP-Platform.sln"))) root = root.Parent;
         var path = Path.Combine(root!.FullName, "tests/Kernel.Tests/Fixtures/ObjectAuthorizationDataAccess.contract.json");
         var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId is "Part" or "Document" or "Workspace"
-            && (item.Provider!.StartsWith("authorization.object", StringComparison.Ordinal)
-                || item.Provider.StartsWith("authorization.collection", StringComparison.Ordinal))).ToArray();
+            && (item.Provider?.StartsWith("authorization.object", StringComparison.Ordinal) == true
+                || item.Provider?.StartsWith("authorization.collection", StringComparison.Ordinal) == true)).ToArray();
         var json = JsonSerializer.Serialize(declarations, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
         if (Environment.GetEnvironmentVariable("NEWP_OBJECT_AUTHORIZATION_FIXTURE_EXPORT") == "1")
             File.WriteAllText(path, json.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal));

@@ -1,4 +1,5 @@
 {
+  "ICP.Platform.Modules.Authorization.Services.ObjectActionAccess.CheckAsync[0] -> IsAllowedAsync action=variable": "Authorization拥有的稳定通用对象动作接口；业务自由选择动作及调用时点，按钮管线复用同一接口，底层算法不外泄。",
   "ICP.Platform.Crud.Runtime.StandardCrudService.BuildMutationDetailAsync[0] -> IsAllowedAsync action=constant:read": "写后独立读取观察；只决定详情或成功回执，不重复写前授权。",
   "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateCandidateRequirementAsync[0] -> IsCandidateAllowedAsync action=variable": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
   "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateObjectRequirementAsync[0] -> IsAllowedAsync action=variable": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",

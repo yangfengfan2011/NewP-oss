@@ -24,6 +24,12 @@ public static class StandardCrudDataExecutions
             .Concat(sources.SelectMany(source => source.Endpoints)
                 .SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<StandardCrudDataExecutionAttribute>())
                 .SelectMany(endpoint => endpoint.Bindings)).ToArray();
+        var buttonBindings = sources.SelectMany(source => source.Endpoints)
+            .Select(endpoint => endpoint.Metadata.GetMetadata<ButtonExecutionEndpoint>()).Where(item => item is not null).ToArray();
+        foreach (var button in plan.ActionDataAccessCatalog.Where(item => item.BusinessBinding is not null && item.Object is not null))
+            if (!buttonBindings.Any(binding => binding!.BusinessBinding == button.BusinessBinding
+                && binding.ObjectName == button.Object && button.Resources.SequenceEqual([binding.ResourceKey])))
+                throw new InvalidOperationException("BUTTON_EXECUTION_ENDPOINT_MISSING");
         foreach (var execution in plan.Modules.SelectMany(module => module.DataExecutions)
             .Where(contract => contract.Boundary == "entry" && contract.Provider.StartsWith("standardCrud.", StringComparison.Ordinal)))
             if (!bound.Any(binding => binding.Execution == execution.Key && binding.Provider == execution.Provider))
@@ -55,7 +61,30 @@ public static class StandardCrudDataExecutions
         if (capability is not null && !descriptor.Authorization!.FeatureOperations.Contains(capability.Value)) return endpoint;
         var executionOperation = operation is "enable" or "disable" ? "update" : operation;
         if (!descriptor.DataExecutions.TryGetValue(executionOperation, out var execution))
-            throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
+        {
+            var buttons = services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog
+                .Where(item => item.BusinessBinding == descriptor.ResourceKey + "." + operation).ToArray();
+            if (operation != "update" || buttons.Length == 0 || buttons.Any(item => item.ModuleId != descriptor.ModuleId
+                || item.Object is not null && item.Object != descriptor.ModelName))
+                throw new InvalidOperationException("STANDARD_CRUD_BUTTON_BINDING_INVALID");
+            endpoint.WithMetadata(new ButtonExecutionEndpoint(descriptor.ResourceKey + "." + operation, descriptor.ResourceKey, descriptor.ModelName));
+            endpoint.AddEndpointFilter(async (context, next) =>
+            {
+                try
+                {
+                    var id = context.HttpContext.Request.RouteValues["id"]?.ToString() ?? "";
+                    context.HttpContext.RequestServices.GetRequiredService<IButtonExecutionAccess>()
+                        .Bind(descriptor.ResourceKey, descriptor.ModelName, operation, id);
+                    return await next(context);
+                }
+                catch (ActionDataAccessException exception)
+                {
+                    return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                        extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+                }
+            });
+            return endpoint;
+        }
         var plan = services.GetRequiredService<CanonicalModulePlan>();
         var contract = plan.Modules.SelectMany(module => module.DataExecutions).SingleOrDefault(item => item.Key == execution);
         var prepareOnly = operation == "read" && descriptor.DataExecutions.TryGetValue("update", out var update) && execution == update;

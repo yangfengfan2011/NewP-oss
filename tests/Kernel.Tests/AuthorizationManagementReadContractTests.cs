@@ -43,9 +43,9 @@ public sealed class AuthorizationManagementReadContractTests
         Assert.DoesNotContain(plan.FeatureCatalog, point => point.Key == "delete" && point.ModuleId == "Authorization");
         var json = JsonSerializer.Serialize(new { moduleId = "Authorization",
                 features = plan.FeatureCatalog.Where(item => item.ModuleId == "Authorization"),
-                dataAccess = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Authorization"),
+                dataAccess = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Authorization" && item.BusinessBinding is null),
                 identityFeatures = plan.FeatureCatalog.Where(item => item.ModuleId == "Identity"),
-                identityDataAccess = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Identity") },
+                identityDataAccess = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Identity" && item.BusinessBinding is null) },
                 new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
         if (Environment.GetEnvironmentVariable("NEWP_AUTHORIZATION_READ_FIXTURE_EXPORT") is { Length: > 0 } path) File.WriteAllText(path, json);
         else

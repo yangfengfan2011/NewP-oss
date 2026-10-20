@@ -35,7 +35,8 @@ public sealed class WorkspaceClipboardDataExecutionContractTests
                 position => compiled.Plan.FeatureCatalog.Any(point => point.Position == position && point.ActionScope == "contextMenu"));
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
-        var allDeclarations = compiled.Plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace").ToArray();
+        // 这份旧合同fixture只覆盖仍有execution的入口；无数据要求按钮身份由新声明测试独立覆盖。
+        var allDeclarations = compiled.Plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace" && item.BusinessBinding is null).ToArray();
         // 同一正式fixture也覆盖已存在树动作的目标读取来源，位置仍取实际编译目录。
         var clipboardKeys = new[] { "copy", "copySelected", "cut", "cutSelected", "paste", "remove", "removeSelected", "clearClipboard", "edit", "moveUp", "moveDown", "createPart", "createDocument", "delete", "deleteObjects", "pasteFolderCopy", "pasteFolderStructure", "pasteObjectCopy", "resolveObjectCopy" };
         var features = compiled.Plan.FeatureCatalog.Where(point => point.ModuleId == "Workspace"

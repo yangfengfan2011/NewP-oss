@@ -180,7 +180,9 @@ async function requestBlob(
 function featureHeaders(context?: StandardCrudFeatureRequestContext): Record<string, string> {
   return {
     ...(context?.featurePosition ? { 'X-NewP-Feature': context.featurePosition } : {}),
-    ...(context?.dataAccess?.id ? { 'X-NewP-Data-Declaration': context.dataAccess.id } : {}),
+    ...(context?.buttonId || context?.dataAccess?.businessBinding
+      ? { 'X-NewP-Button': context.buttonId ?? context.dataAccess!.id }
+      : context?.dataAccess?.id ? { 'X-NewP-Data-Declaration': context.dataAccess.id } : {}),
   };
 }
 

@@ -75,6 +75,22 @@
     "provider": "standardCrud.create"
   },
   {
+    "id": "Organization/view:organization.company.list/pageActions/action:initialize",
+    "moduleId": "Organization",
+    "viewKey": "organization.company.list",
+    "surface": "pageActions",
+    "actionKey": "initialize",
+    "execution": "",
+    "resources": [
+      "organization.company"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.pageActions/action:initialize"
+    ],
+    "businessBinding": "organization.company.initialize"
+  },
+  {
     "id": "Organization/view:organization.company.list/read",
     "moduleId": "Organization",
     "viewKey": "organization.company.list",
@@ -943,6 +959,23 @@
     "providerModuleId": "Authorization"
   },
   {
+    "id": "Organization/view:organization.person.detail/pageActions/action:disable",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.detail",
+    "surface": "pageActions",
+    "actionKey": "disable",
+    "execution": "",
+    "resources": [
+      "organization.person"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:disable",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:disable"
+    ],
+    "businessBinding": "organization.person.disable"
+  },
+  {
     "id": "Organization/view:organization.person.detail/pageActions/action:edit",
     "moduleId": "Organization",
     "viewKey": "organization.person.detail",
@@ -1339,6 +1372,22 @@
     "provider": "standardCrud.delete"
   },
   {
+    "id": "Organization/view:organization.person.list/rowActions/action:disable",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.list",
+    "surface": "rowActions",
+    "actionKey": "disable",
+    "execution": "",
+    "resources": [
+      "organization.person"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:disable"
+    ],
+    "businessBinding": "organization.person.disable"
+  },
+  {
     "id": "Organization/view:organization.person.list/rowActions/action:edit",
     "moduleId": "Organization",
     "viewKey": "organization.person.list",
@@ -1390,6 +1439,22 @@
       }
     ],
     "provider": "standardCrud.update"
+  },
+  {
+    "id": "Organization/view:organization.person.list/rowActions/action:enable",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.list",
+    "surface": "rowActions",
+    "actionKey": "enable",
+    "execution": "",
+    "resources": [
+      "organization.person"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:enable"
+    ],
+    "businessBinding": "organization.person.enable"
   },
   {
     "id": "Organization/view:organization.position.detail/read",
@@ -1609,51 +1674,18 @@
     "viewKey": "organization.position.list",
     "surface": "rowActions",
     "actionKey": "edit",
-    "execution": "organization.position.update",
+    "execution": "",
     "resources": [
       "organization.position"
     ],
     "actions": [
-      "read",
       "edit"
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "organization.position"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "organization.position"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.update"
+    "object": "Position",
+    "businessBinding": "organization.position.update"
   },
   {
     "id": "Organization/view:organization.structure/read",

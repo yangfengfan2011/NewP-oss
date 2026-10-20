@@ -17,6 +17,7 @@ export interface StandardCrudMutationExecutionRequest {
   mode: 'create' | 'edit';
   featurePosition?: string;
   dataAccess?: ActionDataAccessRequirement;
+  buttonId?: string;
   id?: string;
   fields: StandardCrudFieldDefinition[];
   values: Record<string, unknown>;
@@ -91,6 +92,7 @@ export function useStandardCrudMutationExecution({
     mode,
     featurePosition,
     dataAccess,
+    buttonId,
     id,
     fields,
     values,
@@ -124,8 +126,8 @@ export function useStandardCrudMutationExecution({
           }
         : normalizedValues;
 
-      const context = featurePosition || dataAccess
-        ? { ...(featurePosition ? { featurePosition } : {}), ...(dataAccess ? { dataAccess } : {}) }
+      const context = featurePosition || dataAccess || buttonId
+        ? { ...(featurePosition ? { featurePosition } : {}), ...(dataAccess ? { dataAccess } : {}), ...(buttonId ? { buttonId } : {}) }
         : undefined;
       let result: StandardCrudOperationResult | undefined;
       if (mode === 'create') {

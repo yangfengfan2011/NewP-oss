@@ -25,9 +25,9 @@ export function useStandardCrudActionEntry(identity: unknown) {
     setFailure(undefined);
     try {
       if (precheck) {
-        if (!context.action?.dataAccess?.id) throw new StandardCrudRequestError('动作数据声明不可用。', 400);
+        if (!context.action?.buttonId && !context.action?.dataAccess?.id) throw new StandardCrudRequestError('动作数据声明不可用。', 400);
         setPendingKey(key);
-        await precheck({ ...context, signal: controller.signal });
+        await precheck({ ...context, ...(context.action?.buttonId ? { buttonId: context.action.buttonId } : {}), signal: controller.signal });
       }
       if (!mounted.current || controller.signal.aborted || current.current !== submitted || context.instance?.active === false) return false;
       onEnter();

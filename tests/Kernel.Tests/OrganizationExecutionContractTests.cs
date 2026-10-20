@@ -44,6 +44,14 @@ public sealed class OrganizationExecutionContractTests
         foreach (var operation in new[] { "create", "update", "delete" })
         {
             var execution = "organization." + resource + "." + operation;
+            if (resource == "position" && operation == "update")
+            {
+                var button = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.BusinessBinding == execution);
+                Assert.Equal("Position", button.Object);
+                Assert.Equal(new[] { "edit" }, button.Actions);
+                Assert.Null(button.Requirements);
+                continue;
+            }
             var entries = result.Plan!.ActionDataAccessCatalog.Where(item => item.Execution == execution).ToArray();
             Assert.NotEmpty(entries);
             Assert.All(entries, entry =>

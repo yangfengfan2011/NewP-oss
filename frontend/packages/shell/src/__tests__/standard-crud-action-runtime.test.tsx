@@ -5,7 +5,8 @@ import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
-import { StandardCrudRequestError } from '@icp-platform/sdk';
+import { createStandardCrudClient, StandardCrudRequestError } from '@icp-platform/sdk';
+import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 import type {
   StandardCrudActionDefinition,
   StandardCrudActionHandler,
@@ -113,6 +114,25 @@ describe('standard CRUD action runtime', () => {
 
     expect(container.textContent).toContain('编辑');
     expect(container.textContent).not.toContain('停用');
+  });
+
+  it.each([true, false])('passes the formal button identity and feature from the clicked control to transport (dataAccess=%s)', async declared => {
+    const id = 'Test/view:items/rowActions/action:edit';
+    const definition = bindActionDataAccess({ view: { key: 'items', rowActions: [{ key: 'edit', labelKey: '编辑', handlerKey: 'save',
+      ...(declared ? { dataAccess: { object: 'Person', actions: ['edit'] } } : {}) }] } }, [{ id, moduleId: 'Test', viewKey: 'items',
+      surface: 'rowActions', actionKey: 'edit', execution: '', resources: ['test.person'], actions: declared ? ['edit'] : [],
+      featurePositions: ['edit'], businessBinding: 'test.person.save', ...(declared ? { object: 'Person' } : {}) }]);
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ fields: { EID: 'Person_1' } })));
+    const client = createStandardCrudClient('/api/test/persons', fetcher);
+    await renderActions({ actions: definition.view.rowActions as StandardCrudActionDefinition[],
+      actionPrechecks: { edit: async context => { expect(context.buttonId).toBe(id); } },
+      handlers: { save: async context => { await client.update(context.id!, { ENAME: '已编辑' }, context); } } });
+    await clickActionButton('编辑');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const headers = new Headers((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].headers);
+    expect(headers.get('X-NewP-Button')).toBe(id);
+    expect(headers.get('X-NewP-Feature')).toBe('edit');
+    expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
   });
 
   it.each([true, false])('checks a declared handler entry before executing it (allowed=%s)', async allowed => {

@@ -1019,7 +1019,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     featurePosition: drawerState.mode === 'edit'
       ? resolvedFeaturePosition(drawerActionResolution)
       : readPosition,
-    dataAccess: drawerState.mode === 'edit' ? drawerDataAccess ?? detailDataAccess : detailDataAccess,
+    dataAccess: drawerState.mode === 'edit' && !drawerDataAccess?.businessBinding ? drawerDataAccess ?? detailDataAccess : detailDataAccess,
   });
   const detailFields = useMemo(
     () => drawerDetailQuery.detail?.normalized.fields ?? {},
@@ -1668,6 +1668,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       mode: drawerState.mode === 'create' ? 'create' : 'edit',
       featurePosition: resolvedFeaturePosition(drawerActionResolution),
       dataAccess: drawerDataAccess,
+      buttonId: (drawerState.mode === 'create' ? schema.pageActions : schema.rowActions)
+        .find(action => action.standardAction === (drawerState.mode === 'create' ? 'create' : 'edit'))?.buttonId,
       id: drawerState.id,
       fields: drawerState.mode === 'create' ? createFields : editFields,
       ...(drawerState.mode === 'edit' ? editSession.draft! : { values: formValues, detailFields }),

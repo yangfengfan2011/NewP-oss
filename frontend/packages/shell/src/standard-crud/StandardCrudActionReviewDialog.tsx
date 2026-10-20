@@ -86,7 +86,7 @@ export function StandardCrudActionReviewDialog({
   const content = <>
     {confirmMessage ? <p>{confirmMessage}</p> : null}
     {inputRenderer({
-      action, featurePosition, instance,
+      action, featurePosition, instance, buttonId: action.buttonId,
       dataAccess: action.dataAccess, dataAccessDeclarations,
       navigationFeaturePosition: key => {
         const resolution = features.navigation(key);

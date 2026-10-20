@@ -9,4 +9,6 @@ public abstract record ObjectOperationWriteSource
     private ObjectOperationWriteSource() { }
     /// <summary>已迁移的正式入口或固定内部写绑定。</summary>
     public sealed record Declared(DataExecutionWriteContext Context) : ObjectOperationWriteSource;
+    /// <summary>正式按钮目标；不携带已允许结果，也不继承其他对象的入口许可。</summary>
+    public sealed record Button(ButtonExecutionContext Context) : ObjectOperationWriteSource;
 }

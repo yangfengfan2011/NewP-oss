@@ -4,6 +4,11 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 public sealed record ActionDataAccessDeclaration(string ModuleId, string ViewKey, string Surface, string ActionKey,
     string Execution, IReadOnlyList<string> Resources, IReadOnlyList<string> Actions)
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    [System.Text.Json.Serialization.JsonPropertyName("object")]
+    public string? Object { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? BusinessBinding { get; init; }
     public IReadOnlyList<string> AdditionalActions { get; init; } = [];
     public string Id => $"{Uri.EscapeDataString(ModuleId)}/view:{Uri.EscapeDataString(ViewKey)}/{Surface}"
         + (Surface == "read" ? "" : $"/action:{Uri.EscapeDataString(ActionKey)}");
@@ -13,6 +18,11 @@ public sealed record ActionDataAccessDeclaration(string ModuleId, string ViewKey
 public sealed record ActionDataAccessRequirement(string Id, string ModuleId, string ViewKey, string Surface, string ActionKey,
     string Execution, IReadOnlyList<string> Resources, IReadOnlyList<string> Actions, IReadOnlyList<string> FeaturePositions)
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    [System.Text.Json.Serialization.JsonPropertyName("object")]
+    public string? Object { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? BusinessBinding { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<DataExecutionRequirement>? Requirements { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
@@ -37,6 +47,20 @@ public static class ActionDataAccessCompiler
             throw new InvalidOperationException("DATA_EXECUTION_BINDING_MISSING");
         foreach (var (feature, declaration) in entries)
         {
+            if (declaration.BusinessBinding is not null)
+            {
+                if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
+                    || string.IsNullOrWhiteSpace(declaration.ActionKey) || declaration.Execution.Length != 0
+                    || declaration.Resources.Count != 1 || !resources.Contains(declaration.Resources[0])
+                    || declaration.AdditionalActions.Count != 0
+                    || declaration.Object is null && declaration.Actions.Count != 0
+                    || declaration.Object is not null && (string.IsNullOrWhiteSpace(declaration.Object) || declaration.Actions.Count == 0)
+                    || declaration.Actions.Distinct(StringComparer.Ordinal).Count() != declaration.Actions.Count
+                    || declaration.Actions.Any(key => !actions.Any(action => action.Key == key))
+                    || declaration.BusinessBinding != feature.BehaviorKey)
+                    throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
+                continue;
+            }
             if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
                 || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "export" or "lookupBindings" or "featureActions" or "pageActions" or "rowActions" or "outputActions" or "detailContributions")
                 || declaration.Surface != "read" && string.IsNullOrWhiteSpace(declaration.ActionKey)
@@ -62,6 +86,16 @@ public static class ActionDataAccessCompiler
         return entries.GroupBy(entry => entry.declaration.Id, StringComparer.Ordinal).Select(group =>
         {
             var first = group.First().declaration;
+            if (first.BusinessBinding is not null)
+            {
+                if (group.Any(entry => entry.declaration.BusinessBinding != first.BusinessBinding || entry.declaration.Object != first.Object
+                    || !entry.declaration.Actions.SequenceEqual(first.Actions) || !entry.declaration.Resources.SequenceEqual(first.Resources)))
+                    throw new InvalidOperationException("ACTION_DATA_ACCESS_IDENTITY_CONFLICT");
+                return new ActionDataAccessRequirement(first.Id, first.ModuleId, first.ViewKey, first.Surface, first.ActionKey,
+                    "", first.Resources, first.Actions, group.Select(entry => positions[(entry.feature.ModuleId,
+                        entry.feature.ReferenceKey ?? entry.feature.Key)].Position).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray())
+                { Object = first.Object, BusinessBinding = first.BusinessBinding };
+            }
             var contract = contracts[first.Execution];
             if (group.Any(entry => entry.declaration.Execution != first.Execution
                 || !entry.declaration.Actions.SequenceEqual(first.Actions) || !entry.declaration.Resources.SequenceEqual(first.Resources)

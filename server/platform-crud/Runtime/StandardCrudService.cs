@@ -21,6 +21,7 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly StandardCrudDefaultWriter _defaultWriter;
     private readonly ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider _objectScope;
     private readonly ICP.Platform.Authorization.Contracts.IDataExecutionAccess _executions;
+    private readonly ICP.Platform.Authorization.Contracts.IButtonExecutionAccess? _buttons;
 
     /// <summary>所有读取和标准写必须显式组合正式执行器；写后观察仍独立于写前裁决。</summary>
     public StandardCrudService(
@@ -30,8 +31,10 @@ public sealed class StandardCrudService : IStandardCrudService
         StandardCrudDefaultWriter defaultWriter, IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
         DisplayValueProjection displayProjection, IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
         ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider objectScope,
-        ILogger<StandardCrudService>? logger = null, IObjectOperationExecutor? objectOperations = null)
+        ILogger<StandardCrudService>? logger = null, IObjectOperationExecutor? objectOperations = null,
+        ICP.Platform.Authorization.Contracts.IButtonExecutionAccess? buttons = null)
     {
+        _buttons = buttons;
         _executions = executions ?? throw new ArgumentNullException(nameof(executions));
         _evaluation = evaluation;
         _repository = repository;
@@ -394,10 +397,13 @@ public sealed class StandardCrudService : IStandardCrudService
     }
 
     // 仅已登记的入口生成本次目标绑定；正式来源仍由统一执行器核对原请求声明。
-    private static ObjectOperationWriteSource EntryWriteSource(StandardCrudDescriptor descriptor, string operation, string? id)
+    private ObjectOperationWriteSource EntryWriteSource(StandardCrudDescriptor descriptor, string operation, string? id)
         => descriptor.DataExecutions.TryGetValue(operation, out var execution)
             ? new ObjectOperationWriteSource.Declared(new(new(execution, "standardCrud." + operation, "submit"), descriptor.ResourceKey, id))
-            : throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
+            : operation == "update" && id is not null
+                ? new ObjectOperationWriteSource.Button((_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED"))
+                    .Bind(descriptor.ResourceKey, descriptor.ModelName, operation, id))
+                : throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
 
     // 查询扩展点只产出标准条件；列表真正执行统一收口到平台查询内核，避免模块逻辑直接进入持久化实现。
     private IReadOnlyList<StandardCrudQueryCondition> BuildConditions(StandardCrudDescriptor descriptor, StandardCrudListQuery query)

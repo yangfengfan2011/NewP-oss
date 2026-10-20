@@ -82,7 +82,7 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit", "dataAccess": { "execution": "organization.position.update", "resources": ["organization.position"] }
+        "standardAction": "edit", "dataAccess": { "object": "Position", "actions": ["edit"] }
       },
       {
         "key": "delete",

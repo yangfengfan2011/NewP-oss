@@ -25,7 +25,6 @@
     {"key":"organization.department.update","moduleId":"Organization","provider":"standardCrud.update","boundary":"entry","featureBehaviors":["organization.department.update"],"resourceKey":"organization.department"},
     {"key":"organization.department.delete","moduleId":"Organization","provider":"standardCrud.delete","boundary":"entry","featureBehaviors":["organization.department.delete"],"resourceKey":"organization.department"},
     {"key":"organization.position.create","moduleId":"Organization","provider":"standardCrud.create","boundary":"entry","featureBehaviors":["organization.position.create"],"resourceKey":"organization.position"},
-    {"key":"organization.position.update","moduleId":"Organization","provider":"standardCrud.update","boundary":"entry","featureBehaviors":["organization.position.update"],"resourceKey":"organization.position"},
     {"key":"organization.position.delete","moduleId":"Organization","provider":"standardCrud.delete","boundary":"entry","featureBehaviors":["organization.position.delete"],"resourceKey":"organization.position"},
     {"key":"organization.person.create","moduleId":"Organization","provider":"standardCrud.create","boundary":"entry","featureBehaviors":["organization.person.create"],"resourceKey":"organization.person"},
     {"key":"organization.person.update","moduleId":"Organization","provider":"standardCrud.update","boundary":"entry","featureBehaviors":["organization.person.update"],"resourceKey":"organization.person"},

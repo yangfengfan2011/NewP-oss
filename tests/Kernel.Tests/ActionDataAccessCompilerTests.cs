@@ -9,6 +9,43 @@ namespace ICP.Platform.Kernel.Tests;
 [Trait("Category", "ModuleMetadataConsumer")]
 public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
 {
+    [Theory]
+    [InlineData("{\"object\":\"Position\",\"actions\":[\"edit\"]}", true)]
+    [InlineData("{\"object\":\"Unknown\",\"actions\":[\"edit\"]}", false)]
+    [InlineData("{\"object\":\"Position\",\"actions\":[\"unknown\"]}", false)]
+    [InlineData("{\"object\":\"Position\",\"actions\":[]}", false)]
+    [InlineData("{\"object\":\"Position\",\"actions\":[\"edit\"],\"execution\":\"old\"}", false)]
+    [InlineData("{\"object\":\"Position\",\"actions\":[\"edit\"],\"resources\":[\"test.position\"]}", false)]
+    public void ObjectActionsButton_CompilesItsOwnRequirementsAndRejectsMalformedDeclarations(string declaration, bool valid)
+    {
+        using var navigation = JsonDocument.Parse("""
+            {"navigation":{"items":[{"key":"entry","featureAuthorization":true,"targetKey":"items"}]}}
+            """);
+        using var model = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "modules", "Organization", "metadata", "models", "Position.model.json")));
+        using var view = JsonDocument.Parse("""
+            {"view":{"key":"items","mode":"list","model":"Position","resourceKey":"test.position","rowActions":[
+              {"key":"change","standardAction":"edit","dataAccess":DECLARATION},
+              {"key":"command","handlerKey":"command"}
+            ]}}
+            """.Replace("DECLARATION", declaration, StringComparison.Ordinal));
+        IReadOnlyList<ActionDataAccessRequirement> Compile() => ActionDataAccessCompiler.Compile(
+            StandardFeatureMetadataCompiler.Read("Test", [navigation.RootElement, model.RootElement, view.RootElement]),
+            [new("Authorization", "edit", "Edit", "data.edit", RequiresRead: true)]);
+        if (!valid) { Assert.Throws<InvalidOperationException>(() => Compile()); return; }
+        var requirements = Compile();
+        var button = Assert.Single(requirements, item => item.ActionKey == "change");
+        Assert.Equal("Position", button.Object);
+        Assert.Equal(new[] { "edit" }, button.Actions);
+        Assert.Equal("test.position.update", button.BusinessBinding);
+        Assert.Equal("", button.Execution);
+        Assert.Null(button.Requirements);
+        var command = Assert.Single(requirements, item => item.ActionKey == "command");
+        Assert.Null(command.Object);
+        Assert.Empty(command.Actions);
+        Assert.Equal("test.position.command", command.BusinessBinding);
+        Assert.NotEmpty(command.FeaturePositions);
+    }
+
     [Fact]
     public void FormalPlan_ProjectsWorkspaceButtonsWithoutChangingFeaturePositions()
     {

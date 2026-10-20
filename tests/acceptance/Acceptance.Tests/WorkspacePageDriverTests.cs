@@ -7,6 +7,78 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "树编辑driver先等本次保存后的目标路径读取，旧请求和其他节点不能提前完成，无服务器或端口")]
+    public async Task TreeEdit_WaitsForItsSavedTargetPathBeforeCheckingTheBreadcrumb()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        var oldRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pathRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var targetReads = 0;
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            var path = new Uri(route.Request.Url).AbsolutePath;
+            if (path == "/api/trees/workspace.structure/path")
+            {
+                if (new Uri(route.Request.Url).Query.Contains("nodeKey=selected", StringComparison.Ordinal))
+                {
+                    if (++targetReads == 1) await oldRead.Task;
+                    else { pathRequested.TrySetResult(); oldRead.TrySetResult(); await ready.Task; }
+                }
+                await route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" });
+            }
+            else if (route.Request.Method == "PUT")
+            {
+                await route.FulfillAsync(new() { ContentType = "application/json", Body = "{\"succeeded\":true}" });
+            }
+            else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><aside aria-label="结构树"><span id="folder">原目录</span></aside>
+                <section aria-label="节点内容"><nav aria-label="面包屑"><span aria-current="page">原目录</span></nav><table class="ant-table"><tr><td>内容</td></tr></table></section>
+                <div role="menu" hidden><button role="menuitem">编辑</button></div>
+                <script>
+                  document.querySelector('#folder').oncontextmenu=event=>{ event.preventDefault(); document.querySelector('[role=menu]').hidden=false; };
+                  document.querySelector('[role=menuitem]').onclick=()=>{
+                    fetch('/api/trees/workspace.structure/path?nodeKey=selected');
+                    document.querySelector('[role=menu]').hidden=true;
+                    const drawer=document.createElement('div'); drawer.className='ant-drawer-content';
+                    drawer.innerHTML='<label>名称<input value="原目录"></label><button>保存并关闭</button>'; document.body.append(drawer);
+                    drawer.querySelector('button').onclick=async()=>{
+                      const name=drawer.querySelector('input').value;
+                      await fetch('/api/workspace/content/link',{method:'PUT',body:JSON.stringify({values:{ENAME:name}})});
+                      drawer.remove();
+                      await fetch('/api/trees/workspace.structure/path?nodeKey=another');
+                      await fetch('/api/trees/workspace.structure/path?nodeKey=selected');
+                      document.querySelector('[aria-current=page]').textContent=name;
+                    };
+                  };
+                </script>
+                """ });
+        });
+        await page.GotoAsync("http://workspace.test/workspace?node=selected");
+        var editing = new WorkspacePageDriver(page).EditFolderFromTreeContextMenuAsync("原目录", "新目录");
+        await pathRequested.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            // 真实读取尚未完成时旧driver会在原5秒UI断言处失败；不改变任何等待阈值。
+            var first = await Task.WhenAny(editing, Task.Delay(TimeSpan.FromSeconds(6)));
+            if (ReferenceEquals(editing, first))
+            {
+                await editing;
+                Assert.Fail("目标路径读取完成前不能进入最终面包屑断言。");
+            }
+        }
+        finally { ready.TrySetResult(); }
+        await editing;
+        Assert.Equal(2, targetReads);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "恢复树位置先等待既有面包屑就绪，不把异步空快照当作最终内容，无服务器或端口")]
     public async Task RestorePosition_WaitsForTheRestoredBreadcrumbBeforeCheckingContent()
     {

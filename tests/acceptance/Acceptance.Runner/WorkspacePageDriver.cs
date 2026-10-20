@@ -422,9 +422,39 @@ internal sealed class WorkspacePageDriver(IPage page)
         var edit = page.GetByRole(AriaRole.Menuitem, new() { Name = "编辑", Exact = true });
         await edit.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await CaptureContextMenuAsync(capture);
-        await edit.ClickAsync();
-        await SaveObjectEditAsync(newName);
-        await WaitForContentAsync(newName);
+        var nodeKey = System.Web.HttpUtility.ParseQueryString(new Uri(page.Url).Query)["node"]
+            ?? throw new InvalidOperationException("树编辑缺少当前出现位置。");
+        var written = false;
+        var refreshRequests = new HashSet<IRequest>();
+        // 保存后同步先重读已加载分支，再读取当前路径；旧在途请求不能替代本次刷新。
+        void RefreshStarted(object? sender, IRequest request)
+        {
+            var url = new Uri(request.Url);
+            if (written && request.Method == "GET" && url.AbsolutePath == "/api/trees/workspace.structure/path"
+                && StandardCrudPageDriver.HasQueryValue(url, "nodeKey", nodeKey)) refreshRequests.Add(request);
+        }
+        // 响应抵达即标记写入边界，不能等Drawer关闭后才订阅快速完成的同步请求。
+        void Written(object? sender, IResponse response)
+        {
+            if (response.Request.Method == "PUT" && new Uri(response.Url).AbsolutePath.StartsWith("/api/workspace/content/", StringComparison.Ordinal))
+                written = response.Ok;
+        }
+        page.Request += RefreshStarted;
+        page.Response += Written;
+        try
+        {
+            await edit.ClickAsync();
+            var refreshed = await page.RunAndWaitForResponseAsync(() => SaveObjectEditAsync(newName),
+                response => refreshRequests.Contains(response.Request));
+            await refreshed.FinishedAsync();
+            if (!refreshed.Ok) throw new InvalidOperationException($"树编辑后路径读取失败：{refreshed.Status} {await refreshed.TextAsync()}");
+            await WaitForContentAsync(newName);
+        }
+        finally
+        {
+            page.Request -= RefreshStarted;
+            page.Response -= Written;
+        }
     }
 
     /// <summary>沿树菜单提交单条关系换位，等待正式树和列表读取消费已提交变化。</summary>

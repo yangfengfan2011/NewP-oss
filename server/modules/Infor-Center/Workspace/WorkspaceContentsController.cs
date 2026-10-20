@@ -18,7 +18,7 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
     ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler, WorkspaceEditValuesHandler editValuesHandler,
-    WorkspacePartCreationHandler partCreationHandler, WorkspaceFolderCreationHandler folderCreationHandler,
+    WorkspacePartCreationHandler partCreationHandler, WorkspaceFolderCreationHandler folderCreationHandler, WorkspaceRemoveReferencesHandler removeReferencesHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)
@@ -316,30 +316,40 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>移除所选关系始终带当前完整位置，裸父或对象 EID 不能替代 LID。</summary>
     [HttpDelete("content/references/{linkId}"), RequireFeature("workspace.folder.remove")]
-    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Remove, "submit")]
+    [ButtonBusinessHandler(typeof(WorkspaceRemoveReferencesHandler))]
     public async Task<IResult> RemoveReference(string linkId, RemoveReferenceInput input, CancellationToken token)
     {
         try
         {
             if (input.Position is null) throw new LinkQueryException(400, "Workspace.InvalidReferenceInput");
-            await contents.RemoveAsync(Actor(), input.Position, linkId, token);
+            await buttonBusiness.ExecuteAsync(removeReferencesHandler, new WorkspaceRemoveReferencesInput(Actor(), input.Position, [linkId]), token);
             return Results.Ok(new { succeeded = true });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
     }
 
     /// <summary>整批只移除当前父中的引用，业务对象、其他入向关系及文件保留。</summary>
     [HttpPost("content/references/remove"), RequireFeature("workspace.folder.removeSelected")]
-    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Remove, "submit")]
+    [ButtonBusinessHandler(typeof(WorkspaceRemoveReferencesHandler))]
     public async Task<IResult> RemoveReferences(DeleteObjectsInput input, CancellationToken token)
     {
         try
         {
             if (input.Position is null || input.LinkIds is null) throw new LinkQueryException(400, "Workspace.InvalidReferenceInput");
-            await contents.RemoveReferencesAsync(Actor(), input.Position, input.LinkIds, token);
+            await buttonBusiness.ExecuteAsync(removeReferencesHandler, new WorkspaceRemoveReferencesInput(Actor(), input.Position, input.LinkIds), token);
             return Results.Ok(new { succeeded = true });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
+    }
+
+    // 只翻译本次父目标的既有业务响应，判权依赖故障仍沿原异常边界传播。
+    private static IResult ReferenceButtonProblem(ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+    {
+        var code = exception.Code switch { "DataScope.ActionDenied" => "Workspace.ParentWriteDenied", "StandardCrud.NotFound" => "Workspace.PositionUnavailable", _ => exception.Code };
+        return Results.Problem(statusCode: exception.Status, title: code,
+            extensions: new Dictionary<string, object?> { ["code"] = code });
     }
 
     /// <summary>正式单选候选只返回安全字段，不能请求来源、私人路径或任意排序表达式。</summary>

@@ -70,10 +70,6 @@
       {"role": "sourceParent", "stage": "submit", "branch": "cut", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.position"},
       {"role": "sourceTargets", "stage": "submit", "branch": "cut", "shape": "objects", "minimumCount": 1, "maximumCount": 100, "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.clipboard.endpoint"},
       {"role": "targetParent", "stage": "submit", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.position"}
-    ]},
-    {"key": "workspace.clipboard.remove", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": ["workspace.folder.remove", "workspace.folder.removeSelected"], "requirements": [
-      {"role": "sourceParent", "stage": "submit", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.position"},
-      {"role": "sourceTargets", "stage": "submit", "shape": "objects", "minimumCount": 1, "maximumCount": 100, "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]], "readResolverKey": "workspace.clipboard.endpoint"}
     ]}
   ],
   "frontend": {

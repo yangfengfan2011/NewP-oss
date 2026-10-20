@@ -178,30 +178,6 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     internal Task<WorkspaceTreeOrderResult> ExecuteReorderAsync(WorkspaceReorderState state, CancellationToken token) =>
         treeOrder.ReorderAsync(state.ActorId, state.ParentId, state.LinkId, state.Up, token);
 
-    /// <summary>移除只删除指定 LID；关系当前父端、目标读取与有效出现位置均由提交时事实决定。</summary>
-    public ValueTask<bool> RemoveAsync(string actorId, WorkspacePosition position, string linkId, CancellationToken token) =>
-        RemoveReferencesAsync(actorId, position, [linkId], token);
-
-    /// <summary>单条和一页批量移除共用完整位置、父edit及端点read；确切LID删除及旧关系业务记录共享原事务，不消费对象delete或Files。</summary>
-    public ValueTask<bool> RemoveReferencesAsync(string actorId, WorkspacePosition position, string[] linkIds, CancellationToken token)
-    {
-        ValidateSelection(linkIds);
-        var binding = WorkspaceClipboardExecutions.Binding(WorkspaceClipboardExecutions.Remove, "submit");
-        executionAccess.Validate([binding], "workspace.folder");
-        return transactions.ExecuteAsync<bool>(async cancellation =>
-        {
-            using var operation = audit.BeginOperation();
-            await LockGraphAsync(cancellation);
-            var path = await ResolveClipboardPositionAsync(binding, "sourceParent", position, cancellation);
-            var targets = await ResolveDeclaredClipboardTargetsAsync(path.FolderId, linkIds, binding, cancellation);
-            await Links.Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
-                && EF.Property<string>(row, "PEID") == path.FolderId).ExecuteDeleteAsync(cancellation);
-            for (var index = 0; index < targets.Length; index++)
-                await referenceAudit.RemovedAsync(linkIds[index], path.FolderId, targets[index], cancellation);
-            return true;
-        }, token);
-    }
-
     // 已登记对象行为进入后由此完整创建所属对象与引用，调用方不再拼接准备和关系登记。
     internal async ValueTask<StandardCrudMutationResult> CreateObjectAsync(ObjectOperationContext context,
         IObjectOperationExecutor operations, CancellationToken cancellationToken)

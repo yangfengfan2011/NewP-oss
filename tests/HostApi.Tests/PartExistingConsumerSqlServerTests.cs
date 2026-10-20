@@ -73,6 +73,23 @@ public sealed partial class WorkspaceObjectMutationSqlServerHttpApiTests
         var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
         using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+        var editRule = new ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto("PartEditBeforeDeny", "PartEditBeforeDeny", null, "编辑前事实", true, "part.part",
+            new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("Part编辑前可读")),
+            [new("PartEditBeforeSubject", "all", null, 0, new Dictionary<string, string> { ["edit"] = "deny" })], []);
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
+            "/api/authorization/data-scope/rules/PartEditBeforeDeny", editRule)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+        string beforeAudit;
+        using (var originalScope = fixture.Services.CreateScope())
+            beforeAudit = JsonSerializer.Serialize(await originalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>()
+                .Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking().ToArrayAsync());
+        using (var rejected = await SendAsync(fixture, ordinary, "edit", HttpMethod.Put, "/api/workspace/content/" + part.Link,
+            new { position = root, values = new { ENAME = afterName } })) Assert.Equal(HttpStatusCode.Forbidden, rejected.StatusCode);
+        using (var originalScope = fixture.Services.CreateScope())
+            Assert.Equal(beforeAudit, JsonSerializer.Serialize(await originalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>()
+                .Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking().ToArrayAsync()));
+        using (var allowed = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
+            "/api/authorization/data-scope/rules/PartEditBeforeDeny", editRule with { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("不匹配")) }))
+            Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
         var before = await OwnedResourceReadHttpRequests.ReadAsync(fixture, ordinary, partRead, "part.part", "read", "/api/part/parts/" + part.Id);
         Assert.Equal("Part编辑前可读", before.GetProperty("fields").GetProperty("ENAME").GetString());
         using var edited = await SendAsync(fixture, ordinary, "edit", HttpMethod.Put, "/api/workspace/content/" + part.Link,

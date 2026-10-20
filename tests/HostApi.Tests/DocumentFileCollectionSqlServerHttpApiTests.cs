@@ -295,7 +295,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
             $"/api/document/documents/{document["EID"]}/files/{list[^1].GetProperty("fileLinkId").GetString()}/content");
         Assert.Equal(HttpStatusCode.OK, last.StatusCode); Assert.Equal(new byte[] { 100, 101, 102 }, await last.Content.ReadAsByteArrayAsync());
         var ws = Assert.Single(await RowsAsync(fixture, "WorkspaceFolderContent"));
-        using var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
+        using var deleted = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
             "/api/workspace/content/" + ws["LID"], new { position });
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode); Assert.Empty(await RowsAsync(fixture, "DocumentFileLink"));
         Assert.All(await RowsAsync(fixture, "FileUsage"), row => Assert.Equal("released", row["State"]));
@@ -343,26 +343,26 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
             var staged = await StageThreeAsync(fixture, admin, position, Values(code));
             using var saved = await SaveAsync(fixture, admin, position, Values(code), staged); Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
         }
-        using (var part = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.createPart"), HttpMethod.Post,
+        using (var part = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "workspace.folder.createPart"), HttpMethod.Post,
             "/api/workspace/content/parts", new { position, values = new { ECODE = "SET-DELETE-PART", ENAME = "混合零组件" } })) Assert.Equal(HttpStatusCode.OK, part.StatusCode);
         var spare = await StageAsync(fixture, admin, position, Values("SET-DELETE-SPARE"), [9, 8, 7], "spare.pdf");
         var ws = await RowsAsync(fixture, "WorkspaceFolderContent");
         var docIds = (await RowsAsync(fixture, "Document")).Select(row => (string)row["EID"]!).ToArray();
         var docLinks = ws.Where(row => docIds.Contains((string)row["CEID"]!)).ToArray();
         fault.ArmDeleteFailure(1);
-        await InjectedFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
+        await InjectedFailureAsync(() => new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
             "/api/workspace/content/" + docLinks[0]["LID"], new { position }));
         Assert.Equal(3, fault.ObservedReleasedUsages); await AssertActiveCollectionsAsync(fixture, 6);
         fault.ArmDeleteFailure(2);
-        await InjectedFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObjects"), HttpMethod.Post,
+        await InjectedFailureAsync(() => new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "workspace.folder.deleteObjects"), HttpMethod.Post,
             "/api/workspace/content/delete", new { position, linkIds = new[] { (string)docLinks[0]["LID"]!, (string)ws.Single(row => !docIds.Contains((string)row["CEID"]!))["LID"]!, (string)docLinks[1]["LID"]! } }));
         Assert.Equal(6, fault.ObservedReleasedUsages); await AssertActiveCollectionsAsync(fixture, 6); Assert.Single(await RowsAsync(fixture, "Part"));
-        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
+        using (var deleted = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
             "/api/workspace/content/" + docLinks[0]["LID"], new { position })) Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         Assert.Equal(3, await CleanupAsync(fixture)); Assert.Equal(0, await CleanupAsync(fixture));
         Assert.Equal(3, (await RowsAsync(fixture, "FileUsage")).Count(row => Equals(row["State"], "active")));
         Assert.Equal("staged", Assert.Single(await RowsAsync(fixture, "FileUploadLease"), row => Equals(row["EID"], Token(spare)))["State"]);
-        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObjects"), HttpMethod.Post,
+        using (var deleted = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "workspace.folder.deleteObjects"), HttpMethod.Post,
             "/api/workspace/content/delete", new { position, linkIds = ws.Where(row => !Equals(row["LID"], docLinks[0]["LID"])).Select(row => (string)row["LID"]!).ToArray() })) Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         Assert.Equal(3, await CleanupAsync(fixture)); Assert.Equal(0, await CleanupAsync(fixture));
         foreach (var model in new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink", "WorkspaceFolderContent", "Part" }) Assert.Empty(await RowsAsync(fixture, model));

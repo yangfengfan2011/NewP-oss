@@ -411,8 +411,12 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 writes++;
                 Assert.Equal(HttpMethod.Post, request.Method);
                 Assert.Equal(action.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
-                if (current) Assert.Equal(declaration, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
-                else Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+                if (current) Assert.Equal(declaration, Assert.Single(request.Headers.GetValues(model == "Part" ? "X-NewP-Button" : "X-NewP-Data-Declaration")));
+                else
+                {
+                    Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+                    Assert.False(request.Headers.Contains("X-NewP-Button"));
+                }
                 using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
                 Assert.Equal("parent-LID", Assert.Single(body.RootElement.GetProperty("position").GetProperty("linkIds").EnumerateArray()).GetString());
                 Assert.Equal("Code", body.RootElement.GetProperty("values").GetProperty("ECODE").GetString());
@@ -435,7 +439,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
         var features = CurrentWorkspaceFeatures();
         var entry = features.Behavior("Workspace", "workspace.spaces.access");
         var create = features.Action(entry, "create", "list.pageActions", "folder");
-        var createDeclaration = features.DeclarationAtView(create, "workspace.folder.list", "pageActions", "create");
+        var createDeclaration = features.Button(create);
         var readDeclaration = features.ReadDeclaration("Workspace", "workspace.folder.list", entry.Position);
         Assert.NotEqual(readDeclaration, features.ReadDeclaration("Workspace", "workspace.references.list", entry.Position));
         var parent = new WorkspaceFolderPosition("space", "root-EID", "parent-EID", ["first-LID"]);
@@ -452,7 +456,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 Assert.Equal("first-LID", Assert.Single(position.GetProperty("linkIds").EnumerateArray()).GetString());
                 Assert.Equal("child", body.RootElement.GetProperty("values").GetProperty("ENAME").GetString());
                 Assert.Equal(create.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
-                Assert.Equal(createDeclaration, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
+                Assert.Equal(createDeclaration, Assert.Single(request.Headers.GetValues("X-NewP-Button")));
+                Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
                 return Json(HttpStatusCode.OK, "{\"id\":\"child-EID\",\"fields\":{}}");
             }
             Assert.Equal("/api/links/workspace.content", path);
@@ -486,7 +491,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
         var entry = features.Behavior(module, behavior);
         var create = features.Action(entry, "create", "list.pageActions");
         var resource = module == "Part" ? "part.part" : "document.document";
-        var declaration = features.Declaration(create, resource + ".create", "standardCrud.create", resource);
+        var declaration = module == "Part" ? features.Button(create) : features.Declaration(create, resource + ".create", "standardCrud.create", resource);
         var created = false;
         using var client = new HttpClient(new AsyncHandler(async (request, token) =>
         {
@@ -494,7 +499,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal(path, request.RequestUri.AbsolutePath);
             Assert.Equal(create.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
-            Assert.Equal(declaration, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
+            Assert.Equal(declaration, Assert.Single(request.Headers.GetValues(module == "Part" ? "X-NewP-Button" : "X-NewP-Data-Declaration")));
             Assert.Equal("fixture-token", Assert.Single(request.Headers.GetValues("X-CSRF-TOKEN")));
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             Assert.Equal(["ECODE", "ENAME"], body.RootElement.EnumerateObject().Select(property => property.Name).ToArray());
@@ -555,6 +560,9 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 _ => throw new InvalidOperationException("重启准备不应扩大权限或使用其他写入入口：" + path)
             };
             Assert.Equal(features.Action(entry, action, "list.pageActions", "folder").Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            var currentAction = features.Action(entry, action, "list.pageActions", "folder");
+            Assert.Equal(action == "createDocument" ? features.DeclarationAtView(currentAction, "workspace.folder.list", "pageActions", action) : features.Button(currentAction),
+                Assert.Single(request.Headers.GetValues(action == "createDocument" ? "X-NewP-Data-Declaration" : "X-NewP-Button")));
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             var position = body.RootElement.GetProperty("position");
             Assert.Equal("public-space", position.GetProperty("spaceId").GetString());

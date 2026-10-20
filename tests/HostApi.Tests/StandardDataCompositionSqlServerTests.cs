@@ -154,7 +154,7 @@ public sealed class StandardDataCompositionSqlServerTests
         var partVersion = CurrentVersion("Part");
         var workspaceVersion = CurrentVersion("Workspace");
         var partPoint = Assert.Single(fixture.Catalog, point => point.BehaviorKey == "part.part.create");
-        using var partResponse = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, partPoint, HttpMethod.Post, "/api/part/parts", new { ECODE = "EXTERNAL266PART", ENAME = "外仓组合真实Part266" });
+        using var partResponse = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, partPoint, HttpMethod.Post, "/api/part/parts", new { ECODE = "EXTERNAL266PART", ENAME = "外仓组合真实Part266" }, new FeatureHttpTestRequests(fixture).Declaration("part.part.create", partPoint));
         Assert.True(partResponse.IsSuccessStatusCode, await partResponse.Content.ReadAsStringAsync());
         var partId = (await partResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("fields").GetProperty("EID").GetString()!;
         await fixture.StopAsync();

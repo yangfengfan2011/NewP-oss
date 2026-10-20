@@ -68,7 +68,8 @@ internal static class WorkspaceAcceptanceFixture
         var receipt = await SendAsync(client, HttpMethod.Post, "/api/workspace/content/parts",
             new { position = position.CommandPosition,
                 values = new { ECODE = code, ENAME = name } },
-            features.Action(entry, "createPart", "list.pageActions", "folder").Position, token);
+            features.Action(entry, "createPart", "list.pageActions", "folder").Position, token,
+            buttonId: features.Button(features.Action(entry, "createPart", "list.pageActions", "folder")));
         if (!receipt.GetProperty("succeeded").GetBoolean() || receipt.TryGetProperty("id", out _))
             throw new InvalidOperationException("组合后的真实 Part 创建未返回受控成功回执。");
         var contents = await ReadContentsAtPositionAsync(client, position, entry.Position, token, features);
@@ -81,7 +82,8 @@ internal static class WorkspaceAcceptanceFixture
             || string.IsNullOrEmpty(row.GetProperty("linkId").GetString()))
             throw new InvalidOperationException("组合后的内容 Link 未保留 Workspace/Part 端点与真实身份。");
         var detail = await SendAsync(client, HttpMethod.Get, "/api/part/parts/" + Uri.EscapeDataString(id), null,
-            features.Behavior("Part", "part.part.read").Position, token);
+            features.Behavior("Part", "part.part.read").Position, token,
+            features.ReadDeclaration("Part", "part.part.detail", features.Behavior("Part", "part.part.read").Position));
         var fields = detail.GetProperty("fields");
         if (fields.GetProperty("EID").GetString() != id || fields.GetProperty("ECODE").GetString() != code || fields.GetProperty("ENAME").GetString() != name)
             throw new InvalidOperationException("组合后的所属 Part 详情未保持正式对象字段与身份。");
@@ -209,8 +211,7 @@ internal static class WorkspaceAcceptanceFixture
         var created = await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/folders",
             new { position = parent.CommandPosition, values = new { ENAME = name } },
             features.Action(entry, "create", "list.pageActions", "folder").Position, token,
-            features.DeclarationAtView(features.Action(entry, "create", "list.pageActions", "folder"),
-                "workspace.folder.list", "pageActions", "create"));
+            buttonId: features.Button(features.Action(entry, "create", "list.pageActions", "folder")));
         var id = created.GetProperty("id").GetString()!;
         var contents = await ReadContentsAtPositionAsync(ordinary, parent, entry.Position, token, features);
         var link = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == id);
@@ -241,7 +242,8 @@ internal static class WorkspaceAcceptanceFixture
         var resource = module switch { "Part" => "part.part", "Document" => "document.document",
             _ => throw new InvalidOperationException("元数据准备只接受已登记的Part/Document来源。") };
         var result = await SendAsync(ordinary, HttpMethod.Post, path, new { ECODE = code, ENAME = name },
-            create.Position, token, features.Declaration(create, resource + ".create", "standardCrud.create", resource));
+            create.Position, token, module == "Document" ? features.Declaration(create, resource + ".create", "standardCrud.create", resource) : null,
+            buttonId: module == "Part" ? features.Button(create) : null);
         // 受控成功回执不含可引用身份，不能伪造 ID 继续准备。
         return result.GetProperty("fields").GetProperty("EID").GetString()
             ?? throw new InvalidOperationException("正式元数据创建未返回可引用的 EID。");
@@ -264,7 +266,9 @@ internal static class WorkspaceAcceptanceFixture
         })
             await SendAsync(ordinary, HttpMethod.Post, path,
                 new { position = folder.CommandPosition, values = new { ECODE = code, ENAME = name } },
-                features.Action(entry, action, "list.pageActions", "folder").Position, token);
+                features.Action(entry, action, "list.pageActions", "folder").Position, token,
+                dataDeclaration: action == "createDocument" ? features.DeclarationAtView(features.Action(entry, action, "list.pageActions", "folder"), "workspace.folder.list", "pageActions", action) : null,
+                buttonId: action == "createPart" ? features.Button(features.Action(entry, action, "list.pageActions", "folder")) : null);
         // 创建回执不含实体或关系身份；重启前后的快照只消费正式 Link 查询。
         return folder;
     }

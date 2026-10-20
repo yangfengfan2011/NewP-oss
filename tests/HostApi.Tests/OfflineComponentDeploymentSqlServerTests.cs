@@ -257,7 +257,7 @@ public sealed class OfflineComponentDeploymentSqlServerTests
     {
         await new FeatureHttpTestRequests(fixture).InitializeOrganizationAsync(fixture.Administrator);
         var point = Assert.Single(fixture.Catalog, point => point.BehaviorKey == "part.part.create");
-        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, "/api/part/parts", new { ECODE = "OFFLINE264", ENAME = "离线保留264" });
+        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, "/api/part/parts", new { ECODE = "OFFLINE264", ENAME = "离线保留264" }, new FeatureHttpTestRequests(fixture).Declaration("part.part.create", point));
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("fields").GetProperty("EID").GetString()!;
     }

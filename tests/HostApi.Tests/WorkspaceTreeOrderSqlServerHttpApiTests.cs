@@ -492,7 +492,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         var partPosition = root with { LinkIds = [linkId] };
         using (var createdPart = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.createPart"), HttpMethod.Post,
             "/api/workspace/content/parts", new { position = partPosition, values = new { ECODE = "ORDER-PART", ENAME = "业务对象" } },
-            new FeatureHttpTestRequests(fixture).Declaration("workspace.content.createPart", Point(fixture, "workspace.folder.createPart")))) Assert.Equal(HttpStatusCode.OK, createdPart.StatusCode);
+            new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.createPart", Point(fixture, "workspace.folder.createPart")))) Assert.Equal(HttpStatusCode.OK, createdPart.StatusCode);
         var partLink = (string)(await Rows(fixture, "WorkspaceFolderContent")).Single(row => (string)row["ChildModelKey"]! == "Part")["LID"]!;
         using (var business = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post,
             "/api/workspace/content/tree-order", new { parentPosition = partPosition, linkId = partLink, direction = "up" }, OrderDeclaration(fixture, "up"))) Assert.Equal(HttpStatusCode.NotFound, business.StatusCode);
@@ -508,7 +508,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         Assert.DoesNotContain(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.reordered"));
         using (var renamed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
             "/api/workspace/content/" + linkId, new { position = root, values = new { ENAME = "B" } },
-            new FeatureHttpTestRequests(fixture).Declaration("workspace.content.edit", Point(fixture, "workspace.folder.editObject")))) Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+            new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.editObject", Point(fixture, "workspace.folder.editObject")))) Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
         Assert.Equal(new[] { "B", "A" }, Names(await Children(admin, entry, root)));
         Assert.Equal(before, await Snapshot(fixture, "WorkspaceFolderContent"));
     }

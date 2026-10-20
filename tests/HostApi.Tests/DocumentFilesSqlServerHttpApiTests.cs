@@ -772,19 +772,19 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         var second = await CreateMainAsync(fixture, admin, position, "DELETE-02", [4, 5, 6]);
         fault.ArmDelete(1);
         await InjectedFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
-            "/api/workspace/content/" + first.WorkspaceLinkId, new { position }, WorkspaceObjectDeclaration(fixture, "workspace.content.delete", "workspace.folder.deleteObject")));
+            "/api/workspace/content/" + first.WorkspaceLinkId, new { position }, WorkspaceObjectDeclaration(fixture, "workspace.folder.deleteObject", "workspace.folder.deleteObject")));
         Assert.Equal(1, fault.Injected);
         Assert.True(fault.ObservedReleasedUsage);
         await AssertTwoActiveDocumentsAsync(fixture);
         fault.ArmDelete(2);
         await InjectedFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObjects"), HttpMethod.Post,
-            "/api/workspace/content/delete", new { position, linkIds = new[] { first.WorkspaceLinkId, second.WorkspaceLinkId } }, WorkspaceObjectDeclaration(fixture, "workspace.content.delete", "workspace.folder.deleteObjects")));
+            "/api/workspace/content/delete", new { position, linkIds = new[] { first.WorkspaceLinkId, second.WorkspaceLinkId } }, WorkspaceObjectDeclaration(fixture, "workspace.folder.deleteObjects", "workspace.folder.deleteObjects")));
         Assert.Equal(2, fault.Injected);
         Assert.Equal(2, fault.DocumentDeleteCommands);
         Assert.True(fault.ObservedReleasedUsage);
         await AssertTwoActiveDocumentsAsync(fixture);
         using var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObjects"), HttpMethod.Post,
-            "/api/workspace/content/delete", new { position, linkIds = new[] { first.WorkspaceLinkId, second.WorkspaceLinkId } }, WorkspaceObjectDeclaration(fixture, "workspace.content.delete", "workspace.folder.deleteObjects"));
+            "/api/workspace/content/delete", new { position, linkIds = new[] { first.WorkspaceLinkId, second.WorkspaceLinkId } }, WorkspaceObjectDeclaration(fixture, "workspace.folder.deleteObjects", "workspace.folder.deleteObjects"));
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         var final = await ObserveBusinessAsync(fixture);
         Assert.Empty(final.Documents); Assert.Empty(final.Versions); Assert.Empty(final.Iterations); Assert.Empty(final.Links); Assert.Empty(final.References);
@@ -1008,7 +1008,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
     private static ICP.Platform.Kernel.ModulePlanning.ActionDataAccessRequirement WorkspaceObjectDeclaration(
         BusinessAuditHostFixture fixture, string execution, string behavior) =>
         Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
-            item => item.Execution == execution && item.FeaturePositions.Contains(Point(fixture, behavior).Position));
+            item => (item.Execution == execution || item.BusinessBinding == execution) && item.FeaturePositions.Contains(Point(fixture, behavior).Position));
 
     private static async Task<JsonElement> ProblemAsync(HttpResponseMessage response, HttpStatusCode status, string code)
     {

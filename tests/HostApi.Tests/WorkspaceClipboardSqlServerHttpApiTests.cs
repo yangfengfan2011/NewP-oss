@@ -586,7 +586,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
             await Problem(response, HttpStatusCode.BadRequest, "Workspace.RootOnlyFolders");
         }
         using var independent = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "part.part.create"),
-            HttpMethod.Post, "/api/part/parts", new { ECODE = "DIRECT", ENAME = "独立对象" });
+            HttpMethod.Post, "/api/part/parts", new { ECODE = "DIRECT", ENAME = "独立对象" }, new FeatureHttpTestRequests(fixture).Declaration("part.part.create",
+                Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "part.part.create")));
         Assert.Equal(HttpStatusCode.Created, independent.StatusCode);
         var id = (await independent.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("fields").GetProperty("EID").GetString();
         using var added = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.add"), HttpMethod.Post,
@@ -739,10 +740,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
     {
         var feature = Point(fixture, behavior);
         var execution = behavior switch { "workspace.folder.create" => "workspace.folder.create",
-            "workspace.folder.createPart" => "workspace.content.createPart", "workspace.folder.createDocument" => "workspace.content.createDocument", _ => null };
-        var declaration = execution is not null
+            "workspace.folder.createPart" => "workspace.folder.createPart", "workspace.folder.createDocument" => "workspace.content.createDocument", _ => null };
+        var declaration = behavior == "workspace.folder.deleteObjects"
+            ? new FeatureHttpTestRequests(fixture).Declaration(behavior, feature)
+            : execution is not null
             ? Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-                item => item.Execution == execution && item.ViewKey == "workspace.folder.list" && item.Surface == "pageActions" && item.FeaturePositions.Contains(feature.Position))
+                item => (item.Execution == execution || item.BusinessBinding == execution) && item.ViewKey == "workspace.folder.list" && item.Surface == "pageActions" && item.FeaturePositions.Contains(feature.Position))
             : ClipboardDeclaration(fixture, feature);
         // 结果/取消是原actor+操作凭据通道，不能假消费prepare/submit的数据声明。
         if (path is "/api/workspace/content/objects/copy/result" or "/api/workspace/content/objects/copy/cancel") declaration = null;

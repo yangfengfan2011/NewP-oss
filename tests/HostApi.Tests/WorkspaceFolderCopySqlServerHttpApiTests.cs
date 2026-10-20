@@ -160,7 +160,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var root = await Root(fixture, admin);
         var source = await Folder(fixture, admin, root, "来源"); var target = await Folder(fixture, admin, root, "目标");
-        using (var edited = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put,
+        using (var edited = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put,
             "/api/workspace/content/" + source.LinkIds[^1], new { position = root, values = new { ENAME = "来源", Description = "只复制说明白名单" } })) Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
         var firstChild = await Folder(fixture, admin, source, "Z-first");
         await Folder(fixture, admin, source, "A-second");

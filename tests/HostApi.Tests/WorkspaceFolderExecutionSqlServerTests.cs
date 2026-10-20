@@ -99,7 +99,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
         }
         var createFeature = Point(fixture, "workspace.folder.create");
         var declaration = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-            binding => binding.Execution == WorkspaceFolderExecutions.Create && binding.FeaturePositions.Contains(createFeature.Position));
+            binding => binding.BusinessBinding == "workspace.folder.create" && binding.FeaturePositions.Contains(createFeature.Position));
         using (var entry = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path, dataAccess: declaration))
             Assert.Equal(HttpStatusCode.BadRequest, entry.StatusCode);
         // internal合同没有客户端声明ID；任意自报该身份也不能选择纯API的执行来源。
@@ -139,7 +139,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             Assert.NotEmpty(roots.EnumerateArray());
         }
         var create = Point(fixture, "workspace.folder.create");
-        var foreign = Assert.Single(declarations, item => item.Execution == WorkspaceFolderExecutions.Create && item.FeaturePositions.Contains(create.Position));
+        var foreign = Assert.Single(declarations, item => item.BusinessBinding == "workspace.folder.create" && item.FeaturePositions.Contains(create.Position));
         using var rejected = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path, dataAccess: foreign);
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
     }
@@ -295,7 +295,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
         var feature = Point(fixture, "workspace.spaces.access");
         var create = Point(fixture, "workspace.folder.create");
         var foreign = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-            item => item.Execution == WorkspaceFolderExecutions.Create && item.FeaturePositions.Contains(create.Position));
+            item => item.BusinessBinding == "workspace.folder.create" && item.FeaturePositions.Contains(create.Position));
         foreach (var path in new[] { "/api/workspace/spaces/" + position.SpaceId + "/root", "/api/workspace/spaces/roots/" + position.RootFolderId })
         {
             using (var accepted = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path))

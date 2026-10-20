@@ -65,7 +65,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             // 暂停仅消费第一条写入，正常创建仍走真实HTTP，不能用直接SQL绕过所属规则。
             barrier.Pause = false;
             var create = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Part" && point.BehaviorKey == "part.part.create" && point.ActionScope == "list.pageActions");
-            using var winner = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/part/parts", new { ECODE = "NORMAL-RACE-CODE", ENAME = "正常创建赢家" });
+            using var winner = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/part/parts", new { ECODE = "NORMAL-RACE-CODE", ENAME = "正常创建赢家" }, new FeatureHttpTestRequests(fixture).Declaration("part.part.create", create));
             Assert.Equal(HttpStatusCode.Created, winner.StatusCode);
             barrier.Release.TrySetResult();
             using var loser = await pending; Assert.Equal(HttpStatusCode.Conflict, loser.StatusCode);
@@ -288,7 +288,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         Assert.Equal(4, (await Rows(fixture, "Part")).Length);
         var delete = Point(fixture, "workspace.folder.deleteObjects");
         using (var cleanup = await FeatureHttpTestRequests.SendAsync(admin, delete, HttpMethod.Post, "/api/workspace/content/delete",
-            new { position = source, linkIds = new[] { lid } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.content.delete", delete)))
+            new { position = source, linkIds = new[] { lid } }, new FeatureHttpTestRequests(fixture).Declaration(delete.BehaviorKey, delete)))
             Assert.Equal(HttpStatusCode.OK, cleanup.StatusCode);
         Assert.Equal(3, (await Rows(fixture, "Part")).Length);
         Assert.Equal(3, (await Rows(fixture, "WorkspaceFolderContent")).Count(row => Equals(row["ChildModelKey"], "Part")));
@@ -395,7 +395,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var prepared = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, input);
         var operationId = prepared.GetProperty("operationId").GetString();
         using (var update = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put, "/api/workspace/content/" + lid,
-            new { position = source, values = new { ENAME = "提交前名称", Description = "新说明" } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.content.edit", RowPoint(fixture, "edit")))) Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+            new { position = source, values = new { ENAME = "提交前名称", Description = "新说明" } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.editObject", RowPoint(fixture, "edit")))) Assert.Equal(HttpStatusCode.OK, update.StatusCode);
         using (var changed = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "CHANGED-COPY", ENAME = "我的编辑", Description = "我的说明" } }))
             await Problem(changed, HttpStatusCode.Conflict, "Workspace.CopySourceChanged");
         Assert.Single(await Rows(fixture, "Part"));
@@ -418,11 +418,11 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await Problem(afterCancel, HttpStatusCode.Conflict, "Workspace.CopyCancelled");
         Assert.Equal(2, (await Rows(fixture, "Part")).Length);
         var copyLink = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["CEID"], copied["EID"]));
-        using (var editCopy = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put, "/api/workspace/content/" + copyLink["LID"], new { position = target, values = new { ENAME = "只编辑副本" } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.content.edit", RowPoint(fixture, "edit")))) Assert.Equal(HttpStatusCode.OK, editCopy.StatusCode);
+        using (var editCopy = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put, "/api/workspace/content/" + copyLink["LID"], new { position = target, values = new { ENAME = "只编辑副本" } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.editObject", RowPoint(fixture, "edit")))) Assert.Equal(HttpStatusCode.OK, editCopy.StatusCode);
         Assert.Equal("提交前名称", Assert.Single(await Rows(fixture, "Part"), row => Equals(row["ECODE"], "CHANGE-SOURCE"))["ENAME"]);
         var delete = Point(fixture, "workspace.folder.deleteObjects");
         using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, delete, HttpMethod.Post, "/api/workspace/content/delete",
-            new { position = target, linkIds = new[] { copyLink["LID"] } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.content.delete", delete)))
+            new { position = target, linkIds = new[] { copyLink["LID"] } }, new FeatureHttpTestRequests(fixture).Declaration(delete.BehaviorKey, delete)))
             Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         Assert.Equal("CHANGE-SOURCE", Assert.Single(await Rows(fixture, "Part"))["ECODE"]);
     }

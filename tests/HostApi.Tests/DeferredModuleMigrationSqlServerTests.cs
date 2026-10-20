@@ -449,7 +449,7 @@ public sealed class DeferredModuleMigrationSqlServerTests
     {
         var point = Point(fixture, behavior);
         var resource = behavior switch { "part.part.create" => "part.part", "document.document.create" => "document.document", _ => null };
-        var declaration = resource is null ? null : await OwnedResourceReadHttpRequests.DeclarationAsync(fixture.Administrator, point, resource, "create");
+        var declaration = resource is null ? null : new FeatureHttpTestRequests(fixture).Declaration(behavior, point);
         using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, path, input, declaration);
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();

@@ -33,7 +33,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var root = await initialized.Content.ReadFromJsonAsync<JsonElement>();
         var position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
         var create = Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "workspace.folder.create");
-        using var created = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values = new { ENAME = "首个文件夹", Description = new string('描', 500) } });
+        using var created = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values = new { ENAME = "首个文件夹", Description = new string('描', 500) } });
         Assert.True(created.StatusCode == HttpStatusCode.OK, await created.Content.ReadAsStringAsync());
         var detail = await created.Content.ReadFromJsonAsync<JsonElement>();
         var id = detail.GetProperty("id").GetString();
@@ -99,12 +99,12 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
             (new { ENAME = "伪造关系", LID = "chosen", ChildModelKey = "Other/Type", CEID = "missing" }, "Workspace.ServerFieldForbidden")
         })
         {
-            using var rejected = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values });
+            using var rejected = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values });
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
             Assert.Equal(code, (await rejected.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         }
         Assert.Equal(before, await CountsAsync(fixture));
-        var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post,
+        var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, create, HttpMethod.Post,
             "/api/workspace/content/folders", new { position, values = new { ENAME = "并发同级名称" } })));
         Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
         Assert.Equal(3, responses.Count(response => response.StatusCode == HttpStatusCode.Conflict));
@@ -116,7 +116,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         }
         Assert.Equal((before.Folders + 1, before.Links + 1), await CountsAsync(fixture));
         fault.Enabled = true;
-        using var failed = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values = new { ENAME = "关系失败回滚" } });
+        using var failed = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values = new { ENAME = "关系失败回滚" } });
         Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode); fault.Enabled = false;
         Assert.Equal((before.Folders + 1, before.Links + 1), await CountsAsync(fixture));
         foreach (var route in new[] { "/api/workspace/folders", "/api/workspace/folders/missing", "/api/workspace/content", "/api/links/workspace.content" })
@@ -140,17 +140,17 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Entry(fixture); var create = Create(fixture);
         var root = await InitializeAsync(admin, entry);
-        for (var index = 0; index < 27; index++) await CreateAsync(admin, create, root, "层" + index.ToString("D2"));
+        for (var index = 0; index < 27; index++) await CreateAsync(fixture, admin, create, root, "层" + index.ToString("D2"));
         using var costs = new SqlReadObservation(); costs.Begin();
-        var all = await ListAsync(admin, entry, root, root.RootFolderId, "&sortBy=Name&sortDirection=asc&fields=LID,Name");
+        var all = await ListAsync(fixture, admin, entry, root, root.RootFolderId, "&sortBy=Name&sortDirection=asc&fields=LID,Name");
         output.WriteLine(JsonSerializer.Serialize(new { scenario = "WorkspaceDirectList", siblingFolders = 27, total = all.GetProperty("total").GetInt32(), materializedRelations = all.GetProperty("items").GetArrayLength(), cost = costs.End() }));
         Assert.Equal(27, all.GetProperty("total").GetInt32()); Assert.Equal(20, all.GetProperty("items").GetArrayLength());
         Assert.All(all.GetProperty("items").EnumerateArray(), row => Assert.Equal(new[] { "LID", "Name" }, row.GetProperty("fields").EnumerateObject().Select(field => field.Name).ToArray()));
-        var second = await ListAsync(admin, entry, root, root.RootFolderId, "&pageIndex=2&sortBy=Name&sortDirection=asc&fields=LID,Name");
+        var second = await ListAsync(fixture, admin, entry, root, root.RootFolderId, "&pageIndex=2&sortBy=Name&sortDirection=asc&fields=LID,Name");
         Assert.Equal(7, second.GetProperty("items").GetArrayLength()); Assert.Equal("层20", second.GetProperty("items")[0].GetProperty("fields").GetProperty("Name").GetString());
         var first = all.GetProperty("items")[0]; var childId = first.GetProperty("associatedObject").GetProperty("id").GetString()!;
         var childPosition = root with { LinkIds = [first.GetProperty("linkId").GetString()!] };
-        var grand = await CreateAsync(admin, create, childPosition, "孙文件夹");
+        var grand = await CreateAsync(fixture, admin, create, childPosition, "孙文件夹");
         costs.Begin(); var tree = await FeatureHttpTestRequests.ReadAsync(admin, entry, ChildrenUrl(root));
         output.WriteLine(JsonSerializer.Serialize(new { scenario = "WorkspaceDirectLayer", siblingFolders = 27, descendantFolders = 1, materializedRelations = tree.GetProperty("items").GetArrayLength(), cost = costs.End() }));
         Assert.Equal(27, tree.GetProperty("items").GetArrayLength()); Assert.Single(tree.GetProperty("items").EnumerateArray(), row => row.GetProperty("hasChildren").GetBoolean());
@@ -158,7 +158,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using var ordinary = actor.Client;
         var grantSave = Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "authorization.dataScope.save");
         await SaveRuleAsync(fixture, admin, grantSave, "HideParent", "EID", childId, new Dictionary<string, string> { ["read"] = "deny" });
-        var filtered = await ListAsync(ordinary, entry, root, root.RootFolderId, "&pageSize=5&sortBy=Name&sortDirection=asc&fields=Name");
+        var filtered = await ListAsync(fixture, ordinary, entry, root, root.RootFolderId, "&pageSize=5&sortBy=Name&sortDirection=asc&fields=Name");
         Assert.Equal(26, filtered.GetProperty("total").GetInt32()); Assert.Equal(5, filtered.GetProperty("items").GetArrayLength());
         Assert.Equal("层01", filtered.GetProperty("items")[0].GetProperty("fields").GetProperty("Name").GetString());
         var hiddenTree = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(root));
@@ -166,16 +166,16 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using var deniedChild = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ChildrenUrl(childPosition));
         Assert.Equal(HttpStatusCode.NotFound, deniedChild.StatusCode);
         // 孙实体自身可读，但不允许通过祖先被拒的当前出现位置查询或写入。
-        var childList = await ListAsync(admin, entry, childPosition, childId);
+        var childList = await ListAsync(fixture, admin, entry, childPosition, childId);
         var grandPosition = childPosition with { LinkIds = [.. childPosition.LinkIds, childList.GetProperty("items")[0].GetProperty("linkId").GetString()!] };
         using var deniedPath = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, PathUrl(grandPosition)); Assert.Equal(HttpStatusCode.NotFound, deniedPath.StatusCode);
-        using var deniedCreate = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders", new { position = grandPosition, values = new { ENAME = "不应创建" } }); Assert.Equal(HttpStatusCode.NotFound, deniedCreate.StatusCode);
+        using var deniedCreate = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders", new { position = grandPosition, values = new { ENAME = "不应创建" } }); Assert.Equal(HttpStatusCode.NotFound, deniedCreate.StatusCode);
         var grandDetail = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, "/api/workspace/folders/" + grand.GetProperty("id").GetString()); Assert.Equal("孙文件夹", grandDetail.GetProperty("fields").GetProperty("ENAME").GetString());
         foreach (var suffix in new[] { "&fields=OriginSpaceId", "&fields=Description", "&fields=EID", "&sortBy=UpdatedAt_DisplayValue", "&unknown=1", "&Name:gte=x", "&types=Other%2FUnknown" })
         {
             using var bad = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId) + suffix); Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
         }
-        var injection = await ListAsync(ordinary, entry, root, root.RootFolderId, "&keyword=" + Uri.EscapeDataString("'; DROP TABLE WorkspaceFolder;--")); Assert.Equal(0, injection.GetProperty("total").GetInt32());
+        var injection = await ListAsync(fixture, ordinary, entry, root, root.RootFolderId, "&keyword=" + Uri.EscapeDataString("'; DROP TABLE WorkspaceFolder;--")); Assert.Equal(0, injection.GetProperty("total").GetInt32());
         using var forged = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, childId)); Assert.Equal(HttpStatusCode.NotFound, forged.StatusCode);
         using var missing = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ChildrenUrl(root with { LinkIds = ["missing"] })); Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         var personal = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Post, "/api/workspace/spaces/personal/ensure"); var privateRoot = await personal.Content.ReadFromJsonAsync<JsonElement>(); personal.Dispose();
@@ -192,14 +192,14 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ContentWriter", "内容写入", "content-writer", "内容写入账号", entry, create);
         using var ordinary = actor.Client; var save = Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "authorization.dataScope.save");
         await SaveRuleAsync(fixture, admin, save, "ParentNoEdit", "EID", root.RootFolderId, new Dictionary<string, string> { ["edit"] = "deny" });
-        using var noEdit = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders", new { position = root, values = new { ENAME = "不允许编辑父级" } }); Assert.Equal(HttpStatusCode.Forbidden, noEdit.StatusCode);
+        using var noEdit = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders", new { position = root, values = new { ENAME = "不允许编辑父级" } }); Assert.Equal(HttpStatusCode.Forbidden, noEdit.StatusCode);
         await SaveRuleAsync(fixture, admin, save, "ParentNoEdit", "EID", "none", new Dictionary<string, string> { ["edit"] = "deny" });
         await SaveRuleAsync(fixture, admin, save, "CandidateNoCreate", "ENAME", "拒绝创建", new Dictionary<string, string> { ["create"] = "deny" });
-        using var noCreate = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders", new { position = root, values = new { ENAME = "拒绝创建" } }); Assert.Equal(HttpStatusCode.Forbidden, noCreate.StatusCode);
+        using var noCreate = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders", new { position = root, values = new { ENAME = "拒绝创建" } }); Assert.Equal(HttpStatusCode.Forbidden, noCreate.StatusCode);
         Assert.Equal((1, 0), await CountsAsync(fixture));
         await SaveRuleAsync(fixture, admin, save, "CreatedUnreadable", "ENAME", "创建后不可读", new Dictionary<string, string> { ["read"] = "deny" });
-        var receipt = await CreateAsync(ordinary, create, root, "创建后不可读"); Assert.True(receipt.GetProperty("succeeded").GetBoolean()); Assert.Single(receipt.EnumerateObject());
-        var hidden = await ListAsync(ordinary, entry, root, root.RootFolderId); Assert.Equal(0, hidden.GetProperty("total").GetInt32()); Assert.Equal((2, 1), await CountsAsync(fixture));
+        var receipt = await CreateAsync(fixture, ordinary, create, root, "创建后不可读"); Assert.True(receipt.GetProperty("succeeded").GetBoolean()); Assert.Single(receipt.EnumerateObject());
+        var hidden = await ListAsync(fixture, ordinary, entry, root, root.RootFolderId); Assert.Equal(0, hidden.GetProperty("total").GetInt32()); Assert.Equal((2, 1), await CountsAsync(fixture));
         using var absentGrant = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Post, "/api/workspace/content/folders", new { position = root, values = new { ENAME = "以read位置伪装创建" } }); Assert.Equal(HttpStatusCode.Forbidden, absentGrant.StatusCode);
     }
 
@@ -219,19 +219,19 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Entry(fixture); var create = Create(fixture); var root = await InitializeAsync(admin, entry);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ConstraintReader", "范围读取", "constraint-reader", "范围读取账号", entry, create);
         using var ordinary = actor.Client;
-        var allowed = await CreateAsync(ordinary, create, root, "允许的文件夹"); var excluded = await CreateAsync(ordinary, create, root, "被范围排除");
-        var list = await ListAsync(ordinary, entry, root, root.RootFolderId, "&pageSize=1");
+        var allowed = await CreateAsync(fixture, ordinary, create, root, "允许的文件夹"); var excluded = await CreateAsync(fixture, ordinary, create, root, "被范围排除");
+        var list = await ListAsync(fixture, ordinary, entry, root, root.RootFolderId, "&pageSize=1");
         Assert.Equal(1, list.GetProperty("total").GetInt32()); Assert.Equal(allowed.GetProperty("id").GetString(), Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("associatedObject").GetProperty("id").GetString());
         var independent = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, "/api/workspace/folders/" + excluded.GetProperty("id").GetString()); Assert.Equal("被范围排除", independent.GetProperty("fields").GetProperty("ENAME").GetString());
         // 外层强制条件排除 B，而可信 SQL scope 的 UNION 刻意包含 B，交集仍不得放行或计数 B。
         constraint.ScopeIds = [root.RootFolderId, allowed.GetProperty("id").GetString()!, excluded.GetProperty("id").GetString()!];
-        var scopedList = await ListAsync(ordinary, entry, root, root.RootFolderId, "&pageSize=1");
+        var scopedList = await ListAsync(fixture, ordinary, entry, root, root.RootFolderId, "&pageSize=1");
         Assert.Equal(1, scopedList.GetProperty("total").GetInt32());
         var allowedRow = Assert.Single(scopedList.GetProperty("items").EnumerateArray());
         Assert.Equal(allowed.GetProperty("id").GetString(), allowedRow.GetProperty("associatedObject").GetProperty("id").GetString());
         // 同模型 anchor/target 共用一次非空准备；关键词只命中子文件夹，不能因此拒绝根。
         constraint.PrepareScope = true;
-        var filtered = await ListAsync(ordinary, entry, root, root.RootFolderId, "&pageSize=1&keyword=" + Uri.EscapeDataString("允许的文件夹"));
+        var filtered = await ListAsync(fixture, ordinary, entry, root, root.RootFolderId, "&pageSize=1&keyword=" + Uri.EscapeDataString("允许的文件夹"));
         Assert.Equal(1, filtered.GetProperty("total").GetInt32());
         Assert.Equal(allowed.GetProperty("id").GetString(), Assert.Single(filtered.GetProperty("items").EnumerateArray()).GetProperty("associatedObject").GetProperty("id").GetString());
         var add = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder.add");
@@ -247,7 +247,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var treeRow = Assert.Single(tree.GetProperty("items").EnumerateArray());
         Assert.Equal(1, tree.GetProperty("total").GetInt32()); Assert.False(treeRow.GetProperty("hasChildren").GetBoolean());
         // 排序复用同一强制端点交集：被排除节点不能被选中，也不能作为可读邻居换位。
-        var second = await CreateAsync(admin, create, root, "第二个允许的文件夹");
+        var second = await CreateAsync(fixture, admin, create, root, "第二个允许的文件夹");
         var secondId = second.GetProperty("id").GetString()!;
         constraint.ScopeIds = [.. constraint.ScopeIds!, secondId];
         var sort = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder.reorder" && point.Key == "moveUp" && point.ActionScope == "contextMenu");
@@ -276,14 +276,14 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         constraint.ExcludeRoot = true;
         using var deniedAnchor = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId));
         Assert.Equal(HttpStatusCode.NotFound, deniedAnchor.StatusCode); constraint.ExcludeRoot = false;
-        var searched = await ListAsync(ordinary, entry, root, root.RootFolderId, "&keyword=" + Uri.EscapeDataString("被范围排除")); Assert.Equal(0, searched.GetProperty("total").GetInt32());
+        var searched = await ListAsync(fixture, ordinary, entry, root, root.RootFolderId, "&keyword=" + Uri.EscapeDataString("被范围排除")); Assert.Equal(0, searched.GetProperty("total").GetInt32());
         constraint.Fail = true;
         using var failed = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId)); Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
         constraint.ScopeIds = [root.RootFolderId, allowed.GetProperty("id").GetString()!, excluded.GetProperty("id").GetString()!];
         constraint.Fail = false; constraint.CannotTranslate = true;
         using var untranslatable = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId)); Assert.Equal(HttpStatusCode.InternalServerError, untranslatable.StatusCode);
         constraint.CannotTranslate = false;
-        Assert.Equal(1, (await ListAsync(ordinary, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
+        Assert.Equal(1, (await ListAsync(fixture, ordinary, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "异常目标在分页前排除，未知存储类型失败关闭且读取无修复写入")]
@@ -291,14 +291,14 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Entry(fixture); var root = await InitializeAsync(admin, entry);
-        await CreateAsync(admin, Create(fixture), root, "真实端点");
+        await CreateAsync(fixture, admin, Create(fixture), root, "真实端点");
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             var example = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync();
             db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").Add(new(example) { ["LID"] = "broken-link", ["CEID"] = "missing-entity", ["TreeOrdinal"] = 2L }); await db.SaveChangesAsync();
         }
-        var list = await ListAsync(admin, entry, root, root.RootFolderId, "&pageSize=1"); Assert.Equal(1, list.GetProperty("total").GetInt32()); Assert.Single(list.GetProperty("items").EnumerateArray());
+        var list = await ListAsync(fixture, admin, entry, root, root.RootFolderId, "&pageSize=1"); Assert.Equal(1, list.GetProperty("total").GetInt32()); Assert.Single(list.GetProperty("items").EnumerateArray());
         Assert.Equal((2, 2), await CountsAsync(fixture));
         using (var scope = fixture.Services.CreateScope())
         {
@@ -317,12 +317,12 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(fault, fault.Commit)), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Entry(fixture); var root = await InitializeAsync(admin, entry);
         fault.Arm = true;
-        var receipt = await CreateAsync(admin, Create(fixture), root, "提交后读失败");
+        var receipt = await CreateAsync(fixture, admin, Create(fixture), root, "提交后读失败");
         Assert.True(receipt.GetProperty("succeeded").GetBoolean()); Assert.Single(receipt.EnumerateObject());
         fault.Enabled = false;
         Assert.Equal((2, 1), await CountsAsync(fixture));
-        Assert.Equal(1, (await ListAsync(admin, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
-        Assert.Equal(1, (await ListAsync(admin, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
+        Assert.Equal(1, (await ListAsync(fixture, admin, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
+        Assert.Equal(1, (await ListAsync(fixture, admin, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
         Assert.Equal((2, 1), await CountsAsync(fixture));
     }
 
@@ -331,10 +331,10 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Entry(fixture); var create = Create(fixture); var root = await InitializeAsync(admin, entry);
-        await CreateAsync(admin, create, root, "可读父文件夹");
-        var parent = Assert.Single((await ListAsync(admin, entry, root, root.RootFolderId)).GetProperty("items").EnumerateArray());
+        await CreateAsync(fixture, admin, create, root, "可读父文件夹");
+        var parent = Assert.Single((await ListAsync(fixture, admin, entry, root, root.RootFolderId)).GetProperty("items").EnumerateArray());
         var parentPosition = root with { LinkIds = [parent.GetProperty("linkId").GetString()!] };
-        var child = await CreateAsync(admin, create, parentPosition, "唯一子文件夹");
+        var child = await CreateAsync(fixture, admin, create, parentPosition, "唯一子文件夹");
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ChildReader", "子节点读取", "child-reader", "子节点读取账号", entry);
         using var ordinary = actor.Client;
         Assert.True(Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(root))).GetProperty("items").EnumerateArray()).GetProperty("hasChildren").GetBoolean());
@@ -354,8 +354,8 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         Assert.False(Assert.Single((await FeatureHttpTestRequests.ReadAsync(admin, entry, "/api/workspace/spaces")).EnumerateArray()).GetProperty("hasChildren").GetBoolean());
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "RefreshWriter", "刷新写入", "refresh-writer", "刷新写入账号", entry, Create(fixture));
         using var ordinary = actor.Client;
-        await CreateAsync(ordinary, Create(fixture), root, "刷新后可展开");
-        Assert.Equal(1, (await ListAsync(ordinary, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
+        await CreateAsync(fixture, ordinary, Create(fixture), root, "刷新后可展开");
+        Assert.Equal(1, (await ListAsync(fixture, ordinary, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
         using var refreshed = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, "/api/workspace/spaces");
         Assert.Equal(HttpStatusCode.OK, refreshed.StatusCode);
         Assert.True(Assert.Single((await refreshed.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray()).GetProperty("hasChildren").GetBoolean());
@@ -373,14 +373,18 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using var response = await FeatureHttpTestRequests.SendAsync(client, entry, HttpMethod.Post, "/api/workspace/spaces/public/initialize"); Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var root = await response.Content.ReadFromJsonAsync<JsonElement>(); return new(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
     }
-    private static async Task<JsonElement> CreateAsync(HttpClient client, FeaturePoint create, Position position, string name)
+    private static async Task<JsonElement> CreateAsync(BusinessAuditHostFixture fixture, HttpClient client, FeaturePoint create, Position position, string name)
     {
-        using var response = await FeatureHttpTestRequests.SendAsync(client, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values = new { ENAME = name } });
+        using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(client, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values = new { ENAME = name } });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode); return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
     private static string ListUrl(Position position, string anchor) => "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(anchor)
         + "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = position.SpaceId, rootFolderId = position.RootFolderId, linkIds = JsonSerializer.Serialize(position.LinkIds) }));
-    private static Task<JsonElement> ListAsync(HttpClient client, FeaturePoint entry, Position position, string anchor, string suffix = "") => FeatureHttpTestRequests.ReadAsync(client, entry, ListUrl(position, anchor) + suffix);
+    private static async Task<JsonElement> ListAsync(BusinessAuditHostFixture fixture, HttpClient client, FeaturePoint entry, Position position, string anchor, string suffix = "")
+        => await FeatureHttpTestRequests.ReadAsync(client, entry, ListUrl(position, anchor) + suffix,
+            fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog.Single(item =>
+                item.ViewKey == "workspace.folder.list" && item.Surface == "read" && item.Execution == "workspace.content.read"
+                && item.FeaturePositions.Contains(entry.Position)));
     private static string ChildrenUrl(Position position) => "/api/workspace/content/children?spaceId=" + Uri.EscapeDataString(position.SpaceId) + "&rootFolderId=" + Uri.EscapeDataString(position.RootFolderId) + "&linkIds=" + Uri.EscapeDataString(JsonSerializer.Serialize(position.LinkIds));
     private static string PathUrl(Position position) => ChildrenUrl(position).Replace("/children?", "/path?", StringComparison.Ordinal);
     private static async Task<(int Folders, int Links)> CountsAsync(BusinessAuditHostFixture fixture)

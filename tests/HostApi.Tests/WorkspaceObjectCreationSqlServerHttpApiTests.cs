@@ -26,7 +26,7 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
         var entry = Point(fixture, "workspace.spaces.access");
         var position = await RootAsync(admin, entry);
         using var folderResponse = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
-            "/api/workspace/content/folders", new { position, values = new { ENAME = "选中的子文件夹" } });
+            "/api/workspace/content/folders", new { position, values = new { ENAME = "选中的子文件夹" } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.create", Point(fixture, "workspace.folder.create")));
         Assert.Equal(HttpStatusCode.OK, folderResponse.StatusCode);
         var folderId = JsonSerializer.Deserialize<JsonElement>(await folderResponse.Content.ReadAsStringAsync()).GetProperty("id").GetString()!;
         using (var scope = fixture.Services.CreateScope())
@@ -38,28 +38,29 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
         foreach (var (kind, model, action) in Targets)
         {
             var create = Point(fixture, "workspace.folder." + action);
+            var declaration = new FeatureHttpTestRequests(fixture).Declaration(model == "Part" ? create.BehaviorKey : "workspace.content.createDocument", create);
             var url = "/api/workspace/content/" + kind;
             using var denied = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Post, url,
                 new { position, values = new { ECODE = "DENIED", ENAME = "错误功能位置" } });
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
             using var invalid = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url,
-                new { position, values = new { ECODE = "", ENAME = "缺少编码" } });
+                new { position, values = new { ECODE = "", ENAME = "缺少编码" } }, declaration);
             Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
             Assert.Contains("CodeRequired", await invalid.Content.ReadAsStringAsync());
             using var forged = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url,
-                new { position, values = new { ECODE = "FORGED", ENAME = "伪造身份", EID = "chosen" } });
+                new { position, values = new { ECODE = "FORGED", ENAME = "伪造身份", EID = "chosen" } }, declaration);
             Assert.Equal(HttpStatusCode.BadRequest, forged.StatusCode);
             using var missing = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url,
-                new { position = new { position.SpaceId, position.RootFolderId, LinkIds = new[] { "missing" } }, values = new { ECODE = "MISSING", ENAME = "失效位置" } });
+                new { position = new { position.SpaceId, position.RootFolderId, LinkIds = new[] { "missing" } }, values = new { ECODE = "MISSING", ENAME = "失效位置" } }, declaration);
             Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
             using var created = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url,
-                new { position, values = new { ECODE = "FOLDER-CREATE", ENAME = "文件夹内新对象", Description = "说明" } });
+                new { position, values = new { ECODE = "FOLDER-CREATE", ENAME = "文件夹内新对象", Description = "说明" } }, declaration);
             Assert.Equal(HttpStatusCode.OK, created.StatusCode);
             var receipt = JsonSerializer.Deserialize<JsonElement>(await created.Content.ReadAsStringAsync());
             Assert.True(receipt.GetProperty("succeeded").GetBoolean());
             Assert.False(receipt.TryGetProperty("id", out _));
             using var duplicate = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url,
-                new { position, values = new { ECODE = "FOLDER-CREATE", ENAME = "重复编码" } });
+                new { position, values = new { ECODE = "FOLDER-CREATE", ENAME = "重复编码" } }, declaration);
             Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
             using var scope = fixture.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
@@ -89,9 +90,8 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
         foreach (var (kind, model, action) in Targets)
         {
             var create = Point(fixture, "workspace.folder." + action);
-            var declaration = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-                item => item.Execution == (model == "Part" ? "workspace.content.createPart" : "workspace.content.createDocument")
-                    && item.FeaturePositions.Contains(create.Position));
+            var declaration = new FeatureHttpTestRequests(fixture).Declaration(
+                model == "Part" ? create.BehaviorKey : "workspace.content.createDocument", create);
             var url = "/api/workspace/content/" + kind;
             var body = new { position, values = new { ECODE = "ATOMIC", ENAME = "不能留下孤立对象" } };
             decisions.AllowParent = false;
@@ -140,7 +140,7 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
     {
         public bool AllowParent { get; set; } = true;
         public bool AllowCreate { get; set; } = true;
-        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken cancellationToken = default) => Task.FromResult(AllowParent);
+        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken cancellationToken = default) => Task.FromResult(actionKey == "read" || AllowParent);
         public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string actionKey, CancellationToken cancellationToken = default) => Task.FromResult(AllowCreate);
     }
 }

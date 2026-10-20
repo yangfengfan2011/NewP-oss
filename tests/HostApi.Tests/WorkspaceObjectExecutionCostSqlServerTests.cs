@@ -59,7 +59,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         { stage, productionBaseline = "464bc966edca1b1eccc5184e23490bd2387cdfb1", plan.FeatureCatalog, plan.ActionDataAccessCatalog }));
         var partValues = new { ECODE = "COST315-PART", ENAME = "组合Part成本" };
         var docValues = new { ECODE = "COST315-DOC", ENAME = "组合Document成本" };
-        await Measure("part-create", 1, 1, () => Send(createPart, "workspace.content.createPart", HttpMethod.Post,
+        await Measure("part-create", 1, 1, () => Send(createPart, "workspace.folder.createPart", HttpMethod.Post,
             "/api/workspace/content/parts", new { position = parent, values = partValues }));
         var part = await Target("Part", partValues.ECODE);
         JsonElement staged = default;
@@ -68,12 +68,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             "/api/workspace/content/documents", new { position = parent, values = docValues,
                 uploads = new { mainUploadId = staged.GetProperty("uploadId").GetString()! } }));
         var document = await Target("Document", docValues.ECODE);
-        await Measure("part-edit-values", 1, 1, () => Send(edit, "workspace.content.edit", HttpMethod.Post,
+        await Measure("part-edit-values", 1, 1, () => Send(edit, "workspace.folder.editObject", HttpMethod.Post,
             "/api/workspace/content/" + part.Lid + "/edit-values", new { position = parent }));
-        await Measure("part-update", 1, 1, () => Send(edit, "workspace.content.edit", HttpMethod.Put,
+        await Measure("part-update", 1, 1, () => Send(edit, "workspace.folder.editObject", HttpMethod.Put,
             "/api/workspace/content/" + part.Lid, new { position = parent, values = new { ECODE = partValues.ECODE, ENAME = "组合Part已编辑" } }));
         await AddOtherReference("Document", document.Id);
-        await Measure("document-delete", 1, 2, () => Send(delete, "workspace.content.delete", HttpMethod.Delete,
+        await Measure("document-delete", 1, 2, () => Send(delete, "workspace.folder.deleteObject", HttpMethod.Delete,
             "/api/workspace/content/" + document.Lid, new { position = parent }));
         // 两对象成本使用同一普通创建主体；准备期另建真实Document主文件，所有目标均有两个入向引用。
         var mixedValues = new { ECODE = "COST315-MIXED-DOC", ENAME = "双对象Document" };
@@ -82,13 +82,13 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             new { position = parent, values = mixedValues, uploads = new { mainUploadId = mixedStage.GetProperty("uploadId").GetString()! } });
         var mixedDocument = await Target("Document", mixedValues.ECODE);
         await AddOtherReference("Part", part.Id); await AddOtherReference("Document", mixedDocument.Id);
-        await Measure("mixed-selected-delete", 2, 4, () => Send(selectedDelete, "workspace.content.delete", HttpMethod.Post,
+        await Measure("mixed-selected-delete", 2, 4, () => Send(selectedDelete, "workspace.folder.deleteObjects", HttpMethod.Post,
             "/api/workspace/content/delete", new { position = parent, linkIds = new[] { part.Lid, mixedDocument.Lid } }));
         output.WriteLine("Workspace object cost artifacts: " + run);
 
         ActionDataAccessRequirement? Declaration(string execution, FeaturePoint feature)
         {
-            var result = plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Execution == execution
+            var result = plan.ActionDataAccessCatalog.SingleOrDefault(item => (item.Execution == execution || item.BusinessBinding == execution)
                 && item.ViewKey == "workspace.folder.list" && item.FeaturePositions.Contains(feature.Position));
             if (result is null) Assert.Equal("baseline", stage);
             return result;

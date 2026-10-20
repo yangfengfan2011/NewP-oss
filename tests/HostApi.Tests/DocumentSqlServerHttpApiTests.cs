@@ -208,7 +208,7 @@ public sealed class DocumentSqlServerHttpApiTests
         var partCreate = Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "part.part.create");
         var partRead = Assert.Single(fixture.FeatureCatalog, p => p.ModuleId == "Part" && p.Kind == "navigation" && p.Key == "part.parts");
         using var partResponse = await FeatureHttpTestRequests.SendAsync(admin, partCreate, HttpMethod.Post, "/api/part/parts",
-            new { ECODE = "SHARED-001", ENAME = "独立零组件" }, OwnedResourceReadHttpRequests.Declaration(fixture, partCreate, "part.part", "create"));
+            new { ECODE = "SHARED-001", ENAME = "独立零组件" }, new FeatureHttpTestRequests(fixture).Declaration("part.part.create", partCreate));
         Assert.Equal(HttpStatusCode.Created, partResponse.StatusCode);
         var part = await partResponse.Content.ReadFromJsonAsync<JsonElement>();
         var document = await CreateDeclaredAsync(fixture, admin, new { ECODE = "SHARED-001", ENAME = "独立图文档" });

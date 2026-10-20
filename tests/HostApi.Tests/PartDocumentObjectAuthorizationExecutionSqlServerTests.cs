@@ -85,7 +85,7 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Auth318PartViewer", "只读权限查看角色",
             "auth318.part.viewer", "只读权限查看主体", read);
         using var ordinary = actor.Client;
-        var createSource = OwnedResourceReadHttpRequests.Declaration(fixture, create, "part.part", "create");
+        var createSource = new FeatureHttpTestRequests(fixture).Declaration("part.part.create", create);
         using var created = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/part/parts",
             new { ECODE = "AUTH318-PART-VIEW", ENAME = "只读授权查看目标" }, createSource);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -133,7 +133,7 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
         using var ordinary = actor.Client;
         using var created = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/part/parts",
             new { ECODE = "AUTH318-PART-TARGET", ENAME = "授权来源真实零组件" },
-            OwnedResourceReadHttpRequests.Declaration(fixture, create, "part.part", "create"));
+            new FeatureHttpTestRequests(fixture).Declaration("part.part.create", create));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var id = BusinessAuditSqlServerHttpApiTests.Id(await created.Content.ReadFromJsonAsync<JsonElement>());
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();

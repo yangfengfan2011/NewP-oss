@@ -112,7 +112,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.createDocument"
             && item.FeaturePositions.Contains(create.Position));
-        var crossed = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.createPart");
+        var crossed = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.createPart");
         var values = new { ECODE = "WORKSPACE-DOC-315", ENAME = "带文件且创建后不可读" };
         var beforeStage = await ObjectSnapshot(fixture);
         foreach (var source in new[] { (string?)null, crossed.Id })

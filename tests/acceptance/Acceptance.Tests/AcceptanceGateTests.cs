@@ -1001,6 +1001,47 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "当前普通账号经树、列表及正式独立Part页完成本次基础对象写入")]
+    public async Task NativeWorkspaceObjectWrites_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-object-writes");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                var crud = new StandardCrudPageDriver(page);
+                var suffix = runId[..8];
+                var folder = "按钮文件夹 " + suffix;
+                var part = "按钮零组件 " + suffix;
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                await driver.CreateFolderAsync(folder);
+                await driver.ExpandRootToFolderAsync("公共空间", folder);
+                await driver.SelectTreePathAsync("公共空间", folder);
+                await driver.EditFolderFromTreeContextMenuAsync(folder, folder + " 已编辑");
+                await driver.SelectRootAsync("公共空间");
+                await driver.DeleteSelectedAsync(folder + " 已编辑");
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await driver.CreateObjectAsync("零组件", "BUTTON-P-" + suffix, part);
+                await driver.EditObjectAsync(part, part + " 已编辑");
+                // Doc由原正式fixture准备；本child只编辑/删除，不再跑属于333的创建或文件旅程。
+                await driver.EditObjectFromContextMenuAsync(fixture.ExistingDocumentName, fixture.ExistingDocumentName + " 已编辑");
+                await driver.DeleteSelectedAsync(part + " 已编辑", fixture.ExistingDocumentName + " 已编辑");
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "workspace-writes-saved.png"));
+                await page.GotoAsync(new Uri(new Uri(page.Url), "/parts").ToString());
+                var drawer = await crud.OpenCreateDrawerAsync("新建零组件");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "编码", "BUTTON-INDEPENDENT-" + suffix);
+                await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "名称", "独立按钮零组件 " + suffix);
+                await crud.SaveAndCloseAsync(drawer, new("POST", "/api/part/parts", 201, "独立创建零组件"));
+                await crud.WaitForRowAsync("独立按钮零组件 " + suffix);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "part-independent-created.png"));
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "folder-create-tree-edit-delete-part-create-row-edit-document-context-edit-mixed-delete-independent-part-create" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号在原Workspace入口创建零组件与带文件图文档，编辑后选中并删除两种对象")]
     public async Task NativeWorkspaceObjects_UsesFormalDriver()
     {

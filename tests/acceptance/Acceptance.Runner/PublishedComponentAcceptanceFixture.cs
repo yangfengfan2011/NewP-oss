@@ -500,7 +500,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             ? features.DeclarationAtView(action, "workspace.folder.list", "pageActions", "create" + model) : null;
         await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/" + route,
             new { position = position.CommandPosition, values = new { ECODE = code, ENAME = name } },
-            action.Position, token, declaration);
+            action.Position, token, model == "Part" ? null : declaration,
+            buttonId: model == "Part" && sourcePreparation == PublishedWorkspacePreparation.CurrentRelease ? features.Button(action) : null);
         var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, entry.Position, token, features);
         return contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name)
             .GetProperty("associatedObject").GetProperty("id").GetString()!;

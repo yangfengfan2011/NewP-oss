@@ -177,7 +177,7 @@ public sealed class PartHistoryDeclarationSqlServerTests
     {
         var point = Point(fixture, "part.part.create");
         var created = await FeatureHttpTestRequests.CreateAsync(admin, point, "/api/part/parts", new { ECODE = code, ENAME = "零组件履历" },
-            OwnedResourceReadHttpRequests.Declaration(fixture, point, "part.part", "create"));
+            new FeatureHttpTestRequests(fixture).Declaration("part.part.create", point));
         return created.GetProperty("fields").GetProperty("EID").GetString()!;
     }
 

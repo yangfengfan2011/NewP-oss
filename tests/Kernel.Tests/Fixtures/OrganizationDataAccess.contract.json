@@ -39,6 +39,22 @@
     "provider": "standardCrud.read"
   },
   {
+    "id": "Organization/view:organization.company.list/featureActions/action:initialize",
+    "moduleId": "Organization",
+    "viewKey": "organization.company.list",
+    "surface": "featureActions",
+    "actionKey": "initialize",
+    "execution": "",
+    "resources": [
+      "organization.company"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.custom/action:initialize"
+    ],
+    "businessBinding": "organization.company.initialize"
+  },
+  {
     "id": "Organization/view:organization.company.list/pageActions/action:create",
     "moduleId": "Organization",
     "viewKey": "organization.company.list",
@@ -600,6 +616,23 @@
     ],
     "object": "Department",
     "businessBinding": "organization.department.update"
+  },
+  {
+    "id": "Organization/view:organization.person.detail/featureActions/action:linkUser",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.detail",
+    "surface": "featureActions",
+    "actionKey": "linkUser",
+    "execution": "",
+    "resources": [
+      "organization.person"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.custom/action:linkUser",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.custom/action:linkUser"
+    ],
+    "businessBinding": "organization.person.linkUser"
   },
   {
     "id": "Organization/view:organization.person.detail/lookupBindings/action:organization.companies",

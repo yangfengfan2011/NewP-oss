@@ -17,7 +17,7 @@ namespace ICP.Platform.Modules.Workspace;
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
-    ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler,
+    ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)
@@ -197,12 +197,12 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         MutateObjectsAsync(input.Position, [linkId], input.Values, ObjectOperationAction.Update, token);
 
     /// <summary>单行删除与批量命令共享原子对象删除规则。</summary>
-    [HttpDelete("content/{linkId}"), RequireFeature("workspace.folder.deleteObject")]
+    [HttpDelete("content/{linkId}"), RequireFeature("workspace.folder.deleteObject"), ButtonBusinessHandler(typeof(WorkspaceMutationHandler))]
     public Task<IResult> DeleteObject(string linkId, RemoveReferenceInput input, CancellationToken token) =>
         MutateObjectsAsync(input.Position, [linkId], null, ObjectOperationAction.Delete, token);
 
     /// <summary>混合选择整批原子删除，清理所有引用；不递归删除非空文件夹。</summary>
-    [HttpPost("content/delete"), RequireFeature("workspace.folder.deleteObjects")]
+    [HttpPost("content/delete"), RequireFeature("workspace.folder.deleteObjects"), ButtonBusinessHandler(typeof(WorkspaceMutationHandler))]
     public Task<IResult> DeleteObjects(DeleteObjectsInput input, CancellationToken token) =>
         MutateObjectsAsync(input.Position, input.LinkIds, null, ObjectOperationAction.Delete, token);
 
@@ -214,8 +214,10 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         {
             if (position is null || linkIds is null || action == ObjectOperationAction.Update && values is null)
                 throw new LinkQueryException(400, "Workspace.InvalidEditInput");
-            var result = await operations.ExecuteAsync(WorkspaceObjectMutation.BehaviorDefinition.ObjectKey, action, null,
-                new Dictionary<string, object?> { ["ActorId"] = Actor(), ["Position"] = position, ["LinkIds"] = linkIds, ["Values"] = values }, token);
+            var result = action == ObjectOperationAction.Delete
+                ? await buttonBusiness.ExecuteAsync(mutationHandler, new WorkspaceMutationInput(Actor(), position, linkIds, values, action), token)
+                : await operations.ExecuteAsync(WorkspaceObjectMutation.BehaviorDefinition.ObjectKey, action, null,
+                    new Dictionary<string, object?> { ["ActorId"] = Actor(), ["Position"] = position, ["LinkIds"] = linkIds, ["Values"] = values }, token);
             return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }

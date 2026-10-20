@@ -8,7 +8,7 @@ public sealed class WorkspaceObjectMutation(Func<WorkspaceContents> contents, Fu
 {
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new(
         "workspace.content.mutation", "Workspace", WorkspacePositions.ContentModel,
-        [ObjectOperationAction.Update, ObjectOperationAction.Delete], [], ["ActorId", "Position", "LinkIds"],
+        [ObjectOperationAction.Update, ObjectOperationAction.Delete], [], ["ActorId", "Position", "LinkIds", WorkspaceMutationHandler.ContinuationField],
         [new(ObjectOperationAction.Update, new("part.part", ObjectOperationAction.Update)),
          new(ObjectOperationAction.Update, new("document.document", ObjectOperationAction.Update)),
          new(ObjectOperationAction.Delete, new("part.part", ObjectOperationAction.Delete)),

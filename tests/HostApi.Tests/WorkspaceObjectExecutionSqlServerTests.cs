@@ -1,4 +1,8 @@
 using System.Net;
+using System.Net.Http.Json;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Modules.Authorization.Services;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Workspace;
@@ -150,7 +154,11 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "混合选择删除核后续Document资格且不串用移除引用来源，全部引用与对象同事务")]
     public async Task MixedDelete_RejectsLaterTargetAndReferenceSourceBeforeAnyCleanup()
     {
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        var checkedTargets = new List<(string Object, string Id, string[] Actions)>();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+            services.Replace(ServiceDescriptor.Scoped<IObjectActionAccess>(provider =>
+                new TracedObjectActions(ActivatorUtilities.CreateInstance<ObjectActionAccess>(provider), checkedTargets))),
+            includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var position = await ContainerAsync(fixture, admin);
         var part = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "MixedPart315");
@@ -161,7 +169,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
             "mixed-delete315", "混合删除普通主体", entry, delete);
         using var ordinary = actor.Client;
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.delete"
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.ActionKey == delete.Key && item.Surface == "pageActions"
             && item.FeaturePositions.Contains(delete.Position));
         var remove = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.clipboard.remove" && item.ActionKey == "removeSelected");
         var body = new { position, linkIds = new[] { part.LinkId, document.LinkId } };
@@ -175,13 +183,13 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         }
         await SaveRule(fixture, admin, "MixedDocDenied315", "document.document", "EID", document.Id, "delete", "deny");
         before = await ObjectSnapshot(fixture);
-        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Post,
-            "/api/workspace/content/delete", body, declaration))
-            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using (var denied = await SendButtonAsync(ordinary, delete, declaration.Id, body))
+            Assert.True(denied.StatusCode == HttpStatusCode.Forbidden, await denied.Content.ReadAsStringAsync());
+        Assert.Equal(new[] { part.Id, document.Id }, checkedTargets.Where(item => item.Actions.Contains("delete"))
+            .Select(item => item.Id).ToArray());
         Assert.Equal(before, await ObjectSnapshot(fixture));
         await SaveRule(fixture, admin, "MixedDocDenied315", "document.document", "EID", document.Id, "delete", "allow");
-        using var accepted = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Post,
-            "/api/workspace/content/delete", body, declaration);
+        using var accepted = await SendButtonAsync(ordinary, delete, declaration.Id, body);
         Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
@@ -189,6 +197,36 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         Assert.False(await db.Set<Dictionary<string, object?>>("Document").AnyAsync(row => EF.Property<string>(row, "EID") == document.Id));
         Assert.False(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AnyAsync(row =>
             EF.Property<string>(row, "CEID") == part.Id || EF.Property<string>(row, "CEID") == document.Id));
+    }
+
+    // 请求身份取自实际编译条目；迁移前旧条目不能用新header冒充可执行按钮。
+    private static async Task<HttpResponseMessage> SendButtonAsync(HttpClient client, FeaturePoint point, string buttonId, object body)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/delete");
+        request.Headers.Add("X-NewP-Feature", point.Position);
+        request.Headers.Add("X-NewP-Button", buttonId);
+        request.Content = JsonContent.Create(body, options: new JsonSerializerOptions());
+        return await client.SendAsync(request);
+    }
+
+    // 只记录真实通用判权调用；仍由正式资源读取与规则引擎给出结果，不替换允许/拒绝。
+    private sealed class TracedObjectActions(ObjectActionAccess inner,
+        List<(string Object, string Id, string[] Actions)> calls) : IObjectActionAccess
+    {
+        public Task<DataExecutionDecision> CheckAsync(string name, string id, IReadOnlyList<string> actions,
+            CancellationToken token = default)
+        {
+            calls.Add((name, id, actions.ToArray()));
+            return inner.CheckAsync(name, id, actions, token);
+        }
+        public Task<DataExecutionDecision> CheckAsync(string name, string id, IReadOnlyList<string> actions,
+            object context, CancellationToken token = default)
+        {
+            calls.Add((name, id, actions.ToArray()));
+            return inner.CheckAsync(name, id, actions, context, token);
+        }
+        public Task<DataExecutionDecision> CheckCandidateAsync(string name, IReadOnlyDictionary<string, object?> candidate,
+            IReadOnlyList<string> actions, CancellationToken token = default) => inner.CheckCandidateAsync(name, candidate, actions, token);
     }
 
     // 使用真实规则API，Id/RootId保持同一根；不注入恒真provider或伪造主体权限。

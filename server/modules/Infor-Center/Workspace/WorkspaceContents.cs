@@ -22,7 +22,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     Microsoft.Extensions.Logging.ILogger<WorkspaceContents> logger,
     ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership,
     ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor,
-    IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization, IDataExecutionAccess executionAccess)
+    IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization, IDataExecutionAccess executionAccess,
+    IObjectActionAccess objectActions, IStandardCrudRepository mutationRepository)
 {
     /// <summary>保留旧调用不复制父授权的行为；新的初始化语义须由真实业务入口明确选择。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token) =>
@@ -237,6 +238,10 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     internal async ValueTask<StandardCrudMutationResult> MutateObjectsAsync(ObjectOperationContext context,
         IObjectOperationExecutor operations, CancellationToken cancellationToken)
     {
+        if (context.Values.TryGetValue(WorkspaceMutationHandler.ContinuationField, out var handoff))
+            return handoff is WorkspaceMutationContinuation continuation
+                ? await WithButtonMutationAsync(context, continuation, cancellationToken)
+                : throw new InvalidOperationException("WORKSPACE_BUTTON_CONTINUATION_INVALID");
         var actor = (string)context.Values["ActorId"]!;
         var position = (WorkspacePosition)context.Values["Position"]!;
         var linkIds = (string[])context.Values["LinkIds"]!;

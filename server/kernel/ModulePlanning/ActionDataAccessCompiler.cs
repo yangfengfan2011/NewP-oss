@@ -1,5 +1,9 @@
 namespace ICP.Platform.Kernel.ModulePlanning;
 
+/// <summary>按钮声明中的一个对象及其动作；资源身份由正式对象绑定派生，不由作者另配。</summary>
+public sealed record ButtonObjectRequirement([property: System.Text.Json.Serialization.JsonPropertyName("object")] string Object,
+    IReadOnlyList<string> Actions, string ResourceKey);
+
 /// <summary>按钮自身声明的数据要求；身份由模块、View 和动作结构派生，不形成第二份操作映射。</summary>
 public sealed record ActionDataAccessDeclaration(string ModuleId, string ViewKey, string Surface, string ActionKey,
     string Execution, IReadOnlyList<string> Resources, IReadOnlyList<string> Actions)
@@ -9,6 +13,8 @@ public sealed record ActionDataAccessDeclaration(string ModuleId, string ViewKey
     public string? Object { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? BusinessBinding { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ButtonObjectRequirement>? ObjectRequirements { get; init; }
     public IReadOnlyList<string> AdditionalActions { get; init; } = [];
     public string Id => $"{Uri.EscapeDataString(ModuleId)}/view:{Uri.EscapeDataString(ViewKey)}/{Surface}"
         + (Surface == "read" ? "" : $"/action:{Uri.EscapeDataString(ActionKey)}");
@@ -24,11 +30,16 @@ public sealed record ActionDataAccessRequirement(string Id, string ModuleId, str
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? BusinessBinding { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ButtonObjectRequirement>? ObjectRequirements { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<DataExecutionRequirement>? Requirements { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? Provider { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? ProviderModuleId { get; init; }
+    /// <summary>把兼容单对象与正式多对象投影为同一只读要求集合；不添加隐式动作。</summary>
+    public IReadOnlyList<ButtonObjectRequirement> GetObjectRequirements() => ObjectRequirements
+        ?? (Object is null ? [] : [new(Object, Actions, Resources.Single())]);
 }
 
 /// <summary>从既有功能展开中的直接按钮声明编译数据要求，不增加功能授权点。</summary>
@@ -49,21 +60,26 @@ public static class ActionDataAccessCompiler
         {
             if (declaration.BusinessBinding is not null)
             {
+                var objects = declaration.ObjectRequirements;
                 if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
                     || string.IsNullOrWhiteSpace(declaration.ActionKey) || declaration.Execution.Length != 0
-                    || declaration.Resources.Count > 1 || declaration.Object is not null && declaration.Resources.Count != 1
+                    || declaration.Resources.Distinct(StringComparer.Ordinal).Count() != declaration.Resources.Count
                     || declaration.Resources.Any(resource => !resources.Contains(resource))
-                    || declaration.AdditionalActions.Count != 0
-                    || declaration.Object is null && declaration.Actions.Count != 0
-                    || declaration.Object is not null && (string.IsNullOrWhiteSpace(declaration.Object) || declaration.Actions.Count == 0)
-                    || declaration.Actions.Distinct(StringComparer.Ordinal).Count() != declaration.Actions.Count
-                    || declaration.Actions.Any(key => !actions.Any(action => action.Key == key))
-                    || declaration.BusinessBinding != feature.BehaviorKey)
+                    || declaration.AdditionalActions.Count != 0 || declaration.BusinessBinding != feature.BehaviorKey
+                    || (objects is null
+                        ? declaration.Resources.Count > 1 || declaration.Object is not null && declaration.Resources.Count != 1
+                            || declaration.Object is null && declaration.Actions.Count != 0
+                            || declaration.Object is not null && (string.IsNullOrWhiteSpace(declaration.Object) || !ValidActions(declaration.Actions, actions))
+                        : declaration.Object is not null || declaration.Actions.Count != 0 || objects.Count == 0
+                            || objects.Any(item => item is null || string.IsNullOrWhiteSpace(item.Object) || !ValidActions(item.Actions, actions))
+                            || objects.Select(item => item.Object).Distinct(StringComparer.Ordinal).Count() != objects.Count
+                            || objects.Select(item => item.ResourceKey).Distinct(StringComparer.Ordinal).Count() != objects.Count
+                            || !objects.Select(item => item.ResourceKey).Order(StringComparer.Ordinal).SequenceEqual(declaration.Resources.Order(StringComparer.Ordinal))))
                     throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
                 continue;
             }
             if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
-                || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "export" or "lookupBindings" or "featureActions" or "pageActions" or "rowActions" or "outputActions" or "detailContributions")
+                || declaration.ObjectRequirements is not null || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "export" or "lookupBindings" or "featureActions" or "pageActions" or "rowActions" or "outputActions" or "detailContributions")
                 || declaration.Surface != "read" && string.IsNullOrWhiteSpace(declaration.ActionKey)
                 || declaration.Actions.Distinct(StringComparer.Ordinal).Count() != declaration.Actions.Count
                 || declaration.Actions.Any(key => !actions.Any(action => action.Key == key))
@@ -90,12 +106,13 @@ public static class ActionDataAccessCompiler
             if (first.BusinessBinding is not null)
             {
                 if (group.Any(entry => entry.declaration.BusinessBinding != first.BusinessBinding || entry.declaration.Object != first.Object
-                    || !entry.declaration.Actions.SequenceEqual(first.Actions) || !entry.declaration.Resources.SequenceEqual(first.Resources)))
+                    || !entry.declaration.Actions.SequenceEqual(first.Actions) || !entry.declaration.Resources.SequenceEqual(first.Resources)
+                    || !SameObjects(entry.declaration.ObjectRequirements, first.ObjectRequirements)))
                     throw new InvalidOperationException("ACTION_DATA_ACCESS_IDENTITY_CONFLICT");
                 return new ActionDataAccessRequirement(first.Id, first.ModuleId, first.ViewKey, first.Surface, first.ActionKey,
                     "", first.Resources, first.Actions, group.Select(entry => positions[(entry.feature.ModuleId,
                         entry.feature.ReferenceKey ?? entry.feature.Key)].Position).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray())
-                { Object = first.Object, BusinessBinding = first.BusinessBinding };
+                { Object = first.Object, BusinessBinding = first.BusinessBinding, ObjectRequirements = first.ObjectRequirements };
             }
             var contract = contracts[first.Execution];
             if (group.Any(entry => entry.declaration.Execution != first.Execution
@@ -118,4 +135,16 @@ public static class ActionDataAccessCompiler
             };
         }).OrderBy(requirement => requirement.Id, StringComparer.Ordinal).ToArray();
     }
+
+    // 每条对象要求独立持有非空、唯一且已登记的动作，不从其他条目补要求。
+    private static bool ValidActions(IReadOnlyList<string> keys, IReadOnlyList<DataActionDeclaration> actions) => keys is not null
+        && keys.Count > 0 && keys.Distinct(StringComparer.Ordinal).Count() == keys.Count
+        && keys.All(key => actions.Any(action => action.Key == key));
+
+    // 同一authoring在多个出现位置独立解析；比较内容而非数组实例身份。
+    private static bool SameObjects(IReadOnlyList<ButtonObjectRequirement>? left, IReadOnlyList<ButtonObjectRequirement>? right) =>
+        left is null ? right is null : right is not null && left.Count == right.Count && left.Zip(right).All(pair =>
+            pair.First.Object == pair.Second.Object && pair.First.ResourceKey == pair.Second.ResourceKey
+            && pair.First.Actions.SequenceEqual(pair.Second.Actions));
+
 }

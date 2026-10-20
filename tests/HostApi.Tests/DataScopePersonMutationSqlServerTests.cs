@@ -27,7 +27,7 @@ public sealed class DataScopePersonMutationSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PersonReadFault", "读取故障",
             "person-read-fault", "读取故障用户", read, edit);
         using var ordinary = actor.Client;
-        var person = await FeatureHttpTestRequests.CreateAsync(admin,
+        var person = await http.CreateButtonAsync(admin,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "READ-FAULT", ENAME = "读取故障人员", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
@@ -36,7 +36,7 @@ public sealed class DataScopePersonMutationSqlServerTests
             [new("PersonReadFaultSubject", "test.mutation.failure", null, 0,
                 new Dictionary<string, string> { ["read"] = "deny" })], []);
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonReadFaultRule", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
@@ -61,14 +61,14 @@ public sealed class DataScopePersonMutationSqlServerTests
             "organization.person", new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("故障人员")),
             [new("PersonFaultSubject", "test.mutation.failure", null, 0,
                 new Dictionary<string, string> { ["create"] = "deny" })], []);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonFaultRule", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var payload = new { PersonNo = "WRITE-FAULT", ENAME = "故障人员", EmploymentStatus = "Active", IsEnabled = true };
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
             "/api/organization/persons", payload))
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
-        var created = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons", payload);
+        var created = await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons", payload);
         Assert.NotNull(created);
     }
 
@@ -95,7 +95,7 @@ public sealed class DataScopePersonMutationSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PersonInFlight", "在途人员",
             "person-in-flight", "在途人员用户", read, edit);
         using var ordinary = actor.Client;
-        var person = await FeatureHttpTestRequests.CreateAsync(admin,
+        var person = await http.CreateButtonAsync(admin,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "WRITE-IN-FLIGHT", ENAME = "判权前", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
@@ -119,7 +119,7 @@ public sealed class DataScopePersonMutationSqlServerTests
                 "organization.person", new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
                 [new("PersonInFlightSubject", "all", null, 0,
                     new Dictionary<string, string> { ["edit"] = "deny" })], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/PersonInFlightRule", rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
@@ -150,17 +150,17 @@ public sealed class DataScopePersonMutationSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PersonSwitchScope", "人员开关范围",
             "person-switch-scope", "人员开关范围用户", read, create, edit, delete);
         actor.Client.Dispose();
-        var person = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var person = await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "WRITE-SWITCH", ENAME = "开关目标", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
-        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("create"),
+        using var accountResponse = await http.SendButtonAsync(admin, http.Identity("create"),
             HttpMethod.Post, "/api/identity/accounts", new { ECODE = "person-switch-bound", ENAME = "绑定守卫账号" });
         Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
         var account = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account");
-        var bound = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var bound = await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "WRITE-SWITCH-BOUND", ENAME = "绑定守卫人员", EmploymentStatus = "Active", IsEnabled = true });
         var boundId = BusinessAuditSqlServerHttpApiTests.Id(bound);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin,
+        using (var response = await http.SendButtonAsync(admin,
             http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{boundId}/user-binding", new
             {
@@ -174,7 +174,7 @@ public sealed class DataScopePersonMutationSqlServerTests
             "organization.person", new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
             [new("PersonSwitchSubject", "all", null, 0, new Dictionary<string, string>
                 { ["read"] = "deny", ["edit"] = "deny", ["delete"] = "deny" })], []);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonSwitchRule", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
@@ -201,7 +201,7 @@ public sealed class DataScopePersonMutationSqlServerTests
             Subjects = [rule.Subjects[0] with { Id = "PersonCreateSwitchSubject",
                 Actions = new Dictionary<string, string> { ["create"] = "deny" } }] };
         using (var administrator = await LoginCurrentAsync("admin"))
-        using (var response = await FeatureHttpTestRequests.SendAsync(administrator, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(administrator, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonCreateSwitchRule", createRule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var createPayload = new { PersonNo = "WRITE-CREATE-SWITCH", ENAME = "开关创建", EmploymentStatus = "Active", IsEnabled = true };
@@ -269,7 +269,7 @@ public sealed class DataScopePersonMutationSqlServerTests
         var rule = new DataScopeRuleDto("PersonWriteScopeRule", "PersonWriteScopeRule", null, "写入候选",
             true, "organization.person", new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("禁止创建")),
             [new("PersonWriteScopeSubject", "all", null, 0, new Dictionary<string, string> { ["create"] = "deny" })], []);
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var payload = new { PersonNo = "WRITE-SCOPE-DENIED", ENAME = "禁止创建", EmploymentStatus = "Active", IsEnabled = true };
@@ -282,7 +282,7 @@ public sealed class DataScopePersonMutationSqlServerTests
         var id = BusinessAuditSqlServerHttpApiTests.Id(visible);
         var hidden = rule with { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("移出范围")),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny" } }] };
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", hidden))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await SendAsync(ordinary, create, HttpMethod.Post,
@@ -328,13 +328,13 @@ public sealed class DataScopePersonMutationSqlServerTests
         var deleteId = BusinessAuditSqlServerHttpApiTests.Id(deletable);
         var deleteDenied = rule with { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("删除候选")),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["delete"] = "deny" } }] };
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", deleteDenied))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await SendAsync(ordinary, delete, HttpMethod.Delete,
             $"/api/organization/persons/{deleteId}"))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", deleteDenied with { Subjects = [] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await SendAsync(ordinary, delete, HttpMethod.Delete,
@@ -355,7 +355,7 @@ public sealed class DataScopePersonMutationSqlServerTests
         var businessRule = rule with { Condition = new("business", "", "", JsonSerializer.SerializeToElement((object?)null),
                 Key: "organization.person.departmentEnabled"),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["edit"] = "deny" } }] };
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", businessRule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await SendAsync(ordinary, read, HttpMethod.Get,
@@ -364,7 +364,7 @@ public sealed class DataScopePersonMutationSqlServerTests
         using (var response = await SendAsync(ordinary, edit, HttpMethod.Put,
             $"/api/organization/persons/{businessId}", new { ENAME = "不得修改" }))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", businessRule with
             { Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["create"] = "deny" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -376,14 +376,14 @@ public sealed class DataScopePersonMutationSqlServerTests
         var auditRule = rule with { Condition = new("attribute", "CreatedBy", "equal",
             JsonSerializer.SerializeToElement(actor.AccountId)),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["create"] = "deny" } }] };
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", auditRule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await SendAsync(ordinary, create, HttpMethod.Post,
             "/api/organization/persons", new { PersonNo = "WRITE-SCOPE-AUDIT", ENAME = "服务端审计字段候选",
                 EmploymentStatus = "Active", IsEnabled = true }))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", rule with
             { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("管理员仍可维护")) }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -395,7 +395,7 @@ public sealed class DataScopePersonMutationSqlServerTests
             "/api/organization/persons", new { PersonNo = "WRITE-SCOPE-INVALID", ENAME = "业务约束仍生效",
                 CompanyId = companyId, EmploymentStatus = "Active", IsEnabled = true }))
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        using (var response = await SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await http.SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", rule with
             { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("扩展候选")) }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);

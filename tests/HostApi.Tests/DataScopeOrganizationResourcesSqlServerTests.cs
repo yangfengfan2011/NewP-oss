@@ -212,7 +212,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
             using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get,
                 $"/api/organization/{target.Tab}/{target.Id}"))
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
+            using (var response = await http.SendButtonAsync(ordinary, edit, HttpMethod.Put,
                 $"/api/organization/{target.Tab}/{target.Id}", new { ENAME = target.Name + "更新" }))
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }

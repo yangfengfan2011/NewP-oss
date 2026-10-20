@@ -127,16 +127,16 @@ public sealed class DataScopeExpirySqlServerTests
         fixture.Fault.AfterCommit = () => { commits++; clock.Now = clock.Now.AddTicks(1); };
         try
         {
-            using var updated = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
+            using var updated = await http.SendButtonAsync(ordinary, edit, HttpMethod.Put,
                 "/api/organization/persons/" + id, new { ENAME = "已经提交" });
             Assert.True(updated.StatusCode == HttpStatusCode.OK, await updated.Content.ReadAsStringAsync());
             Assert.Equal(1, commits);
             Assert.Equal("{\"succeeded\":true}", await updated.Content.ReadAsStringAsync());
         }
         finally { fixture.Fault.AfterCommit = null; }
-        var actual = await FeatureHttpTestRequests.ReadAsync(admin, read, "/api/organization/persons/" + id);
+        var actual = await FeatureHttpTestRequests.ReadAsync(admin, read, "/api/organization/persons/" + id, http.Declaration("organization.person.read", read));
         Assert.Equal("已经提交", actual.GetProperty("fields").GetProperty("ENAME").GetString());
-        using var noLongerReadable = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, "/api/organization/persons/" + id);
+        using var noLongerReadable = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, "/api/organization/persons/" + id, dataAccess: http.Declaration("organization.person.read", read));
         Assert.Equal(HttpStatusCode.NotFound, noLongerReadable.StatusCode);
     }
 

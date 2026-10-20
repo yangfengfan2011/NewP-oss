@@ -65,42 +65,42 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
             await AssertStatusAsync(http.SendButtonAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{maintainer.AccountId}/roles", new { RoleCodes = Array.Empty<string>() }), HttpStatusCode.Forbidden);
         }
         var beforeRejected = await HistoryAsync(http, admin, person);
-        await AssertStatusAsync(SendAsync(read, create, HttpMethod.Post, "/api/organization/persons", Person("DENIED", company, a, position)), HttpStatusCode.Forbidden);
-        await AssertStatusAsync(SendAsync(read, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "禁止" }), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(http.SendButtonAsync(read, create, HttpMethod.Post, "/api/organization/persons", Person("DENIED", company, a, position)), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(http.SendButtonAsync(read, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "禁止" }), HttpStatusCode.Forbidden);
         await AssertStatusAsync(new FeatureHttpTestRequests(fixture).SendButtonAsync(read, disable, HttpMethod.Put, $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "禁止" }), HttpStatusCode.Forbidden);
         Assert.Equal(beforeRejected, await HistoryAsync(http, admin, person));
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { DepartmentId = b }), HttpStatusCode.OK);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { DepartmentId = b }), HttpStatusCode.OK);
         await AssertStatusAsync(new FeatureHttpTestRequests(fixture).SendButtonAsync(writer, disable, HttpMethod.Put, $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "正式停用" }), HttpStatusCode.OK);
         await AssertStatusAsync(http.SendButtonAsync(writer, http.Organization("persons", "enable", "list.rowActions"), HttpMethod.Put, $"/api/organization/persons/{person}/status/enable", new { isEnabled = true, reason = "正式启用" }), HttpStatusCode.OK);
         var secondRole = await CreateRoleAsync(http, admin, "duplicate-source", [edit]);
         await SetRolesAsync(http, admin, maintainer.AccountId, ["matrix-m", "duplicate-source"]);
         await http.GrantAsync(admin, maintainer.RoleId, [.. Views(http), create]);
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重复来源仍生效" }), HttpStatusCode.OK);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重复来源仍生效" }), HttpStatusCode.OK);
         await http.GrantAsync(admin, secondRole, []);
         var current = await writer.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         Assert.Equal(maintainer.AccountId, current.GetProperty("id").GetString());
         Assert.DoesNotContain(current.GetProperty("featurePositions").EnumerateArray(), point => point.GetString() == edit.Position);
         var before = await ReadTextAsync(admin, http.Organization("persons"), $"/api/organization/persons/{person}");
         var history = await HistoryAsync(http, admin, person);
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "撤权后禁止" }), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "撤权后禁止" }), HttpStatusCode.Forbidden);
         await AssertStatusAsync(new FeatureHttpTestRequests(fixture).SendButtonAsync(writer, disable, HttpMethod.Put, $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "撤权后禁止" }), HttpStatusCode.Forbidden);
         Assert.Equal(before, await ReadTextAsync(admin, http.Organization("persons"), $"/api/organization/persons/{person}"));
         Assert.Equal(history, await HistoryAsync(http, admin, person));
         await AssertStatusAsync(SendAsync(writer, http.Organization("persons"), HttpMethod.Get, $"/api/organization/persons/{person}"), HttpStatusCode.OK);
         await new FeatureHttpTestRequests(fixture).CreateButtonAsync(writer, create, "/api/organization/persons", Person("STILL-CREATE", company, a, position));
         await http.GrantAsync(admin, secondRole, edit);
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重新授予" }), HttpStatusCode.OK);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重新授予" }), HttpStatusCode.OK);
         await AssertStatusAsync(http.SendButtonAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{secondRole}", new { Name = "停用来源", IsEnabled = false }), HttpStatusCode.OK);
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "停用后禁止" }), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "停用后禁止" }), HttpStatusCode.Forbidden);
         await AssertStatusAsync(http.SendButtonAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{secondRole}", new { Name = "恢复来源", IsEnabled = true }), HttpStatusCode.OK);
         // 正式删除永久撤销普通分配；同名重新引入只能由管理员重新授予。
         await fixture.RemoveActiveFeatureAsync(edit.Position);
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "删除后禁止" }), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "删除后禁止" }), HttpStatusCode.Forbidden);
         await AssertStatusAsync(SendAsync(writer, http.Organization("persons"), HttpMethod.Get, $"/api/organization/persons/{person}"), HttpStatusCode.OK);
         await fixture.RestoreFeatureCatalogAsync();
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重加不恢复" }), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重加不恢复" }), HttpStatusCode.Forbidden);
         await http.GrantAsync(admin, secondRole, edit);
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "明确重新授予" }), HttpStatusCode.OK);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "明确重新授予" }), HttpStatusCode.OK);
         await fixture.RepeatFeatureSynchronizationAsync();
     }
 
@@ -121,13 +121,13 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Fault.AfterRegister = async (change, token) => { if (change.EventType == "person.updated") { reached.TrySetResult(); await release.Task.WaitAsync(token); } };
-        var inflight = AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "已判权在途" }), HttpStatusCode.OK);
+        var inflight = AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "已判权在途" }), HttpStatusCode.OK);
         try { await reached.Task.WaitAsync(TimeSpan.FromSeconds(15)); await http.GrantAsync(admin, actor.RoleId, [.. Views(http), create]); }
         finally { release.TrySetResult(); }
         await inflight;
         fixture.Fault.AfterRegister = null;
         var history = await HistoryAsync(http, admin, person);
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "禁止" }), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(http.SendButtonAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "禁止" }), HttpStatusCode.Forbidden);
         Assert.Equal(history, await HistoryAsync(http, admin, person));
         var detail = await ReadAsync(writer, http.Organization("persons"), $"/api/organization/persons/{person}");
         Assert.Equal("已判权在途", detail.GetProperty("fields").GetProperty("ENAME").GetString());

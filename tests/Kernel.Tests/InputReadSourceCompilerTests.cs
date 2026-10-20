@@ -159,7 +159,6 @@ public sealed class InputReadSourceCompilerTests
             foreach (var action in list[surface]!.AsArray().OfType<JsonObject>().Where(action =>
                 action["handlerKey"]?.GetValue<string>() == operation || action["behaviorKey"]?.GetValue<string>() == resource + "." + operation))
             {
-                action["handlerKey"] = operation;
                 action["inputReadSourceKey"] = sourceKey;
                 action["dataAccess"] = candidate.ModuleId == "Workspace"
                     ? JsonSerializer.SerializeToNode(new[] { "WorkspaceFolder", "Part", "Document" }.Select(name => new Dictionary<string, object> { ["object"] = name, ["actions"] = actions }))

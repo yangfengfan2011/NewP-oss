@@ -299,7 +299,8 @@ public static class StandardFeatureMetadataCompiler
             if (isButton && (!hasDataAccess || declared.ValueKind == JsonValueKind.Array
                 || declared.ValueKind == JsonValueKind.Object && declared.TryGetProperty("object", out _)))
             {
-                if (operation is null)
+                // 非呈现feature动作沿既有behavior绑定调用；不能为生成身份而增加UI handler。
+                if (operation is null && !(surface == "featureActions" && Optional(action, "behaviorKey") == node.BehaviorKey))
                     throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
                 var multiple = hasDataAccess && declared.ValueKind == JsonValueKind.Array;
                 var entries = !hasDataAccess ? [] : multiple ? declared.EnumerateArray().ToArray() : new[] { declared };

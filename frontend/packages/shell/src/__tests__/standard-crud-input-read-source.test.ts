@@ -10,6 +10,15 @@ const source: ActionDataAccessRequirement = {
 const action = { key: 'authorize', labelKey: 'Authorize', inputReadSourceKey: 'part.part.permissions' };
 
 describe('explicit standard CRUD input read source', () => {
+  it('keeps a behavior-only feature action outside the presented action schema', () => {
+    const schema = buildStandardCrudListSchema({ key: 'items', featureActions: [{ key: 'authorize', titleKey: 'Authorize',
+      behaviorKey: 'part.part.authorize', dataAccess: { object: 'Part', actions: ['read', 'authorize'] } }] }, {
+      resourceKey: 'part.part', listViewKey: 'items', dataAdapter: { list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+        get: async () => ({ value: {}, normalized: { fields: {}, summaries: {} } }), getRowId: () => '' },
+    });
+    expect(schema.featureActions).toEqual([]);
+  });
+
   it('keeps the original PageRef read role and prepare stage at its exact feature position', () => {
     expect(standardCrudInputReadSource({ action, featurePosition: 'input-position', dataAccessDeclarations: [source] })).toBe(source);
     expect(standardCrudInputReadSource({ action: { key: 'generic', labelKey: 'Generic' } })).toBeUndefined();

@@ -52,6 +52,15 @@ export function bindFormalRuntimeMetadata(value: RuntimeMetadataState): RuntimeM
   for (const document of value.viewDocuments) if (Array.isArray(document.view.tabs))
     for (const tab of document.view.tabs) if (typeof tab.pageRef?.pageKey === 'string') viewKeys.add(tab.pageRef.pageKey === 'platform.detail' && typeof tab.pageRef.parameters?.detailReadSourceKey === 'string' ? tab.pageRef.parameters.detailReadSourceKey : tab.pageRef.pageKey);
   for (const item of value.navDocuments.flatMap(document => document.navigation.items)) if (item.page) viewKeys.add(item.page.pageKey === 'platform.detail' && typeof item.page.parameters?.detailReadSourceKey === 'string' ? item.page.parameters.detailReadSourceKey : item.page.pageKey);
+  // 输入显式引用的查询来源也来自正式目录，不能只保留列表自身的ViewKey而丢失真实manifest内容。
+  const includeInputReads = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) { value.forEach(includeInputReads); return; }
+    const record = value as Record<string, unknown>;
+    if (typeof record.inputReadSourceKey === 'string') viewKeys.add(record.inputReadSourceKey);
+    Object.values(record).forEach(includeInputReads);
+  };
+  value.viewDocuments.forEach(includeInputReads);
   const relevant = declarations.filter(item => viewKeys.has(item.viewKey));
   const modules = value.manifest.modules.map(module => ({ ...module,
     dataAccess: uniqueDeclarations([...relevant.filter(item => item.moduleId === module.moduleId), ...(module.dataAccess ?? [])]),

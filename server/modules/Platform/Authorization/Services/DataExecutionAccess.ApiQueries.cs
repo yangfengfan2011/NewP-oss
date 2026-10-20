@@ -12,24 +12,24 @@ public sealed partial class DataExecutionAccess
     public Task<DataScopeReadPlan> GetApiQueryReadPlanAsync(DataExecutionApiQueryContext context, string resourceKey,
         CancellationToken cancellationToken = default)
     {
-        var contract = ResolveApiReadSource(context?.Binding, context?.Identity, resourceKey);
+        var contract = ResolveApiSource(context?.Binding, context?.Identity, resourceKey);
         if (contract.Requirements.Count != 1 || contract.Branches.Count != 0) throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
         var requirement = contract.Requirements[0];
-        if (context!.Role != "query" || requirement.Role != context.Role || requirement.Stage != "read" || requirement.Shape != "query"
+        if (context!.Binding.Stage != "read" || context.Role != "query" || requirement.Role != context.Role || requirement.Stage != "read" || requirement.Shape != "query"
             || requirement.MinimumCount != 0 || requirement.MaximumCount is not null || requirement.Branch is not null)
             throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
         RequireReadPlanRole(requirement, resourceKey);
         return (queryReads ?? throw new InvalidOperationException("DATA_EXECUTION_QUERY_READS_REQUIRED")).GetReadPlanAsync(resourceKey, cancellationToken);
     }
 
-    // Query与Object只共享固定来源核对；角色与目标形状仍由各自入口严格限定。
-    private DataExecutionContract ResolveApiReadSource(DataExecutionBindingReference? binding, string? identity, string resourceKey)
+    // 只读计划与对象执行共享固定API来源核对；阶段、角色和目标形状由各自入口严格限定。
+    private DataExecutionContract ResolveApiSource(DataExecutionBindingReference? binding, string? identity, string resourceKey)
     {
         var request = http.HttpContext ?? throw new ActionDataAccessException(400, "ActionDataAccess.ContextRequired");
         if (request.User.Identity?.IsAuthenticated != true) throw new ActionDataAccessException(401, "ActionDataAccess.SubjectRequired");
         // 此纯固定API不开放客户端声明选择；拒绝foreign头，不将entry缺声明请求导向该方法。
         if (request.Request.Headers.ContainsKey("X-NewP-Data-Declaration") || binding is null
-            || binding.Stage != "read" || binding.Branch is not null || string.IsNullOrWhiteSpace(identity)
+            || binding.Branch is not null || string.IsNullOrWhiteSpace(identity)
             || request.GetEndpoint() is not RouteEndpoint endpoint || string.IsNullOrWhiteSpace(endpoint.RoutePattern.RawText))
             throw ApiBindingInvalid();
         var owners = endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();

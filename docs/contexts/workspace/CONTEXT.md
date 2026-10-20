@@ -119,6 +119,8 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 批量移除使用 `POST /api/workspace/content/references/remove`，输入为完整 position 与当前页 1–100 个不同 LID；正式 `removeSelected` 确认弹层明确保留对象及文件。单条 DELETE 兼容入口委托同一内核：图锁事务内重验完整位置、父 edit 和端点 read 后只删除这些 LID，不要求对象 edit/delete/copy，不调用对象删除或 Files release；最后引用及非空文件夹引用均可移除，一条失败整批回滚。成功后按 unknown-change 刷新同一真实父的已加载出现位置与列表。
 
+`POST /api/workspace/content/references` 是现有无界面添加引用API，固定绑定 `workspace.reference.add`，继续核原 `workspace.folder.add` 功能资格。图锁后原父位置 read/edit 与原目标端点 read 分别消费对应角色；不要求引用复制、目标 edit/delete。API不开放客户端声明选择，携带入口声明头拒绝；普通粘贴仍使用自己的入口来源，不借该API绕过声明。
+
 ## 父直接授权初始化
 
 普通Folder新建和浅副本的新根可显式选择 `copyParentAuthorization`，页面默认勾选，可取消；命令选项不属于Folder模型字段。旧请求省略该选项保留不复制行为。普通空间根没有普通父文件夹授权来源，页面说明此边界，服务端即使收到true也不从根初始化。Part/Document创建和已有共享子对象不使用此初始化。

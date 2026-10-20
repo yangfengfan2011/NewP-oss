@@ -278,6 +278,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return Results.Ok(new { succeeded = true });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>正式排序权限独立于列表位置；服务器不接受客户端邻居、序号或批量选择。</summary>

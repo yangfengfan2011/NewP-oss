@@ -68,6 +68,9 @@ public partial interface IDataExecutionAccess
     /// <summary>纯固定API在原详情SQL点核对来源和真实单目标后取得read计划，不作为普通entry的缺声明回退。</summary>
     Task<DataScopeReadPlan> GetApiObjectReadPlanAsync(DataExecutionApiObjectContext context, string resourceKey, string objectId,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    /// <summary>固定API在原对象裁决点消费本次角色要求，来源不能作为普通entry缺声明的回退。</summary>
+    Task<DataExecutionTargetDecision> EvaluateApiObjectAsync(DataExecutionApiObjectExecutionContext context, string role,
+        DataExecutionTargetInput target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     /// <summary>通用端点由真实metadata及资源owner选择受控绑定；仅明确登记的旧消费者返回null。</summary>
     DataExecutionBindingReference? BindResourceEndpoint(string resourceKey) => throw new NotSupportedException();
     /// <summary>完整角色先核基数，再按输入顺序裁决；每次枚举均使用当前阶段事实。</summary>

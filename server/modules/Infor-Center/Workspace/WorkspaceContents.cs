@@ -130,9 +130,9 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var path = await WritablePositionAsync(actorId, position, cancellation);
+            var path = await ResolveReferenceParentAsync(position, cancellation);
             RequireContainer(position, path, target.ModelKey);
-            var linkId = await AddTargetReferenceAsync(path.FolderId, target, cancellation);
+            var linkId = await AddTargetReferenceAsync(path.FolderId, target, ReferenceReadSource.Api, cancellation);
             await referenceAudit.AddedAsync(linkId, path.FolderId, target, cancellation);
             return true;
         }, token);
@@ -439,14 +439,6 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         if (!transactions.IsActive) throw new InvalidOperationException("Workspace graph writes require an active transaction.");
         return db.Database.ExecuteSqlRawAsync(
             "DECLARE @result int; EXEC @result = sp_getapplock @Resource=N'Workspace.FolderGraph', @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=15000; IF @result < 0 THROW 51000, 'Workspace content lock failed.', 1;", token);
-    }
-
-    // 写命令在图锁后重验位置和父动作；编辑装载只读取资格，不能替代提交时重验。
-    private async Task<WorkspacePositionPath> WritablePositionAsync(string actorId, WorkspacePosition position, CancellationToken token)
-    {
-        var path = await positions.ResolveAsync(actorId, position, token);
-        if (!await decisions.IsAllowedAsync("workspace.folder", path.FolderId, "edit", token)) throw new LinkQueryException(403, "Workspace.ParentWriteDenied");
-        return path;
     }
 
     // 防环观察完整存储图，包括不可见节点与跨空间关系；只返回布尔值，不泄露名称或路径。

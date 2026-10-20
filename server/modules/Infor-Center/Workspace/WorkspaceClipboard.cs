@@ -62,7 +62,7 @@ public sealed partial class WorkspaceContents
             // 至多一页100项，保持选择次序；同事务未保存关系由正式NextOrdinalAsync参与末尾计算。
             for (var index = 0; index < targets.Length; index++)
             {
-                var linkId = await AddTargetReferenceAsync(target.FolderId, targets[index], cancellation, sourceScopes is null ? false : sourceScopes[linkIds[index]]);
+                var linkId = await AddTargetReferenceAsync(target.FolderId, targets[index], ReferenceReadSource.Clipboard, cancellation, sourceScopes is null ? false : sourceScopes[linkIds[index]]);
                 if (mode == "copy") await referenceAudit.CopiedAsync(linkIds[index], source.FolderId, linkId, target.FolderId, targets[index], cancellation);
                 else await referenceAudit.MovedAsync(linkIds[index], source.FolderId, linkId, target.FolderId, targets[index], cancellation);
             }
@@ -148,12 +148,17 @@ public sealed partial class WorkspaceContents
     }
 
     // 单条add与批量paste共享完整图校验；显式分享为普通边，cut调用方传入原边语义，均已持图锁。
-    private async Task<string> AddTargetReferenceAsync(string parentId, LinkObjectReference target, CancellationToken cancellation, bool? isScopeNeutral = false)
+    private async Task<string> AddTargetReferenceAsync(string parentId, LinkObjectReference target, ReferenceReadSource source, CancellationToken cancellation, bool? isScopeNeutral = false)
     {
         var definition = catalog.Get("workspace.content");
         if (string.IsNullOrWhiteSpace(target.Id) || !definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint", "target");
-        if (!await reader.IsEndpointReadableAsync("workspace.content", target, cancellation)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+        if (source == ReferenceReadSource.Api) await RequireReferenceTargetAsync(target, cancellation);
+        else if (source == ReferenceReadSource.Clipboard)
+        {
+            if (!await reader.IsEndpointReadableAsync("workspace.content", target, cancellation)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+        }
+        else throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
         if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AnyAsync(space => EF.Property<string>(space, "RootFolderId") == target.Id, cancellation))
             throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");
         var links = db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);

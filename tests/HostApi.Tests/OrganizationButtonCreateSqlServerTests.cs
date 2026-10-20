@@ -125,7 +125,7 @@ public sealed class OrganizationButtonCreateSqlServerTests
         var rule = new DataScopeRuleDto("CompleteCandidate325", "CompleteCandidate325", null, "完整候选", true, "organization.position",
             new("attribute", "IsEnabled", "equal", JsonSerializer.SerializeToElement(true)),
             [new("CandidateSubject325", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny", ["create"] = create })], []);
-        using var response = await FeatureHttpTestRequests.SendAsync(admin,
+        using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
             fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/CompleteCandidate325", rule);
         Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());

@@ -104,12 +104,12 @@ public sealed class DataScopeRelationTreeSqlServerTests(ITestOutputHelper output
         Assert.Equal(0, unassignedSearch.GetProperty("total").GetInt32());
 
         async Task<string> CreateAsync(string tab, object payload) => BusinessAuditSqlServerHttpApiTests.Id(
-            await FeatureHttpTestRequests.CreateAsync(admin, http.Organization(tab, "create", "list.pageActions"),
+            await http.CreateButtonAsync(admin, http.Organization(tab, "create", "list.pageActions"),
                 "/api/organization/" + tab, payload));
 
         async Task SaveRuleAsync(DataScopeRuleDto rule)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
                 fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
                 HttpMethod.Put, "/api/authorization/data-scope/rules/" + rule.Id, rule);
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
@@ -156,14 +156,14 @@ public sealed class DataScopeRelationTreeSqlServerTests(ITestOutputHelper output
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "TreeCost236", "树成本",
             "tree-cost-236", "树成本人员", tree);
         using var ordinary = actor.Client;
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "TREE-COST-236", ENAME = "成本公司", SortOrder = "0100" }));
         var saveRule = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
         for (var index = 0; index < 12; index++)
         {
             var id = "TreeCostRule236_" + index;
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, saveRule, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, saveRule, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + id,
                 new DataScopeRuleDto(id, id, null, id, true, "organization.department",
                     new("attribute", "ECODE", "equal", JsonSerializer.SerializeToElement("NEVER-" + index)),
@@ -171,7 +171,7 @@ public sealed class DataScopeRelationTreeSqlServerTests(ITestOutputHelper output
                         new Dictionary<string, string> { ["read"] = "deny" })], []));
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, saveRule, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, saveRule, HttpMethod.Put,
             "/api/authorization/data-scope/rules/TreeCostCompany236",
             new DataScopeRuleDto("TreeCostCompany236", "TreeCostCompany236", null, "公司拒绝", true,
                 "organization.company", new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(company)),

@@ -68,7 +68,7 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
                 new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
                 [new(key + "Subject", "user", actor.AccountId, 0, actions)], []);
             var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + key, rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
@@ -96,7 +96,7 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
             [new("Auth318PartViewSubject", "user", actor.AccountId, 0,
                 new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = "deny" })], []);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, saveRules, HttpMethod.Put,
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, saveRules, HttpMethod.Put,
             "/api/authorization/data-scope/rules/" + ruleId, rule))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var path = "/api/part/parts/" + id + "/permissions/explanation";
@@ -187,7 +187,7 @@ public sealed class PartDocumentObjectAuthorizationExecutionSqlServerTests
                 new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
                 [new(root + "Subject", "user", actor.AccountId, 0, actions)], []);
             var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + root, rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }

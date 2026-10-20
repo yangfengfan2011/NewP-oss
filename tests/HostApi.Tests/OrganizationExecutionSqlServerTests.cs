@@ -61,7 +61,7 @@ public sealed class OrganizationExecutionSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Lookup310", "候选声明",
             "lookup310", "候选普通主体", read);
         using var ordinary = actor.Client;
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "LOOKUP310", ENAME = "声明隐藏公司", SortOrder = "0100" }));
         const string path = "/api/organization/person-lookups/companies";
@@ -78,7 +78,7 @@ public sealed class OrganizationExecutionSqlServerTests
         var rule = new DataScopeRuleDto("Lookup310Hidden", "Lookup310Hidden", null, "隐藏候选", true, "organization.company",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(company)),
             [new("Lookup310All", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin,
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
             fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/Lookup310Hidden", rule))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
@@ -101,10 +101,10 @@ public sealed class OrganizationExecutionSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "OtherLookup310", "专属候选",
             "other-lookup310", "专属候选主体", personRead, departmentRead);
         using var ordinary = actor.Client;
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "OTHER310", ENAME = "来源公司", SortOrder = "0100" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
             new { CompanyId = company, ECODE = "OTHER310-D", ENAME = "来源部门", SortOrder = "0100" }));
         foreach (var source in new[] { "person-department", "department-company", "department-parent" })
@@ -143,10 +143,10 @@ public sealed class OrganizationExecutionSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Tree310", "树声明",
             "tree310", "树主体", tree);
         using var ordinary = actor.Client;
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "TREE310", ENAME = "树来源公司", SortOrder = "0100" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
             new { CompanyId = company, ECODE = "TREE310-D", ENAME = "树来源部门", SortOrder = "0100" }));
         var path = "/api/trees/organization.structure/children?scope=global&nodeKey=company:" + company;
@@ -166,7 +166,7 @@ public sealed class OrganizationExecutionSqlServerTests
         var rule = new DataScopeRuleDto("Tree310Hidden", "Tree310Hidden", null, "隐藏父", true, "organization.company",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(company)),
             [new("Tree310All", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin,
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
             fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/Tree310Hidden", rule)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         using var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, tree, HttpMethod.Get, path, dataAccess: binding);

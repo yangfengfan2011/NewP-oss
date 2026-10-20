@@ -78,7 +78,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         for (var root = 0; root < rootCount; root++)
         {
             var rootId = "Capacity295Root" + root;
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, saveRules, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, saveRules, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + rootId + "_0", Node(rootId, null, 0));
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         }

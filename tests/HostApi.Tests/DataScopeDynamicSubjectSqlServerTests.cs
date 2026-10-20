@@ -74,7 +74,7 @@ public sealed class DataScopeDynamicSubjectSqlServerTests
                 var rule = new DataScopeRuleDto("Dynamic295Rule", "Dynamic295Rule", null, "不得扩规则主体", true, "part.part",
                     new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(original.Id)),
                     [new("Dynamic295RuleSubject", type, null, 1, new Dictionary<string, string> { ["read"] = "allow" })], []);
-                using var rejected = await FeatureHttpTestRequests.SendAsync(admin, ruleSave, HttpMethod.Put,
+                using var rejected = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, ruleSave, HttpMethod.Put,
                     "/api/authorization/data-scope/rules/Dynamic295Rule", rule);
                 Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
             }

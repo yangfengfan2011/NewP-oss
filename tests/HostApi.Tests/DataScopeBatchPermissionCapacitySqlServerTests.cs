@@ -88,7 +88,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         foreach (var group in groups)
         {
             var root = "BatchCapacity297_" + group.Target.Model;
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, saveRules, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, saveRules, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + root + "_0", Rule(root, group.Resource, group.Target.Id, null, 0));
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         }

@@ -34,7 +34,7 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
             [new("Scope_Cost_Allow", "Scope_Cost", "Scope_Cost", "子例外", true, "organization.person",
                 new("attribute", "PersonNo", "equal", JsonSerializer.SerializeToElement("SCOPE-COST-0")),
                 [new("Scope_Cost_Allow_Subject", "all", null, 0, new Dictionary<string, string> { ["read"] = "allow" })], [])]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Cost", rule))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Cost", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var created = 0;
         string? objectAllowed = null;
@@ -42,7 +42,7 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
         {
             for (; created < size; created++)
             {
-                var person = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
+                var person = await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
                     new { PersonNo = "SCOPE-COST-" + created, ENAME = created % 2 == 0 ? "Blocked" : "Visible", EmploymentStatus = "Active", IsEnabled = true });
                 if (created == 2) objectAllowed = BusinessAuditSqlServerHttpApiTests.Id(person);
             }

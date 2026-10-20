@@ -464,7 +464,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             var rule = new DataScopeRuleDto("CopyCandidate", "CopyCandidate", null, "CopyCandidate", true, "part.part",
                 new("attribute", "ECODE", "equal", JsonSerializer.SerializeToElement("HIDDEN-COPY")),
                 [new("CopyCandidateSubject", "all", null, 0, new Dictionary<string, string> { [action] = "deny" })], []);
-            using var write = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/CopyCandidate", rule);
+            using var write = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/CopyCandidate", rule);
             Assert.Equal(HttpStatusCode.NoContent, write.StatusCode);
             if (action == "create")
             { using var createDenied = await PartCopySend(fixture, ordinary, PartCopyDataPhase.Submit, submit); Assert.Equal(HttpStatusCode.Forbidden, createDenied.StatusCode); Assert.Single(await Rows(fixture, "Part")); }

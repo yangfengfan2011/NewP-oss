@@ -64,13 +64,13 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         await LoginAccountAsync(fresh, "moving");
         await UpdateAsync(admin, http, prepared.Person, new { DepartmentId = target });
 
-        var position = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("positions", "create", "list.pageActions"),
+        var position = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("positions", "create", "list.pageActions"),
             "/api/organization/positions", new { ENAME = "独立岗位" }));
         await UpdateAsync(admin, http, actor.Person, new { PositionId = position });
         await SetOrganizationStateAsync(admin, http, "positions", position, false);
         Assert.Equal(HttpStatusCode.OK, (await fresh.GetAsync("/api/auth/current-user")).StatusCode);
 
-        var otherCompany = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+        var otherCompany = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
             "/api/organization/companies", new { ECODE = "OTHER", ENAME = "另一公司", SortOrder = "02" }));
         var otherDepartment = await CreateDepartmentAsync(admin, http, otherCompany, "OTHER");
         await SetOrganizationStateAsync(admin, http, "companies", prepared.Company, false);
@@ -196,7 +196,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             var disabled = await CreateDepartmentAsync(admin, http, prepared.Company, "DISABLED", prepared.Department);
             var childActor = await PrepareAccountAsync(admin, http, prepared.Company, child, "child");
             var leafActor = await PrepareAccountAsync(admin, http, prepared.Company, leaf, "leaf");
-            var outsideCompany = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+            var outsideCompany = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
                 "/api/organization/companies", new { ECODE = "OUTSIDE", ENAME = "范围外公司", SortOrder = "02" }));
             var outsideDepartment = await CreateDepartmentAsync(admin, http, outsideCompany, "OUTSIDE");
             var outsideActor = await PrepareAccountAsync(admin, http, outsideCompany, outsideDepartment, "outside");
@@ -239,17 +239,17 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
     }
 
     private static async Task<string> CreateDepartmentAsync(HttpClient admin, FeatureHttpTestRequests http, string company, string code, string? parent = null) =>
-        BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
+        BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = code, ENAME = code, CompanyId = company, ParentDepartmentId = parent, SortOrder = "01" }));
 
     private static async Task<(string Person, string Account, string Password)> PrepareAccountAsync(
         HttpClient admin, FeatureHttpTestRequests http, string company, string department, string code)
     {
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = code, ENAME = code, CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
-        var created = await CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = code, ENAME = code });
+        var created = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = code, ENAME = code });
         var account = created.GetProperty("account");
-        using var bound = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+        using var bound = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{person}/user-binding", new { accountEid = account.GetProperty("eid").GetString(), expectedRevision = account.GetProperty("revision").GetInt64(), reason = "子树准入准备" });
         Assert.True(bound.IsSuccessStatusCode, await bound.Content.ReadAsStringAsync());
         return (person, account.GetProperty("eid").GetString()!, created.GetProperty("temporaryCredential").GetString()!);

@@ -26,7 +26,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         using var admin = await fixture.LoginAdministratorAsync();
         var read = http.Organization("persons");
         using var ordinary = (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "BoolScope", "布尔条件", "scope-bool", "布尔读取者", read)).Client;
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "SCOPE-BOOL", ENAME = "布尔条件目标", EmploymentStatus = "FullTime", IsEnabled = true }));
         using (var scope = fixture.Services.CreateScope())
@@ -57,7 +57,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
 
         async Task SaveAsync(DataScopeConditionDto condition)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/Scope_Bool", rule with { Condition = condition });
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
@@ -78,11 +78,11 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         var read = http.Organization("persons");
         using var ordinary = (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Operator", "操作符", "scope-operator", "操作符读取者", read)).Client;
         var create = http.Organization("persons", "create", "list.pageActions");
-        var nullable = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var nullable = BusinessAuditSqlServerHttpApiTests.Id(await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "OP-NULL", ENAME = "操作符空值", EmploymentStatus = "FullTime", IsEnabled = true }));
-        var older = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var older = BusinessAuditSqlServerHttpApiTests.Id(await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "OP-OLD", ENAME = "操作符旧值", BirthDate = "2000-01-01", EmploymentStatus = "FullTime", IsEnabled = true }));
-        var newer = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var newer = BusinessAuditSqlServerHttpApiTests.Id(await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "OP-NEW", ENAME = "操作符新值", BirthDate = "2001-01-01", EmploymentStatus = "FullTime", IsEnabled = true }));
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
         var entry = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.read");
@@ -122,21 +122,21 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         await SaveAsync(Leaf("PersonNo", "contains", ""), HttpStatusCode.NoContent);
         var numberRule = rule with { Id = "Scope_Number", RootId = "Scope_Number", ResourceKey = "identity.account",
             Condition = Leaf("Revision", "greaterThan", "9007199254740993"), Subjects = [] };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Number", numberRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var numbers = await FeatureHttpTestRequests.ReadAsync(admin, entry, "/api/authorization/data-scope/rules");
         Assert.Equal(9007199254740993L, numbers.EnumerateArray().Single(item => item.GetProperty("id").GetString() == "Scope_Number")
             .GetProperty("condition").GetProperty("value").GetInt64());
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Number", numberRule with { Condition = Leaf("Revision", "greaterThan", "1.5") }))
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Number", numberRule with { Condition = Leaf("Status", "equal", "Enabled") }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Number", numberRule with { Condition = Leaf("Status", "contains", "En") }))
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Number", numberRule with { Condition =
                 new("business", "", "", empty, Key: "organization.person.departmentEnabled") }))
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -149,7 +149,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
             await SaveAsync(invalid, HttpStatusCode.BadRequest);
         var nested = new DataScopeConditionDto("group", "", "and", empty, Children: [Leaf("PersonNo", "equal", "OP-NULL"),
             Leaf("EmploymentStatus", "equal", "NotAnEmploymentStatus")]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Operators",
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Operators",
             rule with { Condition = nested }))
         {
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -161,7 +161,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
 
         async Task SaveAsync(DataScopeConditionDto condition, HttpStatusCode expected)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/Scope_Operators", rule with { Condition = condition });
             Assert.True(response.StatusCode == expected, await response.Content.ReadAsStringAsync());
         }
@@ -182,17 +182,17 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         var read = http.Organization("persons");
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
         using var ordinary = (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Business", "业务条件", "scope-business", "业务读取者", read, manage)).Client;
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "SCOPE-COMPANY", ENAME = "条件公司", SortOrder = "0010" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
             new { ECODE = "SCOPE-DEPT", ENAME = "条件部门", CompanyId = company, SortOrder = "0010" }));
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "SCOPE-BUSINESS", ENAME = "业务条件人员", CompanyId = company, DepartmentId = department,
                 EmploymentStatus = "FullTime", IsEnabled = true }));
-        var other = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var other = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "SCOPE-OTHER", ENAME = "其他业务人员", CompanyId = company, DepartmentId = department,
                 EmploymentStatus = "FullTime", IsEnabled = true }));
@@ -210,7 +210,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         var rule = new DataScopeRuleDto("Scope_Business", "Scope_Business", null, "业务读取贡献", true, "organization.person", business,
             [new("Subject_Business", "unused.read.facts", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business", rule))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -222,12 +222,12 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
             Condition = new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(person)),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "unset" } }]
         };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Business", unset))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Business", unset with { Subjects = rule.Subjects }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
@@ -237,7 +237,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
                 new Dictionary<string, string> { ["read"] = "deny" })]);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint, objectRead))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Business", unset))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
@@ -263,7 +263,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         {
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["authorize"] = "deny" } }]
         };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Business", ruleAuthorize))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
@@ -280,13 +280,13 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         var absentGroup = new DataScopeConditionDto("group", "", "and", empty, Children:
             [new("group", "", "or", empty, Children: [business, business])]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business",
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business",
             rule with { Condition = absentGroup })) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var mixed = new DataScopeConditionDto("group", "", "or", empty, Children:
             [new("attribute", "PersonNo", "equal", JsonSerializer.SerializeToElement("SCOPE-BUSINESS")), business]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business",
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business",
             rule with { Condition = mixed, Subjects = [rule.Subjects[0] with { Type = "all" }] })) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -296,7 +296,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
             [new("attribute", "PersonNo", "startsWith", JsonSerializer.SerializeToElement("SCOPE-")),
                 new("group", "", "or", empty, Children: [business,
                     new("attribute", "PersonNo", "equal", JsonSerializer.SerializeToElement("SCOPE-BUSINESS"))])]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business",
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business",
             rule with { Condition = nested, Subjects = [rule.Subjects[0] with { Type = "all" }] })) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -325,11 +325,11 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         var read = http.Organization("persons");
         using var ordinary = (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Condition", "组合条件", "scope-condition", "组合读取者", read)).Client;
         var create = http.Organization("persons", "create", "list.pageActions");
-        var alpha = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var alpha = await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "COND-ALPHA", ENAME = "Scope Alpha", EmploymentStatus = "Active", IsEnabled = true, BirthDate = "2000-01-01" });
-        var beta = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var beta = await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "COND-BETA", ENAME = "Scope Beta", EmploymentStatus = "Active", IsEnabled = true });
-        var excluded = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var excluded = await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "COND-EXCLUDED", ENAME = "Scope Alpha", EmploymentStatus = "Active", IsEnabled = true });
         using (var scope = fixture.Services.CreateScope())
         {
@@ -354,7 +354,7 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         var rule = new DataScopeRuleDto("Scope_Compound", "Scope_Compound", null, "组合读取", true, "organization.person", condition,
             [new("Subject_Compound", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Compound", rule))
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Compound", rule))
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         commands.Enabled = true;
         var watch = Stopwatch.StartNew();

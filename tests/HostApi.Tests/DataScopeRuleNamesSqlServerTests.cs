@@ -29,7 +29,7 @@ public sealed class DataScopeRuleNamesSqlServerTests
 
         async Task<HttpStatusCode> Save(DataScopeRuleDto rule)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + rule.Id, rule);
             return response.StatusCode;
         }

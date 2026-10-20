@@ -34,7 +34,7 @@ public sealed class WorkspaceSqlServerHttpApiTests
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(space.GetProperty("rootFolderId").GetString())),
             [new("WorkspaceDeniedSubject", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
         var save = Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "authorization.dataScope.save");
-        using var saved = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/WorkspaceDeniedRoot", rule);
+        using var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/WorkspaceDeniedRoot", rule);
         Assert.True(saved.StatusCode == HttpStatusCode.NoContent, await saved.Content.ReadAsStringAsync());
         var route = $"/api/workspace/spaces/{space.GetProperty("spaceId").GetString()}/root";
         using var refused = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, route);
@@ -54,7 +54,7 @@ public sealed class WorkspaceSqlServerHttpApiTests
 
         var personal = await EnsureAsync(ordinary, entry);
         var privateRule = rule with { Condition = new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(personal.GetProperty("rootFolderId").GetString())) };
-        using var replaced = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/WorkspaceDeniedRoot", privateRule);
+        using var replaced = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/WorkspaceDeniedRoot", privateRule);
         Assert.Equal(HttpStatusCode.NoContent, replaced.StatusCode);
         var receipt = await EnsureAsync(ordinary, entry);
         Assert.True(receipt.GetProperty("initialized").GetBoolean());

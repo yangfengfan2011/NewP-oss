@@ -60,7 +60,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         foreach (var resource in new[] { "organization.company", "organization.department", "organization.person" })
         {
             var key = "Organization310Cost_" + resource.Replace('.', '_');
-            using var response = await FeatureHttpTestRequests.SendAsync(admin,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
                 fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + key,
                 new DataScopeRuleDto(key, key, null, key, true, resource,

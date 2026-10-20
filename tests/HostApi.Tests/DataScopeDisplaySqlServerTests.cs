@@ -40,13 +40,13 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "DisplayFault237", "显示故障",
             "display-fault-237", "显示故障用户", http.Organization("persons"));
         using var ordinary = actor.Client;
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "DISPLAY-237-FAULT", ENAME = "故障公司", SortOrder = "0100" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
             new { CompanyId = company, ECODE = "DISPLAY-237-FAULT", ENAME = "故障部门", SortOrder = "0100" }));
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "DISPLAY-237-FAULT", ENAME = "故障人员", CompanyId = company, DepartmentId = department,
                 EmploymentStatus = "Active", IsEnabled = true }));
@@ -93,10 +93,10 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         var person = await CreateAsync("persons", new
         { PersonNo = "DISPLAY-237", ENAME = "引用人员", CompanyId = hiddenCompany,
             DepartmentId = child, PositionId = hiddenPosition, EmploymentStatus = "Active", IsEnabled = true });
-        var account = (await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
+        var account = (await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts",
             new { ECODE = "display-237-bound", ENAME = "私有绑定账号" })).GetProperty("account");
         var accountId = account.GetProperty("eid").GetString()!;
-        using (var binding = await FeatureHttpTestRequests.SendAsync(admin,
+        using (var binding = await http.SendButtonAsync(admin,
             http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{person}/user-binding",
             new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "显示验证" }))
@@ -209,7 +209,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         Assert.NotEqual("***", restored.GetProperty("CreatedBy_DisplayValue").GetString());
 
         async Task<string> CreateAsync(string tab, object payload) => BusinessAuditSqlServerHttpApiTests.Id(
-            await FeatureHttpTestRequests.CreateAsync(admin,
+            await http.CreateButtonAsync(admin,
                 http.Organization(tab, "create", "list.pageActions"), $"/api/organization/{tab}", payload));
 
         async Task<JsonElement> ReadFieldsAsync(ICP.Platform.Kernel.ModulePlanning.FeaturePoint point, string tab, string id) =>
@@ -220,7 +220,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
             var rule = new DataScopeRuleDto(ruleId, ruleId, null, ruleId, true, resourceKey,
                 new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
                 [new("Subject_" + ruleId, "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
                 fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
                 HttpMethod.Put, "/api/authorization/data-scope/rules/" + ruleId, rule);
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());

@@ -20,7 +20,7 @@ public sealed class DataScopeTemporalSqlServerTests
         var http = new FeatureHttpTestRequests(fixture);
         var read = http.Organization("persons");
         using var ordinary = (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "TemporalScope", "日期范围", "temporal-scope", "日期读取者", read)).Client;
-        var person = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
+        var person = await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "TEMPORAL-SCOPE", ENAME = "日期范围目标", EmploymentStatus = "Active", IsEnabled = true,
                 BirthDate = "2000-02-29", EmploymentStartedAt = "2030-01-02T09:02:03" });
         var personId = BusinessAuditSqlServerHttpApiTests.Id(person);
@@ -60,7 +60,7 @@ public sealed class DataScopeTemporalSqlServerTests
 
         async Task SaveAsync(DataScopeRuleDto value, HttpStatusCode expected)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Temporal", value);
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Temporal", value);
             Assert.Equal(expected, response.StatusCode);
         }
         async Task AssertDeniedAsync()

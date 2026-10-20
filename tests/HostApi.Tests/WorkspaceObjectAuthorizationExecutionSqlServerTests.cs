@@ -120,7 +120,7 @@ public sealed class WorkspaceObjectAuthorizationExecutionSqlServerTests
             var rule = new DataScopeRuleDto(key, key, null, "最后Folder管理资格", true, "workspace.folder",
                 new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(targets[0].Id)),
                 [new(key + "Subject", "all", null, 0, actions)], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + key, rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }

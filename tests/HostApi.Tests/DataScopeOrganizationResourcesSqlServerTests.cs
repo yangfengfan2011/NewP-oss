@@ -26,13 +26,13 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin,
             "ScopeActionSwitch234", "组织动作开关", "scope-action-switch-234", "组织动作开关用户", features);
         actor.Client.Dispose();
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "SWITCH-234-C", ENAME = "开关公司", SortOrder = "0100" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
             new { CompanyId = company, ECODE = "SWITCH-234-D", ENAME = "开关部门", SortOrder = "0100" }));
-        var position = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var position = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("positions", "create", "list.pageActions"), "/api/organization/positions",
             new { ENAME = "开关岗位" }));
         var targets = new[] { (Tab: "companies", Resource: "organization.company", Id: company),
@@ -156,7 +156,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
             var rule = new DataScopeRuleDto(id, id, null, id, true, resource,
                 new("attribute", field, "equal", JsonSerializer.SerializeToElement(value)),
                 [new("Subject_" + id, "all", null, 0, actions)], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + id, rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
@@ -193,7 +193,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         var company = await CreateAsync("companies", new { ECODE = "SCOPE-C", ENAME = "范围公司", SortOrder = "0100" });
         var department = await CreateAsync("departments", new { CompanyId = company, ECODE = "SCOPE-D", ENAME = "范围部门", SortOrder = "0100" });
         var position = await CreateAsync("positions", new { ENAME = "范围岗位", Description = "资源授权" });
-        var person = await FeatureHttpTestRequests.CreateAsync(admin,
+        var person = await http.CreateButtonAsync(admin,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "SCOPE-FOUR", ENAME = "四资源对照", EmploymentStatus = "Active", IsEnabled = true });
         var targets = new[]
@@ -238,10 +238,10 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         var incompatible = new DataScopeRuleDto("Scope234InvalidCompanyField", "Scope234InvalidCompanyField",
             null, "公司不可用部门字段", true, "organization.company",
             new("attribute", "CompanyId", "equal", JsonSerializer.SerializeToElement(company)), [], []);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, ruleSave, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, ruleSave, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope234InvalidCompanyField", incompatible))
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, ruleSave, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, ruleSave, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope234DepartmentCompanyField",
             incompatible with { Id = "Scope234DepartmentCompanyField", RootId = "Scope234DepartmentCompanyField",
                 ResourceKey = "organization.department" }))
@@ -259,7 +259,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
                 target.Resource, new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(target.Id)),
                 [new("Subject234_" + target.Tab, "all", null, 0,
                     new Dictionary<string, string> { ["read"] = "deny" })], []);
-            using (var response = await FeatureHttpTestRequests.SendAsync(admin, ruleSave, HttpMethod.Put,
+            using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, ruleSave, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + ruleId, rule))
                 Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
             using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, path))
@@ -325,7 +325,7 @@ public sealed class DataScopeOrganizationResourcesSqlServerTests
         }
 
         async Task<string> CreateAsync(string tab, object payload) => BusinessAuditSqlServerHttpApiTests.Id(
-            await FeatureHttpTestRequests.CreateAsync(ordinary, http.Organization(tab, "create", "list.pageActions"),
+            await http.CreateButtonAsync(ordinary, http.Organization(tab, "create", "list.pageActions"),
                 "/api/organization/" + tab, payload));
     }
 }

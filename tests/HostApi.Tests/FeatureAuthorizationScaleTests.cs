@@ -25,7 +25,7 @@ public sealed class FeatureAuthorizationScaleTests
             .Select(index => (JsonNode)FeatureCatalogHostLifecycleTests.Declaration($"scale-{index:D5}", "navigation")).ToArray());
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync(declarations);
         var candidate = await GitAsync(fixture.RepositoryRoot, "rev-parse", "HEAD");
-        var http = new FeatureHttpTestRequests(fixture.Catalog);
+        var http = new FeatureHttpTestRequests(fixture);
         var positions = fixture.Catalog.Where(point => point.ModuleId == "Example" && point.Key.StartsWith("scale-", StringComparison.Ordinal)).Select(point => point.Position).ToArray();
         Assert.Equal(extraPoints, positions.Length);
         var roles = Enumerable.Range(0, ordinaryRoles).Select(index => new ScaleRole("Role_" + Guid.NewGuid().ToString("N"), $"scale-{index:D3}", $"规模角色 {index:D3}")).ToArray();
@@ -50,9 +50,9 @@ public sealed class FeatureAuthorizationScaleTests
             seed.Parameters.AddWithValue("@positions", JsonSerializer.Serialize(positions));
             Assert.Equal(checked(extraPoints * ordinaryRoles), await seed.ExecuteNonQueryAsync());
         }
-        var account = await FeatureHttpTestRequests.CreateAsync(fixture.Administrator, http.Identity("create"), "/api/identity/accounts", new { ECODE = "scale-user", ENAME = "规模授权账号" });
+        var account = await http.CreateButtonAsync(fixture.Administrator, http.Identity("create"), "/api/identity/accounts", new { ECODE = "scale-user", ENAME = "规模授权账号" });
         var userId = account.GetProperty("account").GetProperty("eid").GetString()!;
-        using (var assignment = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, http.Role("userRoles"), HttpMethod.Put,
+        using (var assignment = await http.SendButtonAsync(fixture.Administrator, http.Role("userRoles"), HttpMethod.Put,
             $"/api/authorization/users/{userId}/roles", new { RoleCodes = roles.Select(role => role.Code).ToArray() })) Assert.Equal(HttpStatusCode.NoContent, assignment.StatusCode);
         var before = await CountsAsync(fixture);
         Assert.Equal(extraPoints * ordinaryRoles + fixture.Catalog.Count, before.Grants);
@@ -114,7 +114,7 @@ public sealed class FeatureAuthorizationScaleTests
         var requested = positions.Where(position => !removed.Contains(position)).Skip(1).ToArray();
         measurements.Add(await FeatureSqlMeasurement.CaptureAsync(fixture, "role-save", async () =>
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, http.Workbench("authorization.workbench.save"), HttpMethod.Put,
+            using var response = await http.SendButtonAsync(fixture.Administrator, http.Workbench("authorization.workbench.save"), HttpMethod.Put,
                 $"/api/authorization/workbench/roles/{roles[0].Id}", new { positions = requested });
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }));

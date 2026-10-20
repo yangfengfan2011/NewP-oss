@@ -26,7 +26,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Cost311Manager", "角色成本主体",
             "cost311-manager", "角色成本普通主体", read, member);
         using var ordinary = actor.Client;
-        var prototype = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles",
+        var prototype = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles",
             new { Code = "COST311-R000", Name = "COST311 Role 000" });
         var prototypeId = prototype.GetProperty("id").GetString()!;
         string connectionString;
@@ -49,7 +49,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
                     ["ECODE"] = "COST311-T" + index.ToString("000"), ["NormalizedECODE"] = "COST311-T" + index.ToString("000"), ["ENAME"] = "COST311 Target " + index.ToString("000") });
             await db.SaveChangesAsync();
         }
-        using (var assigned = await FeatureHttpTestRequests.SendAsync(admin, member, HttpMethod.Put,
+        using (var assigned = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, member, HttpMethod.Put,
             "/api/authorization/users/" + actor.AccountId + "/roles", new { RoleCodes = codes }))
             Assert.Equal(HttpStatusCode.NoContent, assigned.StatusCode);
         var stage = Environment.GetEnvironmentVariable("NEWP_AUTHORIZATION_EXECUTION_COST_STAGE") ?? "candidate";

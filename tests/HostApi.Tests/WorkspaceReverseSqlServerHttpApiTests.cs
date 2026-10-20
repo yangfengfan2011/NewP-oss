@@ -299,7 +299,7 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
     {
         var rule = new DataScopeRuleDto(key, key, null, key, true, resource, new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
             [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-        using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
+        using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 

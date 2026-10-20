@@ -22,9 +22,9 @@ public sealed class IdentityRoleAuthorizationExecutionSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Object311Formal", "正式对象授权主体",
             "object311-formal", "普通正式对象授权主体", accountFeature, roleFeature);
         using var ordinary = actor.Client;
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles",
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles",
             new { Code = "Object311TargetRole", Name = "正式授权角色" });
-        var account = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
+        var account = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts",
             new { ECODE = "object311-formal-target", ENAME = "正式授权账号" });
         foreach (var (resource, id, feature, tag) in new[]
         {
@@ -81,9 +81,9 @@ public sealed class IdentityRoleAuthorizationExecutionSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Object311Manager", "对象授权主体",
             "object311-manager", "普通对象授权主体", manageAccount, manageRole);
         using var ordinary = actor.Client;
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles",
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles",
             new { Code = "OBJECT311", Name = "授权目标角色" });
-        var account = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
+        var account = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts",
             new { ECODE = "object311-target", ENAME = "授权目标账号" });
         var observations = new List<(string Resource, HttpStatusCode Status)>();
         foreach (var (resource, id, feature) in new[]

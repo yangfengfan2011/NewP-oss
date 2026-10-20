@@ -55,12 +55,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var candidateRule = new ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto("StructureCandidate", "StructureCandidate", null, "逐候选", true, "workspace.folder", new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("深层保密名称")),
             [new("StructureCandidateAll", "all", null, 0, new Dictionary<string, string> { ["create"] = "deny" })], []);
         var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/StructureCandidate", candidateRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/StructureCandidate", candidateRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var denied = await Send(fixture, ordinary, "workspace.folder.pasteFolderStructure", "folders/copy-structure", input)) await Problem(denied, HttpStatusCode.Forbidden, "Workspace.FolderCreateDenied");
         Assert.Equal(foldersBefore, Snapshot(await Rows(fixture, "WorkspaceFolder"))); Assert.Equal(linksBefore, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
         // 新根read拒绝；不能因结果不可读而否定已完成的create。
         var readRule = candidateRule with { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement(input.name)), Subjects = [new("StructureCandidateAll", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })] };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/StructureCandidate", readRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/StructureCandidate", readRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         excludedReads.Active = true;
         try { await Command(fixture, ordinary, "workspace.folder.pasteFolderStructure", "/api/workspace/content/folders/copy-structure", input); }
         finally { excludedReads.Active = false; }
@@ -206,10 +206,10 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var input = new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = personalPosition, name = "私有新副本" };
         var candidateRule = new ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto("ShallowCandidate", "ShallowCandidate", null, "新候选", true, "workspace.folder", new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement(input.name)),
             [new("ShallowCandidateAll", "all", null, 0, new Dictionary<string, string> { ["create"] = "deny" })], []);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/ShallowCandidate", candidateRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/ShallowCandidate", candidateRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var denied = await Send(fixture, ordinary, "workspace.folder.pasteFolderStructure", "folders/copy-structure", input)) await Problem(denied, HttpStatusCode.Forbidden, "Workspace.FolderCreateDenied");
         var readRule = candidateRule with { Subjects = [new("ShallowCandidateAll", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })] };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/ShallowCandidate", readRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/ShallowCandidate", readRule)) Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var result = await Command(fixture, ordinary, "workspace.folder.pasteFolderStructure", "/api/workspace/content/folders/copy-structure", input); Assert.True(result.GetProperty("succeeded").GetBoolean()); Assert.False(result.TryGetProperty("id", out _));
         var copy = Assert.Single(await Rows(fixture, "WorkspaceFolder"), row => Equals(row["ENAME"], input.name)); Assert.Equal(personalPosition.SpaceId, copy["OriginSpaceId"]);
         var newChild = Assert.Single(await Rows(fixture, "WorkspaceFolder"), row => Equals(row["ENAME"], "跨空间后代") && !Equals(row["EID"], sourceChildId));

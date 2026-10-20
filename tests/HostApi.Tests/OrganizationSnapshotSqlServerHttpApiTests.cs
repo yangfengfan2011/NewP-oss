@@ -34,7 +34,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var canonical = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var canonical = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "PERSON-ALIAS", ENAME = "人员别名", EmploymentStatus = "Active", IsEnabled = true }));
         var alias = canonical.ToLowerInvariant();
         Assert.False(string.Equals(canonical, alias, StringComparison.Ordinal));
@@ -43,12 +43,12 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         HttpResponseMessage response;
         if (binding)
         {
-            var account = (await CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "canonical-target", ENAME = "规范标识账号" })).GetProperty("account");
+            var account = (await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "canonical-target", ENAME = "规范标识账号" })).GetProperty("account");
             accountId = account.GetProperty("eid").GetString()!;
-            response = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+            response = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
                 $"/api/organization/persons/{alias}/user-binding", new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "实际标识" });
         }
-        else response = await SendAsync(admin, http.Organization("persons", "disable", "list.rowActions"), HttpMethod.Put,
+        else response = await http.SendButtonAsync(admin, http.Organization("persons", "disable", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{alias}/status/disable", new { isEnabled = false, reason = "实际标识" });
         using (response)
         {
@@ -91,7 +91,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         object data;
         if (model == "Department")
         {
-            var company = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+            var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
                 "/api/organization/companies", new { ECODE = "ALIAS-PARENT", ENAME = "部门所属公司", SortOrder = "01" }));
             data = new { ECODE = "ALIAS", ENAME = "无引用部门", CompanyId = company, SortOrder = "01" };
         }
@@ -102,7 +102,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
             "Person" => new { PersonNo = "ALIAS", ENAME = "未绑定人员", EmploymentStatus = "Active", IsEnabled = true },
             _ => throw new ArgumentOutOfRangeException(nameof(model))
         };
-        var canonical = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization(tab, "create", "list.pageActions"),
+        var canonical = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization(tab, "create", "list.pageActions"),
             $"/api/organization/{tab}", data));
         var alias = canonical.ToLowerInvariant();
         Assert.False(string.Equals(canonical, alias, StringComparison.Ordinal));
@@ -152,13 +152,13 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
             "/api/organization/companies", new { ECODE = "DIRECT", ENAME = "直接删除公司", SortOrder = "01" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = "DIRECT", ENAME = "直接删除部门", CompanyId = company, SortOrder = "01" }));
-        var position = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("positions", "create", "list.pageActions"),
+        var position = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("positions", "create", "list.pageActions"),
             "/api/organization/positions", new { ENAME = "直接删除岗位" }));
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "DIRECT", ENAME = "直接删除人员", EmploymentStatus = "Active", IsEnabled = true }));
         await using var scope = fixture.Services.CreateAsyncScope();
         var executors = scope.ServiceProvider.GetServices<IStandardCrudConditionalDeleteExecutor>().ToDictionary(e => e.ResourceKey);
@@ -180,7 +180,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
             services => services.AddSingleton<OrganizationCache, FailedPublicationCache>());
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(
             admin,
             http.Organization("companies", "create", "list.pageActions"),
             "/api/organization/companies",
@@ -217,21 +217,21 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddSingleton<OrganizationCache, FailedPublicationCache>());
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "FAIL", ENAME = "提交后故障", EmploymentStatus = "Active", IsEnabled = true }));
         var cache = (FailedPublicationCache)fixture.Services.GetRequiredService<OrganizationCache>();
         HttpResponseMessage response;
         if (binding)
         {
-            var account = (await CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "failure", ENAME = "账号" })).GetProperty("account");
+            var account = (await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "failure", ENAME = "账号" })).GetProperty("account");
             cache.Fail = true;
-            response = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+            response = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
                 $"/api/organization/persons/{person}/user-binding", new { accountEid = account.GetProperty("eid").GetString(), expectedRevision = account.GetProperty("revision").GetInt64(), reason = "发布失败" });
         }
         else
         {
             cache.Fail = true;
-            response = await SendAsync(admin, http.Organization("persons", "disable", "list.rowActions"), HttpMethod.Put,
+            response = await http.SendButtonAsync(admin, http.Organization("persons", "disable", "list.rowActions"), HttpMethod.Put,
                 $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "发布失败" });
         }
         using (response)
@@ -256,12 +256,12 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
             "/api/organization/companies", new { ECODE = "LOAD", ENAME = "装载公司", SortOrder = "01" }));
         using (var disabled = await SendAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/companies/{company}", new { IsEnabled = false }))
             Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "LOAD", ENAME = "装载人员", EmploymentStatus = "Active", IsEnabled = false }));
         await using var sourceScope = fixture.Services.CreateAsyncScope();
         var connection = sourceScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.GetConnectionString()!;
@@ -322,19 +322,19 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
         var cache = fixture.Services.GetRequiredService<OrganizationCache>();
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "BOUND", ENAME = "准备阶段人员", EmploymentStatus = "Active", IsEnabled = true }));
-        var account = (await CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "bound", ENAME = "账号" })).GetProperty("account");
+        var account = (await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "bound", ENAME = "账号" })).GetProperty("account");
         var accountId = account.GetProperty("eid").GetString()!;
         var beforeBinding = await cache.ReadAsync();
         fixture.Fault.Mode = "commit";
-        using (var failed = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+        using (var failed = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{person}/user-binding", new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "应回滚" }))
             Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
         fixture.Fault.Mode = "";
         Assert.Same(beforeBinding, await cache.ReadAsync());
         Assert.Null((await cache.ReadAsync()).Persons[person]["AccountEID"]);
-        using var binding = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+        using var binding = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{person}/user-binding", new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "正式绑定" });
         Assert.True(binding.StatusCode == HttpStatusCode.OK, await binding.Content.ReadAsStringAsync());
         var bound = await cache.ReadAsync();
@@ -343,9 +343,9 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         Assert.Equal("正式绑定", bound.Persons[person]["AccountBindingReason"]);
         Assert.Equal(fixture.ActorId, bound.Persons[person]["AccountBoundBy"]);
         Assert.Null(bound.Persons[person]["CompanyId"]);
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
             "/api/organization/companies", new { ECODE = "BOUND", ENAME = "绑定人员公司", SortOrder = "01" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = "BOUND", ENAME = "绑定人员部门", CompanyId = company, SortOrder = "01" }));
         using (var assigned = await SendAsync(admin, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{person}", new { CompanyId = company, DepartmentId = department }))
@@ -355,7 +355,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         Assert.Equal(person, assignedSnapshot.PersonByAccount[accountId]);
         Assert.Equal("正式绑定", assignedSnapshot.Persons[person]["AccountBindingReason"]);
         fixture.Fault.Mode = "commit";
-        using (var failed = await SendAsync(admin, http.Organization("persons", "disable", "list.rowActions"), HttpMethod.Put,
+        using (var failed = await http.SendButtonAsync(admin, http.Organization("persons", "disable", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "应回滚" }))
         {
             Assert.Equal(HttpStatusCode.ServiceUnavailable, failed.StatusCode);
@@ -366,7 +366,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         foreach (var enabled in new[] { false, true })
         {
             var action = enabled ? "enable" : "disable";
-            using var response = await SendAsync(admin, http.Organization("persons", action, "list.rowActions"), HttpMethod.Put,
+            using var response = await http.SendButtonAsync(admin, http.Organization("persons", action, "list.rowActions"), HttpMethod.Put,
                 $"/api/organization/persons/{person}/status/{action}", new { isEnabled = enabled, reason = "生命周期" });
             Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
             var snapshot = await cache.ReadAsync();
@@ -476,7 +476,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         Assert.True(initial.Persons.ContainsKey(person));
 
         async Task<string> Create(string tab, object data) => BusinessAuditSqlServerHttpApiTests.Id(
-            await CreateAsync(admin, http.Organization(tab, "create", "list.pageActions"), $"/api/organization/{tab}", data));
+            await http.CreateButtonAsync(admin, http.Organization(tab, "create", "list.pageActions"), $"/api/organization/{tab}", data));
         async Task Delete(string tab, string id)
         {
             using var response = await SendAsync(admin, http.Organization(tab, "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/{tab}/{id}");

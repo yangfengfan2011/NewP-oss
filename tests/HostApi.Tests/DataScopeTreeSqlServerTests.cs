@@ -64,7 +64,7 @@ public sealed class DataScopeTreeSqlServerTests
 
         async Task SaveAsync(DataScopeRuleDto value)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/Tree_Context", value);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
@@ -86,9 +86,9 @@ public sealed class DataScopeTreeSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Tree", "树裁决", "scope-tree", "树裁决者", people);
         using var ordinary = actor.Client;
         var create = http.Organization("persons", "create", "list.pageActions");
-        var allowedId = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin, create,
+        var allowedId = BusinessAuditSqlServerHttpApiTests.Id(await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create,
             "/api/organization/persons", new { PersonNo = "TREE-ALLOW", ENAME = "Tree Allowed", EmploymentStatus = "Active", IsEnabled = true }));
-        var deniedId = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin, create,
+        var deniedId = BusinessAuditSqlServerHttpApiTests.Id(await new FeatureHttpTestRequests(fixture).CreateButtonAsync(admin, create,
             "/api/organization/persons", new { PersonNo = "TREE-DENY", ENAME = "Tree Denied", EmploymentStatus = "Active", IsEnabled = true }));
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
         var read = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.read");
@@ -178,19 +178,19 @@ public sealed class DataScopeTreeSqlServerTests
             Subjects = [Subject("Tree_Independent", "deny", -100)],
             Children = []
         };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Independent", independent))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         await StatusAsync(allowedId, HttpStatusCode.NotFound);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Delete,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Delete,
             "/api/authorization/data-scope/rules/Scope_Independent"))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         await StatusAsync(allowedId, HttpStatusCode.OK);
 
-        using (var invalid = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var invalid = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Tree", root with { Children = [root with { ParentId = root.Id }] }))
             Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
-        using (var invalid = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var invalid = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/Scope_Tree", root with
             {
                 Children = [root.Children[0],
@@ -206,7 +206,7 @@ public sealed class DataScopeTreeSqlServerTests
             fixture.Fault.Mode = mode;
             try
             {
-                using var failed = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Delete,
+                using var failed = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Delete,
                     "/api/authorization/data-scope/rules/Scope_Tree");
                 Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
             }
@@ -215,7 +215,7 @@ public sealed class DataScopeTreeSqlServerTests
             Assert.Contains(kept.EnumerateArray(), item => item.GetProperty("id").GetString() == root.Id
                 && item.GetProperty("children").GetArrayLength() == 2);
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Delete,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Delete,
             "/api/authorization/data-scope/rules/Scope_Tree"))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var afterDelete = await FeatureHttpTestRequests.ReadAsync(admin, read, "/api/authorization/data-scope/rules");
@@ -233,7 +233,7 @@ public sealed class DataScopeTreeSqlServerTests
 
         async Task SaveAsync(DataScopeRuleDto rule)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/Scope_Tree", rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }

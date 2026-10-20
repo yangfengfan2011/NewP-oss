@@ -80,7 +80,7 @@ public sealed class WorkspaceReferenceExecutionSqlServerTests
             var rule = new ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto(key, key, null, key, true, "workspace.folder",
                 new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
                 [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { [action] = effect })], []);
-            using var saved = await FeatureHttpTestRequests.SendAsync(admin,
+            using var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
                 Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + key, rule);
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);

@@ -157,7 +157,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ContentReader", "内容读取", "content-reader", "内容读取账号", entry, create);
         using var ordinary = actor.Client;
         var grantSave = Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "authorization.dataScope.save");
-        await SaveRuleAsync(admin, grantSave, "HideParent", "EID", childId, new Dictionary<string, string> { ["read"] = "deny" });
+        await SaveRuleAsync(fixture, admin, grantSave, "HideParent", "EID", childId, new Dictionary<string, string> { ["read"] = "deny" });
         var filtered = await ListAsync(ordinary, entry, root, root.RootFolderId, "&pageSize=5&sortBy=Name&sortDirection=asc&fields=Name");
         Assert.Equal(26, filtered.GetProperty("total").GetInt32()); Assert.Equal(5, filtered.GetProperty("items").GetArrayLength());
         Assert.Equal("层01", filtered.GetProperty("items")[0].GetProperty("fields").GetProperty("Name").GetString());
@@ -191,13 +191,13 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Entry(fixture); var create = Create(fixture); var root = await InitializeAsync(admin, entry);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ContentWriter", "内容写入", "content-writer", "内容写入账号", entry, create);
         using var ordinary = actor.Client; var save = Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "authorization.dataScope.save");
-        await SaveRuleAsync(admin, save, "ParentNoEdit", "EID", root.RootFolderId, new Dictionary<string, string> { ["edit"] = "deny" });
+        await SaveRuleAsync(fixture, admin, save, "ParentNoEdit", "EID", root.RootFolderId, new Dictionary<string, string> { ["edit"] = "deny" });
         using var noEdit = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders", new { position = root, values = new { ENAME = "不允许编辑父级" } }); Assert.Equal(HttpStatusCode.Forbidden, noEdit.StatusCode);
-        await SaveRuleAsync(admin, save, "ParentNoEdit", "EID", "none", new Dictionary<string, string> { ["edit"] = "deny" });
-        await SaveRuleAsync(admin, save, "CandidateNoCreate", "ENAME", "拒绝创建", new Dictionary<string, string> { ["create"] = "deny" });
+        await SaveRuleAsync(fixture, admin, save, "ParentNoEdit", "EID", "none", new Dictionary<string, string> { ["edit"] = "deny" });
+        await SaveRuleAsync(fixture, admin, save, "CandidateNoCreate", "ENAME", "拒绝创建", new Dictionary<string, string> { ["create"] = "deny" });
         using var noCreate = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/folders", new { position = root, values = new { ENAME = "拒绝创建" } }); Assert.Equal(HttpStatusCode.Forbidden, noCreate.StatusCode);
         Assert.Equal((1, 0), await CountsAsync(fixture));
-        await SaveRuleAsync(admin, save, "CreatedUnreadable", "ENAME", "创建后不可读", new Dictionary<string, string> { ["read"] = "deny" });
+        await SaveRuleAsync(fixture, admin, save, "CreatedUnreadable", "ENAME", "创建后不可读", new Dictionary<string, string> { ["read"] = "deny" });
         var receipt = await CreateAsync(ordinary, create, root, "创建后不可读"); Assert.True(receipt.GetProperty("succeeded").GetBoolean()); Assert.Single(receipt.EnumerateObject());
         var hidden = await ListAsync(ordinary, entry, root, root.RootFolderId); Assert.Equal(0, hidden.GetProperty("total").GetInt32()); Assert.Equal((2, 1), await CountsAsync(fixture));
         using var absentGrant = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Post, "/api/workspace/content/folders", new { position = root, values = new { ENAME = "以read位置伪装创建" } }); Assert.Equal(HttpStatusCode.Forbidden, absentGrant.StatusCode);
@@ -339,7 +339,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using var ordinary = actor.Client;
         Assert.True(Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(root))).GetProperty("items").EnumerateArray()).GetProperty("hasChildren").GetBoolean());
         var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
-        await SaveRuleAsync(admin, save, "HiddenOnlyChild", "EID", child.GetProperty("id").GetString()!, new Dictionary<string, string> { ["read"] = "deny" });
+        await SaveRuleAsync(fixture, admin, save, "HiddenOnlyChild", "EID", child.GetProperty("id").GetString()!, new Dictionary<string, string> { ["read"] = "deny" });
         var visibleParent = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(root))).GetProperty("items").EnumerateArray());
         Assert.Equal(parent.GetProperty("linkId").GetString(), visibleParent.GetProperty("linkId").GetString()); Assert.False(visibleParent.GetProperty("hasChildren").GetBoolean());
         Assert.Empty((await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(parentPosition))).GetProperty("items").EnumerateArray());
@@ -388,10 +388,10 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using var scope = fixture.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         return (await db.Set<Dictionary<string, object?>>("WorkspaceFolder").CountAsync(), await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").CountAsync());
     }
-    private static async Task SaveRuleAsync(HttpClient admin, FeaturePoint save, string id, string field, string value, Dictionary<string, string> actions)
+    private static async Task SaveRuleAsync(BusinessAuditHostFixture fixture, HttpClient admin, FeaturePoint save, string id, string field, string value, Dictionary<string, string> actions)
     {
         var rule = new DataScopeRuleDto(id, id, null, id, true, "workspace.folder", new("attribute", field, "equal", JsonSerializer.SerializeToElement(value)), [new(id + "Subject", "all", null, 0, actions)], []);
-        using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + id, rule); Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + id, rule); Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
     private sealed class LinkInsertFault : DbCommandInterceptor
     {

@@ -19,7 +19,7 @@ public sealed class DataScopeExplanationSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin,
             "Explain", "权限分析", "explain-user", "分析用户", http.Organization("persons"), http.Organization("persons", "edit", "detail.pageActions"));
         using var user = actor.Client;
-        var record = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
+        var record = await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "EXPLAIN", ENAME = "权限分析记录", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(record);
         var endpoint = $"/api/authorization/data-scope/objects/organization.person/{id}";
@@ -31,7 +31,7 @@ public sealed class DataScopeExplanationSqlServerTests
             [new("ExplainChild", "ExplainRoot", "ExplainRoot", "子规则", true, "organization.person",
                 new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("权限分析记录")),
                 [new("ChildSubject", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow" })], [])]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, ruleSave, HttpMethod.Put,
+        using (var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, ruleSave, HttpMethod.Put,
             "/api/authorization/data-scope/rules/ExplainRoot", root))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var result = await Explain();

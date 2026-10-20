@@ -38,7 +38,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         var rule = new DataScopeRuleDto("WorkspacePartHidden315", "WorkspacePartHidden315", null, "组合候选创建后不可读", true,
             "part.part", new("attribute", "ECODE", "equal", JsonSerializer.SerializeToElement(body.values.ECODE)),
             [new("WorkspacePartHiddenSubject315", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/WorkspacePartHidden315", rule))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
@@ -198,7 +198,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         var rule = new DataScopeRuleDto(key, key, null, key, true, resource,
             new("attribute", field, "equal", JsonSerializer.SerializeToElement(value)),
             [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { [action] = opinion })], []);
-        using var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+        using var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/" + key, rule);
         Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
     }

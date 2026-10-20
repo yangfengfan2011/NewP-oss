@@ -86,7 +86,7 @@ public sealed class ExampleExecutionDeclarationSqlServerTests
                 [condition, new("attribute", "CreatedBy", "equal", JsonSerializer.SerializeToElement(actor.AccountId))]);
             var rule = new DataScopeRuleDto(key, key, null, suffix, true, "example.record", condition,
                 [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { [action] = "deny" })], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
             await Status(response, HttpStatusCode.NoContent);
         }
     }

@@ -267,7 +267,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
         var rule = new DataScopeRuleDto("StructureCreate298", "StructureCreate298", null, "内部新候选拒绝", true, "workspace.folder",
             new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement(a.Name)),
             [new("StructureCreateAll298", "all", null, 0, new Dictionary<string, string> { ["create"] = "deny" })], []);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/StructureCreate298", rule))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var beforeDeniedCreate = await TransactionSnapshotAsync(fixture);

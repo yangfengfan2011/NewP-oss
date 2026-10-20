@@ -38,7 +38,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests(ITestOutp
                 var leaf = await CreateDepartmentAsync(admin, http, prepared.Company, "LEAF-" + index, branch);
                 leaves.Add(leaf);
                 for (var person = 0; person < 2; person++)
-                    persons.Add(BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+                    persons.Add(BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
                         "/api/organization/persons", new { PersonNo = $"COST-{index}-{person}", ENAME = "局部维护人员", CompanyId = prepared.Company,
                             DepartmentId = leaf, EmploymentStatus = "Active", IsEnabled = true })));
             }

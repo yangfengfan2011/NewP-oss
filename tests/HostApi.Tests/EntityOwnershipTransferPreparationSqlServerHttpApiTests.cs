@@ -25,11 +25,11 @@ public sealed class EntityOwnershipTransferPreparationSqlServerHttpApiTests
         using var ownerClient = owner.Client;
         var target = await CreateAsync(fixture, ownerClient, position, "Part", "parts", "createPart", "PREPARE-TRANSFER-PRIVATE");
         var http = new FeatureHttpTestRequests(fixture);
-        var recipient = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
+        var recipient = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts",
             new { ECODE = "prepare-disabled-recipient", ENAME = "停用且无人员部门的接收人" });
         var account = recipient.GetProperty("account");
         var recipientId = account.GetProperty("eid").GetString()!;
-        using (var disabled = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("disable"), HttpMethod.Put,
+        using (var disabled = await http.SendButtonAsync(admin, http.Identity("disable"), HttpMethod.Put,
                    $"/api/identity/accounts/{recipientId}/status/disable", new { TargetStatus = "Disabled",
                        ExpectedRevision = account.GetProperty("revision").GetInt64(), Reason = "验证转交不附加账号启用条件" }))
             await ReadOkAsync(disabled);

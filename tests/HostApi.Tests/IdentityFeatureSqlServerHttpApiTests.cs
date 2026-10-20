@@ -27,9 +27,14 @@ public sealed class IdentityFeatureSqlServerHttpApiTests
             Assert.NotEqual(list.Position, detail.Position);
             Assert.Equal(list.BehaviorKey, detail.BehaviorKey);
         }
-        using var missing = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "missing", ENAME = "缺位置" });
+        using var missingRequest = new HttpRequestMessage(HttpMethod.Post, "/api/identity/accounts")
+        {
+            Content = JsonContent.Create(new { ECODE = "missing", ENAME = "缺位置" })
+        };
+        missingRequest.Headers.Add("X-NewP-Button", http.Declaration(create.BehaviorKey, create).Id);
+        using var missing = await admin.SendAsync(missingRequest);
         Assert.Equal(HttpStatusCode.Forbidden, missing.StatusCode);
-        using var wrong = await SendAsync(admin, http.Identity(), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "wrong", ENAME = "错位置" });
+        using var wrong = await SendAsync(admin, http.Identity(), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "wrong", ENAME = "错位置" }, http.Declaration(create.BehaviorKey, create));
         Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
         var created = await CreateAsync(admin, create, "/api/identity/accounts", new { ECODE = "identity-position", ENAME = "位置账号" }, http.Declaration("identity.account.create", create));
         var account = created.GetProperty("account");
@@ -41,7 +46,7 @@ public sealed class IdentityFeatureSqlServerHttpApiTests
                 dataAccess: http.Declaration("identity.account.read", http.Identity()));
             Assert.Equal(HttpStatusCode.OK, read.StatusCode);
         }
-        using var opposite = await SendAsync(admin, http.Identity("disable"), HttpMethod.Put, $"/api/identity/accounts/{id}/status/disable",
+        using var opposite = await http.SendButtonAsync(admin, http.Identity("disable"), HttpMethod.Put, $"/api/identity/accounts/{id}/status/disable",
             new { TargetStatus = "Enabled", ExpectedRevision = revision, Reason = "反向" });
         Assert.Equal(HttpStatusCode.BadRequest, opposite.StatusCode);
         var problem = await opposite.Content.ReadFromJsonAsync<JsonElement>();
@@ -68,7 +73,7 @@ public sealed class IdentityFeatureSqlServerHttpApiTests
             create);
         using (actor.Client)
         {
-            using var guarded = await SendAsync(actor.Client, create, HttpMethod.Post, "/api/identity/accounts", new { ECODE = "guarded", ENAME = "不应扩大管理权" });
+            using var guarded = await new FeatureHttpTestRequests(fixture).SendButtonAsync(actor.Client, create, HttpMethod.Post, "/api/identity/accounts", new { ECODE = "guarded", ENAME = "不应扩大管理权" });
             Assert.Equal(HttpStatusCode.Forbidden, guarded.StatusCode);
         }
     }

@@ -123,7 +123,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             var rule = new DataScopeRuleDto(key, key, null, key, true, "document.document",
                 new("attribute", "ECODE", "equal", JsonSerializer.SerializeToElement(code)),
                 [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { [action] = opinion })], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, item => item.BehaviorKey == "authorization.dataScope.save"),
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Assert.Single(fixture.FeatureCatalog, item => item.BehaviorKey == "authorization.dataScope.save"),
                 HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }

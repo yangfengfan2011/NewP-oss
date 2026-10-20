@@ -47,7 +47,7 @@ public sealed class LinkQueryDisplaySqlServerHttpApiTests
             Assert.True(created.IsSuccessStatusCode, await created.Content.ReadAsStringAsync());
         }
         var http = new FeatureHttpTestRequests(fixture);
-        var person = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "LINK-DISPLAY", ENAME = "日期端点", BirthDate = "2000-02-29", EmploymentStatus = "Active", IsEnabled = true });
         var personId = person.GetProperty("fields").GetProperty("EID").GetString()!;
         using (var scope = fixture.Services.CreateScope())

@@ -16,8 +16,8 @@ public sealed class LegacyAuthorizationCutoverTests
     {
         var declarations = new JsonArray(FeatureCatalogHostLifecycleTests.Declaration("cutover", "navigation"));
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync(declarations);
-        var http = new FeatureHttpTestRequests(fixture.Catalog);
-        var role = await FeatureHttpTestRequests.CreateAsync(fixture.Administrator, http.Role("create"),
+        var http = new FeatureHttpTestRequests(fixture);
+        var role = await http.CreateButtonAsync(fixture.Administrator, http.Role("create"),
             "/api/authorization/roles", new { Code = "cutover-role", Name = "切换角色" });
         var roleId = role.GetProperty("id").GetString()!;
         using var ordinary = await PrepareBusinessAndOrdinaryAsync(fixture, http);
@@ -77,19 +77,19 @@ public sealed class LegacyAuthorizationCutoverTests
     private static async Task<HttpClient> PrepareBusinessAndOrdinaryAsync(FeatureCatalogHostFixture fixture, FeatureHttpTestRequests http)
     {
         var admin = fixture.Administrator;
-        var company = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+        var company = await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
             "/api/organization/companies", new { ECODE = "CUT", ENAME = "保留公司", SortOrder = "0100" });
-        var department = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
+        var department = await http.CreateButtonAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = "CUT-D", ENAME = "保留部门", CompanyId = company.GetProperty("fields").GetProperty("EID").GetString(), SortOrder = "0100" });
-        var person = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "CUT-P", ENAME = "保留人员", CompanyId = company.GetProperty("fields").GetProperty("EID").GetString(),
                 DepartmentId = department.GetProperty("fields").GetProperty("EID").GetString(), EmploymentStatus = "Active", IsEnabled = true });
-        var account = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "cutover-user", ENAME = "切换用户" });
+        var account = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "cutover-user", ENAME = "切换用户" });
         var userId = account.GetProperty("account").GetProperty("eid").GetString();
-        using (var assigned = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put,
+        using (var assigned = await http.SendButtonAsync(admin, http.Role("userRoles"), HttpMethod.Put,
             $"/api/authorization/users/{userId}/roles", new { RoleCodes = new[] { "cutover-role" } }))
             Assert.Equal(HttpStatusCode.NoContent, assigned.StatusCode);
-        using (var binding = await FeatureHttpTestRequests.SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+        using (var binding = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{BusinessAuditSqlServerHttpApiTests.Id(person)}/user-binding", new { accountEid = userId, expectedRevision = account.GetProperty("account").GetProperty("revision").GetInt64(), reason = "准备切换主体" }))
             Assert.Equal(HttpStatusCode.OK, binding.StatusCode);
         var password = account.GetProperty("temporaryCredential").GetString()!;

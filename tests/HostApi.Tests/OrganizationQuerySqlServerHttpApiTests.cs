@@ -38,9 +38,9 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
         var leaf = await Create("departments", new { ECODE = "LEAF", ENAME = "当前部门", CompanyId = company, ParentDepartmentId = middle, SortOrder = "01" });
         var position = await Create("positions", new { ENAME = "岗位", Description = "内部完整备注" });
         var person = await Create("persons", new { PersonNo = "QUERY", ENAME = "查询人员", BirthDate = "1990-02-03", EmploymentStatus = "Active", IsEnabled = true, CompanyId = company, DepartmentId = leaf, PositionId = position });
-        var account = (await CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "query-bound", ENAME = "账号名称" })).GetProperty("account");
+        var account = (await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "query-bound", ENAME = "账号名称" })).GetProperty("account");
         var accountId = account.GetProperty("eid").GetString()!;
-        using (var bound = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+        using (var bound = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{person}/user-binding", new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "查询绑定" }))
             Assert.Equal(HttpStatusCode.OK, bound.StatusCode);
         var query = fixture.Services.GetRequiredService<IOrganizationQuery>();
@@ -165,7 +165,7 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
         Assert.Contains(counter.Commands, sql => sql.Contains("[Company]") && sql.Contains("OFFSET"));
 
         async Task<string> Create(string resource, object values) => BusinessAuditSqlServerHttpApiTests.Id(
-            await CreateAsync(admin, http.Organization(resource, "create", "list.pageActions"), "/api/organization/" + resource, values));
+            await http.CreateButtonAsync(admin, http.Organization(resource, "create", "list.pageActions"), "/api/organization/" + resource, values));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "摘要缓存读取故障不得被普通附属摘要降级吞掉")]
@@ -178,7 +178,7 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
         });
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "SUMMARY", ENAME = "摘要人员", EmploymentStatus = "Active", IsEnabled = true }));
         ((InvalidatingQuery)fixture.Services.GetRequiredService<IOrganizationQuery>()).InvalidateAfterRead = true;
         using var response = await SendAsync(admin, http.Organization("persons"), HttpMethod.Get, $"/api/organization/persons/{person}");
@@ -191,7 +191,7 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddSingleton<OrganizationCache, PausedRecoveryCache>());
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "AUDIT", ENAME = "审计人员", EmploymentStatus = "Active", IsEnabled = true }));
         var page = await ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={person}");
         var id = Assert.Single(page.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();

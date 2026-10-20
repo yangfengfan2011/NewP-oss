@@ -23,18 +23,23 @@ public sealed class RoleFeatureSqlServerHttpApiTests
             "普通角色创建者",
             create);
         using var ordinary = actor.Client;
-        var role = await FeatureHttpTestRequests.CreateAsync(ordinary, create, "/api/authorization/roles", new { Code = "GlobalCreated", Name = "普通主体全局创建" });
-        using var wrongOperation = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Put,
+        var role = await requests.CreateButtonAsync(ordinary, create, "/api/authorization/roles", new { Code = "GlobalCreated", Name = "普通主体全局创建" });
+        using var wrongOperation = await requests.SendButtonAsync(ordinary, create, HttpMethod.Put,
             $"/api/authorization/roles/{role.GetProperty("id").GetString()}", new { Name = "不可编辑" });
         Assert.Equal(HttpStatusCode.Forbidden, wrongOperation.StatusCode);
         var roleRoute = $"/api/authorization/roles/{role.GetProperty("id").GetString()}";
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit"), HttpMethod.Put, roleRoute, new { Name = "未授编辑" }), HttpStatusCode.Forbidden);
-        await ExpectAsync(ordinary.PostAsJsonAsync("/api/authorization/roles", new { Code = "MissingPosition", Name = "缺少位置" }), HttpStatusCode.Forbidden);
+        await ExpectAsync(requests.SendButtonAsync(ordinary, requests.Role("edit"), HttpMethod.Put, roleRoute, new { Name = "未授编辑" }), HttpStatusCode.Forbidden);
+        using var missingPosition = new HttpRequestMessage(HttpMethod.Post, "/api/authorization/roles")
+        {
+            Content = JsonContent.Create(new { Code = "MissingPosition", Name = "缺少位置" })
+        };
+        missingPosition.Headers.Add("X-NewP-Button", requests.Declaration(create.BehaviorKey, create).Id);
+        await ExpectAsync(ordinary.SendAsync(missingPosition), HttpStatusCode.Forbidden);
         await requests.GrantAsync(admin, actor.RoleId, create, requests.Role("edit"));
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit"), HttpMethod.Put, roleRoute, new { Name = "获授全局编辑", IsEnabled = true }), HttpStatusCode.OK);
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit", "detail.pageActions"), HttpMethod.Put, roleRoute, new { Name = "另一位置" }), HttpStatusCode.Forbidden);
+        await ExpectAsync(requests.SendButtonAsync(ordinary, requests.Role("edit"), HttpMethod.Put, roleRoute, new { Name = "获授全局编辑", IsEnabled = true }), HttpStatusCode.OK);
+        await ExpectAsync(requests.SendButtonAsync(ordinary, requests.Role("edit", "detail.pageActions"), HttpMethod.Put, roleRoute, new { Name = "另一位置" }), HttpStatusCode.Forbidden);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit"), HttpMethod.Delete, roleRoute), HttpStatusCode.Forbidden);
-        using var protectedRole = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
+        using var protectedRole = await requests.SendButtonAsync(ordinary, create, HttpMethod.Post,
             "/api/authorization/roles", new { Code = "LocalAdmin", Name = "不可创建" });
         Assert.Equal(HttpStatusCode.BadRequest, protectedRole.StatusCode);
         var problem = await protectedRole.Content.ReadFromJsonAsync<JsonElement>();
@@ -51,18 +56,18 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         var roles = new Dictionary<string, string>();
         foreach (var code in new[] { "ManagerA", "ManagerB", "TargetRead" })
         {
-            var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = code, Name = code });
+            var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = code, Name = code });
             roles[code] = role.GetProperty("id").GetString()!;
         }
         var member = http.Role("userRoles");
         await http.GrantAsync(admin, roles["ManagerA"], member);
         await http.GrantAsync(admin, roles["ManagerB"], member);
         await http.GrantAsync(admin, roles["TargetRead"], http.Workbench("authorization.workbench.read"));
-        var manager = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "member-manager", ENAME = "普通成员管理员" });
-        var target = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "member-target", ENAME = "另一普通账号" });
+        var manager = await http.CreateButtonAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "member-manager", ENAME = "普通成员管理员" });
+        var target = await http.CreateButtonAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "member-target", ENAME = "另一普通账号" });
         var managerId = manager.GetProperty("account").GetProperty("eid").GetString();
         var targetId = target.GetProperty("account").GetProperty("eid").GetString();
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(admin, member, HttpMethod.Put, $"/api/authorization/users/{managerId}/roles", new { RoleCodes = new[] { "ManagerA", "ManagerB" } }), HttpStatusCode.NoContent);
+        await ExpectAsync(new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, member, HttpMethod.Put, $"/api/authorization/users/{managerId}/roles", new { RoleCodes = new[] { "ManagerA", "ManagerB" } }), HttpStatusCode.NoContent);
         await HttpTestActors.PrepareOrganizationAsync(admin, http, manager.GetProperty("account"));
         await HttpTestActors.PrepareOrganizationAsync(admin, http, target.GetProperty("account"));
         using var ordinary = await fixture.LoginAsync("member-manager", manager.GetProperty("temporaryCredential").GetString()!);
@@ -72,16 +77,16 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Get, "/api/authorization/roles/query?pageIndex=1&pageSize=1",
             dataAccess: http.Declaration("authorization.role.list", member)), HttpStatusCode.OK);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Get, targetRoute), HttpStatusCode.OK);
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "NoCreate", Name = "不自动获得创建" }), HttpStatusCode.Forbidden);
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, http.Role("userRoles", "detail.pageActions"), HttpMethod.Put, targetRoute, new { RoleCodes = new[] { "TargetRead" } }), HttpStatusCode.Forbidden);
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Put, targetRoute, new { RoleCodes = new[] { "TargetRead" } }), HttpStatusCode.NoContent);
+        await ExpectAsync(http.SendButtonAsync(ordinary, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "NoCreate", Name = "不自动获得创建" }), HttpStatusCode.Forbidden);
+        await ExpectAsync(http.SendButtonAsync(ordinary, http.Role("userRoles", "detail.pageActions"), HttpMethod.Put, targetRoute, new { RoleCodes = new[] { "TargetRead" } }), HttpStatusCode.Forbidden);
+        await ExpectAsync(new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, member, HttpMethod.Put, targetRoute, new { RoleCodes = new[] { "TargetRead" } }), HttpStatusCode.NoContent);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(targetClient, http.Workbench("authorization.workbench.read"), HttpMethod.Get, "/api/authorization/workbench/catalog"), HttpStatusCode.OK);
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Put, targetRoute, new { RoleCodes = new[] { "LocalAdmin" } }), HttpStatusCode.BadRequest);
+        await ExpectAsync(new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, member, HttpMethod.Put, targetRoute, new { RoleCodes = new[] { "LocalAdmin" } }), HttpStatusCode.BadRequest);
         var administrator = await admin.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Put, $"/api/authorization/users/{administrator.GetProperty("id").GetString()}/roles", new { RoleCodes = Array.Empty<string>() }), HttpStatusCode.BadRequest);
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{roles["TargetRead"]}", new { positions = Array.Empty<string>() }), HttpStatusCode.Forbidden);
+        await ExpectAsync(new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, member, HttpMethod.Put, $"/api/authorization/users/{administrator.GetProperty("id").GetString()}/roles", new { RoleCodes = Array.Empty<string>() }), HttpStatusCode.BadRequest);
+        await ExpectAsync(http.SendButtonAsync(ordinary, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{roles["TargetRead"]}", new { positions = Array.Empty<string>() }), HttpStatusCode.Forbidden);
         // 移除一个用户角色来源不会提前撤销另一来源，原Cookie继续消费当前关系。
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(admin, member, HttpMethod.Put, $"/api/authorization/users/{managerId}/roles", new { RoleCodes = new[] { "ManagerB" } }), HttpStatusCode.NoContent);
+        await ExpectAsync(new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, member, HttpMethod.Put, $"/api/authorization/users/{managerId}/roles", new { RoleCodes = new[] { "ManagerB" } }), HttpStatusCode.NoContent);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Get, targetRoute), HttpStatusCode.OK);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -90,7 +95,7 @@ public sealed class RoleFeatureSqlServerHttpApiTests
             if (change.EventType == "user.roles.changed" && change.TargetId == targetId)
             { entered.TrySetResult(); await release.Task.WaitAsync(token); }
         };
-        var inFlight = FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Put, targetRoute, new { RoleCodes = Array.Empty<string>() });
+        var inFlight = new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, member, HttpMethod.Put, targetRoute, new { RoleCodes = Array.Empty<string>() });
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));

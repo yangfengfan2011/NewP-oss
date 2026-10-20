@@ -562,7 +562,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
     {
         var rule = new DataScopeRuleDto(id, id, null, id, true, "workspace.folder",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(target)), [new(id + "Subject", "all", null, 0, actions)], []);
-        using var response = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+        using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(client, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/" + id, rule);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }

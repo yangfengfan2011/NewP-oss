@@ -20,11 +20,11 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         var read = http.Workbench("authorization.workbench.read");
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles",
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles",
             new { Code = "ReadContract", Name = "读取契约" });
         var roleId = role.GetProperty("id").GetString()!;
         await http.GrantAsync(admin, roleId, read);
-        using (var disabled = await FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put,
+        using (var disabled = await http.SendButtonAsync(admin, http.Role("edit"), HttpMethod.Put,
             $"/api/authorization/roles/{roleId}", new { Name = "读取契约", IsEnabled = false }))
             Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
 
@@ -85,7 +85,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         var read = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.read").Position;
         var save = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.save").Position;
         Assert.Contains(read, positions); Assert.Contains(save, positions);
-        var target = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "GlobalTarget", Name = "其他角色" });
+        var target = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "GlobalTarget", Name = "其他角色" });
         var targetId = target.GetProperty("id").GetString()!;
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(
             fixture,
@@ -104,28 +104,28 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
             "/api/authorization/workbench/roles?pageIndex=1&pageSize=20", dataAccess: http.Declaration("authorization.workbench.read", http.Workbench("authorization.workbench.read")))) Assert.Equal(HttpStatusCode.OK, list.StatusCode);
         Assert.Single(fixture.Fault.FeatureCommands, command => command.Contains("EXISTS", StringComparison.Ordinal) && command.Contains("RoleFunctionGrant", StringComparison.Ordinal));
         SetPosition(ordinary, save);
-        using (var denied = await ordinary.PutAsJsonAsync($"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
-        using (var grant = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{roleId}", new { positions = new[] { read, save } })) Assert.Equal(HttpStatusCode.NoContent, grant.StatusCode);
+        using (var denied = await http.SendButtonAsync(ordinary, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using (var grant = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{roleId}", new { positions = new[] { read, save } })) Assert.Equal(HttpStatusCode.NoContent, grant.StatusCode);
         SetPosition(ordinary, read);
-        using (var wrong = await ordinary.PutAsJsonAsync($"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
+        using (var wrong = await FeatureHttpTestRequests.SendAsync(ordinary, http.Workbench("authorization.workbench.read"), HttpMethod.Put, $"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } }, http.Declaration("authorization.workbench.save", http.Workbench("authorization.workbench.save")))) Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
         SetPosition(ordinary, save);
-        using (var allowed = await ordinary.PutAsJsonAsync($"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
+        using (var allowed = await http.SendButtonAsync(ordinary, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
         // 准入后、Role行写锁前暂停，避免撤权请求的原权限扫描与测试屏障互等。
         admission.Target = (actor.AccountId, save, $"/api/authorization/workbench/roles/{targetId}");
-        var inFlight = ordinary.PutAsJsonAsync($"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read, save } });
+        var inFlight = http.SendButtonAsync(ordinary, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read, save } });
         try
         {
             await admission.Admitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            using var revoke = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{roleId}", new { positions = Array.Empty<string>() });
+            using var revoke = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{roleId}", new { positions = Array.Empty<string>() });
             Assert.Equal(HttpStatusCode.NoContent, revoke.StatusCode);
         }
         finally { admission.Resume.TrySetResult(); }
         using (var completed = await inFlight) Assert.Equal(HttpStatusCode.NoContent, completed.StatusCode);
         SetPosition(ordinary, read);
         using (var revoked = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
-        using (var assign = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor.AccountId}/roles", new { RoleCodes = new[] { "FeatureReader", "GlobalTarget" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
+        using (var assign = await http.SendButtonAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor.AccountId}/roles", new { RoleCodes = new[] { "FeatureReader", "GlobalTarget" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
         using (var union = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.OK, union.StatusCode);
-        using (var disabled = await FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{targetId}", new { Name = "其他角色", IsEnabled = false })) Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+        using (var disabled = await http.SendButtonAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{targetId}", new { Name = "其他角色", IsEnabled = false })) Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
         using (var denied = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         fixture.Fault.Mode = "feature-decision";
         using (var unavailable = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
@@ -140,25 +140,25 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         await fixture.RepeatFeatureSynchronizationAsync();
         using var admin = await fixture.LoginAdministratorAsync();
         var (read, save) = await PositionsAsync(fixture, admin);
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "Replace", Name = "替换测试" });
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "Replace", Name = "替换测试" });
         var id = role.GetProperty("id").GetString()!;
         SetPosition(admin, save);
         foreach (var invalid in new[] { new[] { save }, new[] { "unknown" } })
         {
-            using var result = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = invalid });
+            using var result = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{id}", new { positions = invalid });
             Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
             var problem = await result.Content.ReadFromJsonAsync<JsonElement>();
             Assert.Equal(400, problem.GetProperty("status").GetInt32());
             Assert.Contains(invalid[0] == save ? "缺少本分支入口" : "未知或失效", problem.GetProperty("title").GetString());
         }
-        using (var initial = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read } }))
+        using (var initial = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{id}", new { positions = new[] { read } }))
             Assert.Equal(HttpStatusCode.NoContent, initial.StatusCode);
-        using (var same = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, read } }))
+        using (var same = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, read } }))
             Assert.Equal(HttpStatusCode.NoContent, same.StatusCode);
         foreach (var mode in new[] { "register", "write", "save", "commit" })
         {
             fixture.Fault.Mode = mode;
-            using var result = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } });
+            using var result = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } });
             fixture.Fault.Mode = "";
             Assert.Equal(HttpStatusCode.InternalServerError, result.StatusCode);
             SetPosition(admin, read);
@@ -168,7 +168,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
             Assert.Equal(1, audit.GetProperty("total").GetInt32());
             SetPosition(admin, save);
         }
-        using (var expanded = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } }))
+        using (var expanded = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } }))
             Assert.Equal(HttpStatusCode.NoContent, expanded.StatusCode);
         SetPosition(admin, read);
         var configured = await ReadWorkbenchAsync(fixture, admin, $"/api/authorization/workbench/roles/{id}");
@@ -180,7 +180,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
             $"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
         Assert.Equal(2, auditBeforeReorder.GetProperty("total").GetInt32());
         SetPosition(admin, save);
-        using (var reordered = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { save, read } }))
+        using (var reordered = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{id}", new { positions = new[] { save, read } }))
             Assert.Equal(HttpStatusCode.NoContent, reordered.StatusCode);
         Assert.Equal(grantIdsBeforeReorder, await GrantIdsAsync(fixture, id));
         var auditAfterReorder = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(),
@@ -190,7 +190,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         var list = await ReadWorkbenchAsync(fixture, admin, "/api/authorization/workbench/roles?query=LocalAdmin");
         var administrator = Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
         SetPosition(admin, save);
-        using var protectedResult = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{administrator}", new { positions = Array.Empty<string>() });
+        using var protectedResult = await http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{administrator}", new { positions = Array.Empty<string>() });
         Assert.Equal(HttpStatusCode.BadRequest, protectedResult.StatusCode);
         Assert.Contains("LocalAdmin", (await protectedResult.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
     }
@@ -202,7 +202,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         var (read, save) = await PositionsAsync(fixture, admin);
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "Race", Name = "并发测试" });
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "Race", Name = "并发测试" });
         var id = role.GetProperty("id").GetString()!;
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -212,12 +212,12 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
             { entered.TrySetResult(); await release.Task.WaitAsync(token); }
         };
         SetPosition(admin, save);
-        var first = admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read } });
+        var first = http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{id}", new { positions = new[] { read } });
         Task<HttpResponseMessage>? second = null;
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            second = admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } });
+            second = http.SendButtonAsync(admin, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } });
             await fixture.Fault.ConcurrentCommand.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally { release.TrySetResult(); }
@@ -238,7 +238,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "history-role", Name = "历史角色" });
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "history-role", Name = "历史角色" });
         var id = role.GetProperty("id").GetString()!;
         var read = http.Workbench("authorization.workbench.read");
         var save = http.Workbench("authorization.workbench.save");

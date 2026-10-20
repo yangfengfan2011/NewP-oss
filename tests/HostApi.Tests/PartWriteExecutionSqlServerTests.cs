@@ -31,7 +31,7 @@ public sealed class PartWriteExecutionSqlServerTests
         var rule = new ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto("PartOptionalFloor", "PartOptionalFloor", null, "PartOptionalFloor", true, "part.part",
             new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement(name)),
             [new("PartOptionalFloorSubject", "all", null, 0, new Dictionary<string, string> { ["create"] = "deny", ["read"] = "deny", ["edit"] = "deny" })], []);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
             HttpMethod.Put, "/api/authorization/data-scope/rules/PartOptionalFloor", rule)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var declaration = OwnedResourceReadHttpRequests.Declaration(fixture, create, "part.part", "create");
         using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts",
@@ -225,7 +225,7 @@ public sealed class PartWriteExecutionSqlServerTests
                 new("attribute", "ECODE", "equal", JsonSerializer.SerializeToElement("DENY-" + action)),
                 [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { [action] = "deny" })], []);
             var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
-            using var saved = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
+            using var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         }
         using var scope = fixture.Services.CreateScope();

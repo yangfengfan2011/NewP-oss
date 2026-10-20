@@ -184,7 +184,7 @@ public sealed partial class WorkspaceSearchSqlServerHttpApiTests
     private static async Task SearchRule(HttpClient admin, BusinessAuditHostFixture fixture, string key, string id, string effect)
     {
         var rule = new DataScopeRuleDto(key, key, null, key, true, "workspace.folder", new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)), [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { ["read"] = effect })], []);
-        using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
+        using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 }

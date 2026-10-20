@@ -88,21 +88,21 @@ public sealed partial class HostAuthenticationProcessRestartTests
             Assert.Equal(HttpStatusCode.OK, changedPassword.StatusCode);
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
             var http = await FeatureHttpTestRequests.LoadAsync(client);
-            var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(client, http.Organization("companies", "create", "list.pageActions"),
+            var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(client, http.Organization("companies", "create", "list.pageActions"),
                 "/api/organization/companies", new { ECODE = "RESTART", ENAME = "重启公司", SortOrder = "0100" }));
-            var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(client, http.Organization("departments", "create", "list.pageActions"),
+            var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(client, http.Organization("departments", "create", "list.pageActions"),
                 "/api/organization/departments", new { ECODE = "RESTART-D", ENAME = "重启部门", CompanyId = company, SortOrder = "0100" }));
-            var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(client, http.Organization("persons", "create", "list.pageActions"),
+            var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(client, http.Organization("persons", "create", "list.pageActions"),
                 "/api/organization/persons", new { PersonNo = "RESTART-P", ENAME = "重启人员", CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
             await BusinessAuditSqlServerHttpApiTests.UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), person, new { ENAME = "持久姓名" });
-            using var roleResponse = await FeatureHttpTestRequests.SendAsync(client, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "restart-reader", Name = "重启查询职责" });
+            using var roleResponse = await http.SendButtonAsync(client, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "restart-reader", Name = "重启查询职责" });
             Assert.Equal(HttpStatusCode.Created, roleResponse.StatusCode);
             var roleId = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
             await http.GrantAsync(client, roleId!, http.Organization("persons"));
-            using var accountResponse = await FeatureHttpTestRequests.SendAsync(client, http.Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "restart-member", ENAME = "重启查询账号" });
+            using var accountResponse = await http.SendButtonAsync(client, http.Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "restart-member", ENAME = "重启查询账号" });
             Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
             var accountId = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account").GetProperty("eid").GetString();
-            using var assignment = await FeatureHttpTestRequests.SendAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { "restart-reader" } });
+            using var assignment = await http.SendButtonAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { "restart-reader" } });
             Assert.Equal(HttpStatusCode.NoContent, assignment.StatusCode);
             var historyBefore = await FeatureHttpTestRequests.ReadTextAsync(client, http.Audit(), "/api/audit/business-changes?pageSize=100");
             StopExactProcess(process);

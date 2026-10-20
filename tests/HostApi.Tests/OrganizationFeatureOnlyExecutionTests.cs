@@ -65,11 +65,11 @@ public sealed class OrganizationFeatureOnlyExecutionTests
         var enable = http.Organization("persons", "enable", "list.rowActions");
         var prefix = "/api/organization/persons/" + person;
         var request = new { accountEid = account.GetProperty("eid").GetString(), expectedRevision = account.GetProperty("revision").GetInt64(), reason = "正式功能管理" };
-        using (var noFeature = await FeatureHttpTestRequests.SendAsync(ordinary, disable, HttpMethod.Put, prefix + "/status/disable", new { isEnabled = false, reason = "无功能" }))
+        using (var noFeature = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, disable, HttpMethod.Put, prefix + "/status/disable", new { isEnabled = false, reason = "无功能" }))
             Assert.Equal(HttpStatusCode.Forbidden, noFeature.StatusCode);
         using (var noFeature = await FeatureHttpTestRequests.SendAsync(ordinary, link, HttpMethod.Get, prefix + "/user-binding/candidates"))
             Assert.Equal(HttpStatusCode.Forbidden, noFeature.StatusCode);
-        using (var noFeature = await FeatureHttpTestRequests.SendAsync(ordinary, link, HttpMethod.Put, prefix + "/user-binding", request))
+        using (var noFeature = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, link, HttpMethod.Put, prefix + "/user-binding", request))
             Assert.Equal(HttpStatusCode.Forbidden, noFeature.StatusCode);
         await http.GrantAsync(admin, actor.RoleId, link, disable, enable);
         var before = await FeatureHttpTestRequests.ReadTextAsync(admin, http.Organization("persons"), prefix,

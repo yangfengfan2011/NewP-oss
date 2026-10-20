@@ -119,7 +119,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
             var rule = new DataScopeRuleDto(key, key, null, key, true, resource,
                 new("attribute", field, "equal", JsonSerializer.SerializeToElement(value)),
                 [new("Subject_" + key, "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
                 fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + key, rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);

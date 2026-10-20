@@ -39,15 +39,15 @@ public sealed class DataScopePersonExportSqlServerTests(ITestOutputHelper output
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Export238", "导出范围",
             "export-238", "导出人员", read, export);
         using var ordinary = actor.Client;
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "EXPORT-238", ENAME = "不可读公司238", SortOrder = "0100" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
             new { CompanyId = company, ECODE = "EXPORT-238", ENAME = "导出部门238", SortOrder = "0100" }));
         var ids = new List<string>();
         for (var index = 0; index < 32; index++)
-            ids.Add(BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+            ids.Add(BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
                 http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
                 new { PersonNo = $"EXPORT238-{index:00}", ENAME = $"导出人员{index:00}", CompanyId = company,
                     DepartmentId = department,
@@ -183,7 +183,7 @@ public sealed class DataScopePersonExportSqlServerTests(ITestOutputHelper output
                 new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(objectId)),
                 [new("Subject_" + ruleId, "all", null, 0,
                     new Dictionary<string, string> { ["read"] = "deny" })], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + ruleId, rule);
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
         }

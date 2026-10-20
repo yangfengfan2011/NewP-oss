@@ -15,8 +15,8 @@ public sealed class FeatureCatalogHostLifecycleTests
     {
         var declarations = Declarations();
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync(declarations);
-        var http = new FeatureHttpTestRequests(fixture.Catalog);
-        var role = await FeatureHttpTestRequests.CreateAsync(fixture.Administrator, http.Role("create"), "/api/authorization/roles", new { Code = "lifecycle-reader", Name = "目录生命周期" });
+        var http = new FeatureHttpTestRequests(fixture);
+        var role = await http.CreateButtonAsync(fixture.Administrator, http.Role("create"), "/api/authorization/roles", new { Code = "lifecycle-reader", Name = "目录生命周期" });
         var roleId = role.GetProperty("id").GetString()!;
         var oldLeaf = Point(fixture, "sync-leaf");
         var oldRoot = Point(fixture, "sync-root");

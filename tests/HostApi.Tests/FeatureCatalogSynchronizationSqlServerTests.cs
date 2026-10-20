@@ -16,7 +16,7 @@ public sealed class FeatureCatalogSynchronizationSqlServerTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "sync-retry", Name = "目录重试" });
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "sync-retry", Name = "目录重试" });
         var roleId = role.GetProperty("id").GetString()!;
         var removed = http.Organization("persons", "edit", "list.rowActions");
         foreach (var mode in new[] { "save", "commit" })

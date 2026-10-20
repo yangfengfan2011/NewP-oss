@@ -54,7 +54,7 @@ public sealed class WorkspacePermissionTargetReadSqlServerTests
         var rule = new DataScopeRuleDto("SourceUnreadable", "SourceUnreadable", null, "SourceUnreadable", true, "workspace.folder",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
             [new("SourceUnreadableSubject", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-        using var saved = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"),
+        using var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"),
             HttpMethod.Put, "/api/authorization/data-scope/rules/SourceUnreadable", rule);
         Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         state.Calls = 0;

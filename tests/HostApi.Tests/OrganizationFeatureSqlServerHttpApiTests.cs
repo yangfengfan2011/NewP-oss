@@ -91,22 +91,22 @@ public sealed class OrganizationFeatureSqlServerHttpApiTests
         using (var user = actor.Client)
         {
             await http.GrantAsync(admin, actor.RoleId, disable);
-            using var opposite = await SendAsync(user, disable, HttpMethod.Put, $"/api/organization/persons/{id}/status/disable", new { isEnabled = true, reason = "反向参数" });
+            using var opposite = await new FeatureHttpTestRequests(fixture).SendButtonAsync(user, disable, HttpMethod.Put, $"/api/organization/persons/{id}/status/disable", new { isEnabled = true, reason = "反向参数" });
             Assert.Equal(HttpStatusCode.BadRequest, opposite.StatusCode);
             await AssertDirectionProblemAsync(opposite);
             foreach (var suffix in new[] { "/status/enable", "/status" })
             {
-                using var denied = await SendAsync(user, disable, HttpMethod.Put, $"/api/organization/persons/{id}{suffix}", new { isEnabled = true, reason = "绕行" });
+                using var denied = await SendAsync(user, disable, HttpMethod.Put, $"/api/organization/persons/{id}{suffix}", new { isEnabled = true, reason = "绕行" }, http.Declaration(disable.BehaviorKey, disable));
                 Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
             }
-            using var success = await SendAsync(user, disable, HttpMethod.Put, $"/api/organization/persons/{id}/status/disable", new { isEnabled = false, reason = "正式停用" });
+            using var success = await new FeatureHttpTestRequests(fixture).SendButtonAsync(user, disable, HttpMethod.Put, $"/api/organization/persons/{id}/status/disable", new { isEnabled = false, reason = "正式停用" });
             Assert.Equal(HttpStatusCode.OK, success.StatusCode);
-            using var beforeGrant = await SendAsync(user, enable, HttpMethod.Put, $"/api/organization/persons/{id}/status/enable", new { isEnabled = true, reason = "未获授权" });
+            using var beforeGrant = await new FeatureHttpTestRequests(fixture).SendButtonAsync(user, enable, HttpMethod.Put, $"/api/organization/persons/{id}/status/enable", new { isEnabled = true, reason = "未获授权" });
             Assert.Equal(HttpStatusCode.Forbidden, beforeGrant.StatusCode);
             await http.GrantAsync(admin, actor.RoleId, enable);
-            using var restore = await SendAsync(user, enable, HttpMethod.Put, $"/api/organization/persons/{id}/status/enable", new { isEnabled = true, reason = "正式启用" });
+            using var restore = await new FeatureHttpTestRequests(fixture).SendButtonAsync(user, enable, HttpMethod.Put, $"/api/organization/persons/{id}/status/enable", new { isEnabled = true, reason = "正式启用" });
             Assert.Equal(HttpStatusCode.OK, restore.StatusCode);
-            using var wrongDirection = await SendAsync(user, enable, HttpMethod.Put, $"/api/organization/persons/{id}/status/enable", new { isEnabled = false, reason = "反向参数" });
+            using var wrongDirection = await new FeatureHttpTestRequests(fixture).SendButtonAsync(user, enable, HttpMethod.Put, $"/api/organization/persons/{id}/status/enable", new { isEnabled = false, reason = "反向参数" });
             Assert.Equal(HttpStatusCode.BadRequest, wrongDirection.StatusCode);
             await AssertDirectionProblemAsync(wrongDirection);
         }
@@ -123,7 +123,7 @@ public sealed class OrganizationFeatureSqlServerHttpApiTests
         var link = http.Organization("persons", "linkUser", "detail.custom");
         var actor = await HttpTestActors.CreateAuthenticatedActorAsync(
             fixture, admin, "exporter", "exporter", "exporter", "exporter");
-        var account = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "binding-target", ENAME = "待绑定账号" });
+        var account = await http.CreateButtonAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "binding-target", ENAME = "待绑定账号" });
         var binding = new { accountEid = account.GetProperty("account").GetProperty("eid").GetString(), expectedRevision = account.GetProperty("account").GetProperty("revision").GetInt64(), reason = "位置绑定" };
         using (var user = actor.Client)
         {
@@ -133,14 +133,14 @@ public sealed class OrganizationFeatureSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
             using var deniedLink = await SendAsync(user, http.Organization("persons"), HttpMethod.Get, $"/api/organization/persons/{id}/user-binding/candidates");
             Assert.Equal(HttpStatusCode.Forbidden, deniedLink.StatusCode);
-            using var deniedWrite = await SendAsync(user, http.Organization("persons"), HttpMethod.Put, $"/api/organization/persons/{id}/user-binding", binding);
+            using var deniedWrite = await SendAsync(user, http.Organization("persons"), HttpMethod.Put, $"/api/organization/persons/{id}/user-binding", binding, http.Declaration(link.BehaviorKey, link));
             Assert.Equal(HttpStatusCode.Forbidden, deniedWrite.StatusCode);
             await http.GrantAsync(admin, actor.RoleId, export, link);
             using var exported = await SendAsync(user, export, HttpMethod.Post, "/api/organization/persons/export", body);
             Assert.True(exported.StatusCode == HttpStatusCode.OK, await exported.Content.ReadAsStringAsync());
             using var candidates = await SendAsync(user, link, HttpMethod.Get, $"/api/organization/persons/{id}/user-binding/candidates");
             Assert.Equal(HttpStatusCode.OK, candidates.StatusCode);
-            using var bound = await SendAsync(user, link, HttpMethod.Put, $"/api/organization/persons/{id}/user-binding", binding);
+            using var bound = await new FeatureHttpTestRequests(fixture).SendButtonAsync(user, link, HttpMethod.Put, $"/api/organization/persons/{id}/user-binding", binding);
             Assert.Equal(HttpStatusCode.OK, bound.StatusCode);
         }
     }
@@ -156,7 +156,7 @@ public sealed class OrganizationFeatureSqlServerHttpApiTests
     }
     private static async Task<string> SeedAsync(FeatureHttpTestRequests http, HttpClient admin, string code)
     {
-        using var response = await SendAsync(admin, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", Person(code));
+        using var response = await http.SendButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", Person(code));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return BusinessAuditSqlServerHttpApiTests.Id(await response.Content.ReadFromJsonAsync<JsonElement>());
     }

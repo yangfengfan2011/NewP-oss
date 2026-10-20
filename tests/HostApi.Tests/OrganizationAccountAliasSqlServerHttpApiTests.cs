@@ -22,13 +22,13 @@ public sealed class OrganizationAccountAliasSqlServerHttpApiTests(ITestOutputHel
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var company = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("companies", "create", "list.pageActions"),
             "/api/organization/companies", new { ECODE = "ACCOUNT-ALIAS", ENAME = "账号别名公司", SortOrder = "01" }));
-        var department = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
+        var department = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = "ACCOUNT-ALIAS", ENAME = "账号别名部门", CompanyId = company, SortOrder = "01" }));
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "ACCOUNT-ALIAS", ENAME = "账号别名人员", CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
-        var created = await CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "account-alias", ENAME = "账号别名主体" });
+        var created = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "account-alias", ENAME = "账号别名主体" });
         var account = created.GetProperty("account");
         var canonical = account.GetProperty("eid").GetString()!;
         var alias = canonical.ToLowerInvariant();
@@ -46,7 +46,7 @@ public sealed class OrganizationAccountAliasSqlServerHttpApiTests(ITestOutputHel
         }
         var directory = scope.ServiceProvider.GetRequiredService<IIdentityAccountDirectory>();
         Assert.Equal(canonical, (await directory.FindAsync(alias))!.AccountEid);
-        using var bound = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+        using var bound = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{person}/user-binding", new { accountEid = alias, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "仅账号标识使用SQL可识别别名" });
         output.WriteLine($"bindingStatus={(int)bound.StatusCode}; bindingBody={await bound.Content.ReadAsStringAsync()}");
         Assert.Equal(HttpStatusCode.OK, bound.StatusCode);
@@ -60,7 +60,7 @@ public sealed class OrganizationAccountAliasSqlServerHttpApiTests(ITestOutputHel
         var boundRevision = (await directory.FindAsync(canonical))!.Revision;
         foreach (var sameTarget in new[] { alias, canonical })
         {
-            using var repeated = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+            using var repeated = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
                 $"/api/organization/persons/{person}/user-binding", new { accountEid = sameTarget, expectedRevision = 0, reason = "不覆盖首次原因" });
             Assert.Equal(HttpStatusCode.OK, repeated.StatusCode);
             var repeatedBody = await repeated.Content.ReadFromJsonAsync<JsonElement>();
@@ -68,8 +68,8 @@ public sealed class OrganizationAccountAliasSqlServerHttpApiTests(ITestOutputHel
             Assert.Equal("仅账号标识使用SQL可识别别名", repeatedBody.GetProperty("reason").GetString());
             Assert.Equal(boundRevision, (await directory.FindAsync(canonical))!.Revision);
         }
-        var otherAccount = (await CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "other-target", ENAME = "不同目标" })).GetProperty("account");
-        using (var conflict = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+        var otherAccount = (await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "other-target", ENAME = "不同目标" })).GetProperty("account");
+        using (var conflict = await http.SendButtonAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
             $"/api/organization/persons/{person}/user-binding", new { accountEid = otherAccount.GetProperty("eid").GetString(), expectedRevision = otherAccount.GetProperty("revision").GetInt64(), reason = "不得改绑" }))
         {
             Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);

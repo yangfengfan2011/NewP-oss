@@ -810,7 +810,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
     {
         var rule = new DataScopeRuleDto(id, id, null, id, true, resource, new("attribute", field, "equal", JsonSerializer.SerializeToElement(value)),
             [new(id + "Subject", "all", null, 0, new Dictionary<string, string> { [action] = "deny" })], []);
-        using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+        using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/" + id, rule);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }

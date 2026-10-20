@@ -71,7 +71,7 @@ public sealed partial class WorkspaceObjectMutationSqlServerHttpApiTests
             new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement(afterName)),
             [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
         var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule))
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var before = await OwnedResourceReadHttpRequests.ReadAsync(fixture, ordinary, partRead, "part.part", "read", "/api/part/parts/" + part.Id);
         Assert.Equal("Part编辑前可读", before.GetProperty("fields").GetProperty("ENAME").GetString());

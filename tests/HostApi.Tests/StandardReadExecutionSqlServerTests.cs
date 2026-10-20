@@ -58,7 +58,7 @@ public sealed class StandardReadExecutionSqlServerTests
         var rule = new DataScopeRuleDto("Lookup309Hidden", "Lookup309Hidden", null, "Lookup309Hidden", true, "organization.position",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(hidden)),
             [new("Lookup309Subject", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
             HttpMethod.Put, "/api/authorization/data-scope/rules/Lookup309Hidden", rule)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var path = "/api/organization/positions/options?keyword=LOOKUP-309&pageSize=100&currentValueIds=" + visible + "," + hidden;
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, source, HttpMethod.Get, path))

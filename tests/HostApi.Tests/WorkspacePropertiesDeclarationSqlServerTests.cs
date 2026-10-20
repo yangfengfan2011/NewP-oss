@@ -39,7 +39,7 @@ public sealed class WorkspacePropertiesDeclarationSqlServerTests
             var rule = new DataScopeRuleDto("PropertiesRead", "PropertiesRead", null, "PropertiesRead", true, "part.part",
                 new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(target.Id)),
                 [new("PropertiesReadSubject", "all", null, 0, new Dictionary<string, string> { ["read"] = denyRead ? "deny" : "allow", ["authorize"] = "deny" })], []);
-            using var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+            using var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
                 "/api/authorization/data-scope/rules/PropertiesRead", rule);
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
             foreach (var source in new[] { "workspace.content.properties", "workspace.content.receivedProperties" })

@@ -204,7 +204,7 @@ public sealed class PartSqlServerHttpApiTests
             new("attribute", field, "equal", JsonSerializer.SerializeToElement(value)),
             [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { [action] = "deny" })], []);
         var save = Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "authorization.dataScope.save");
-        using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
+        using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
         Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
     }
 

@@ -30,7 +30,7 @@ public sealed class DataScopeDynamicDepartmentSqlServerTests
         var organization = (await fixture.Services.GetRequiredService<IOrganizationQuery>().ReadAsync()).FindByAccount(actor.AccountId)!;
         var department = organization.Department!;
         var http = new FeatureHttpTestRequests(fixture);
-        var parent = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
+        var parent = await http.CreateButtonAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = "Dynamic295Parent", ENAME = "动态匹配上级部门", CompanyId = organization.Company!["EID"], SortOrder = "0001" });
         var parentId = BusinessAuditSqlServerHttpApiTests.Id(parent);
         using (var changed = await FeatureHttpTestRequests.SendAsync(admin, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put,

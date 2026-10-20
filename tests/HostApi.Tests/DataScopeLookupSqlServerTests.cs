@@ -30,7 +30,7 @@ public sealed class DataScopeLookupSqlServerTests
         { CompanyId = hiddenCompany, ECODE = "D-235-V", ENAME = "B可读部门", SortOrder = "0200" });
         var hiddenPosition = await CreateAsync("positions", new { ENAME = "A隐藏岗位" });
         var visiblePosition = await CreateAsync("positions", new { ENAME = "B可读岗位" });
-        var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
             new { PersonNo = "LOOKUP-235", ENAME = "候选关系人员", CompanyId = hiddenCompany,
                 DepartmentId = hiddenDepartment, PositionId = hiddenPosition, EmploymentStatus = "Active", IsEnabled = true }));
@@ -93,7 +93,7 @@ public sealed class DataScopeLookupSqlServerTests
         }
 
         async Task<string> CreateAsync(string tab, object payload) =>
-            BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+            BusinessAuditSqlServerHttpApiTests.Id(await http.CreateButtonAsync(admin,
                 http.Organization(tab, "create", "list.pageActions"), $"/api/organization/{tab}", payload));
 
         async Task SaveRuleAsync<T>(string id, string resource, string field, T value)
@@ -101,7 +101,7 @@ public sealed class DataScopeLookupSqlServerTests
             var rule = new DataScopeRuleDto(id, id, null, id, true, resource,
                 new("attribute", field, "equal", JsonSerializer.SerializeToElement(value)),
                 [new("Subject_" + id, "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-            using var response = await FeatureHttpTestRequests.SendAsync(admin,
+            using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
                 fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
                 HttpMethod.Put, "/api/authorization/data-scope/rules/" + id, rule);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);

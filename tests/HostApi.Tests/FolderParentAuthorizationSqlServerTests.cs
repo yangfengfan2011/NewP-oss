@@ -323,7 +323,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         var rule = new DataScopeRuleDto("ParentEdit298", "ParentEdit298", null, "父配置清空后回到规则拒绝", true, "workspace.folder",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(parent.Id)),
             [new("ParentEdit298All", "all", null, 0, new Dictionary<string, string> { ["edit"] = "deny" })], []);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/ParentEdit298", rule))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         foreach (var clearConfiguration in new[] { false, true })
@@ -422,7 +422,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         var rule = new DataScopeRuleDto("IndependentChildRule298", "IndependentChildRule298", null, "子直接项到期回退拒绝", true, "workspace.folder",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(child.Id)),
             [new("IndependentChildFallback298", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-        using (var savedRule = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
+        using (var savedRule = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/IndependentChildRule298", rule))
             Assert.Equal(HttpStatusCode.NoContent, savedRule.StatusCode);
         await AssertReadAsync(HttpStatusCode.OK);
@@ -495,7 +495,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         await CreateAsync(fixture, admin, sourcePosition, "WorkspaceFolder", "folders", "create", "RetainedSourceChild298");
         var manual = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "RetainedManual298");
         var http = new FeatureHttpTestRequests(fixture);
-        var createdAccount = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
+        var createdAccount = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts",
             new { ECODE = "retained-parent-subject298", ENAME = "父已有授权随后删除账号" });
         var account = createdAccount.GetProperty("account");
         var accountId = account.GetProperty("eid").GetString()!;
@@ -511,7 +511,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         var parentBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(parentOccurrence, parent.LinkId))).GetRawText();
         var sourceBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId), new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize")))).GetRawText();
         // 从未登录/绑定的真实账号允许正式软删；保留下来的ACL引用不是新手工选择器。
-        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("delete"), HttpMethod.Post,
+        using (var deleted = await http.SendButtonAsync(admin, http.Identity("delete"), HttpMethod.Post,
             "/api/identity/accounts/" + accountId + "/delete", new { ExpectedRevision = account.GetProperty("revision").GetInt64(), Reason = "核证父已有直接项完整克隆" }))
             await ReadOkAsync(deleted);
         using (var scope = fixture.Services.CreateScope())

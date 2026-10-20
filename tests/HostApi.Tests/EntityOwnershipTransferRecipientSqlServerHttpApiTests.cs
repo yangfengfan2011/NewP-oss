@@ -29,7 +29,7 @@ public sealed class EntityOwnershipTransferRecipientSqlServerHttpApiTests
         using var client = owner.Client;
         var target = await CreateAsync(fixture, client, position, "Part", "parts", "createPart", "DELETE-RECIPIENT-TARGET");
         var http = new FeatureHttpTestRequests(fixture);
-        var created = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
+        var created = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts",
             new { ECODE = "delete-before-transfer-read", ENAME = "将被删除的接收账号" });
         var recipient = created.GetProperty("account");
         var recipientId = recipient.GetProperty("eid").GetString()!;
@@ -42,7 +42,7 @@ public sealed class EntityOwnershipTransferRecipientSqlServerHttpApiTests
         try
         {
             await probe.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            using var deleted = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("delete"), HttpMethod.Post,
+            using var deleted = await http.SendButtonAsync(admin, http.Identity("delete"), HttpMethod.Post,
                 $"/api/identity/accounts/{recipientId}/delete", new { ExpectedRevision = recipient.GetProperty("revision").GetInt64(), Reason = "在最终接收事实读取前提交删除" });
             await ReadOkAsync(deleted);
             using (var confirmation = fixture.Services.CreateScope())
@@ -89,7 +89,7 @@ public sealed class EntityOwnershipTransferRecipientSqlServerHttpApiTests
             accountTable = db.Model.FindEntityType("IdentityAccount")!.GetTableName()!;
         }
         var http = new FeatureHttpTestRequests(fixture);
-        var created = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
+        var created = await http.CreateButtonAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = "TRANSFER-CURRENT-DEPT", ENAME = "提交时当前部门", CompanyId = companyId, SortOrder = "1" });
         var newDepartment = BusinessAuditSqlServerHttpApiTests.Id(created);
         Assert.NotEqual(oldDepartment, newDepartment);

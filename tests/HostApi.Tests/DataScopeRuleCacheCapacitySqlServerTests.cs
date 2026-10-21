@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
@@ -14,13 +15,16 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed partial class DataScopePermissionCostSqlServerTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_RULE_CACHE_CAPACITY", "先以8节点验证准备、两资源声明、重启client、保存与采集清理")]
+    public Task RuleCache_EntryBindingsAndRestartClients() => MeasureRuleCacheAsync(8, true);
+
     [EnvironmentGatedFact("NEWP_RUN_RULE_CACHE_CAPACITY", "独占测量100规则节点、每节点10主体、并发1/16/64")]
     public Task RuleCache_100Nodes() => MeasureRuleCacheAsync(100);
 
     [EnvironmentGatedFact("NEWP_RUN_RULE_CACHE_CAPACITY", "独占测量1000规则节点、每节点10主体、并发1/16/64")]
     public Task RuleCache_1000Nodes() => MeasureRuleCacheAsync(1000);
 
-    private async Task MeasureRuleCacheAsync(int nodes)
+    private async Task MeasureRuleCacheAsync(int nodes, bool entryProbe = false)
     {
         var commands = new CostCommands();
         var phase = Environment.GetEnvironmentVariable("NEWP_RULE_CACHE_CANDIDATE") ?? "unspecified";
@@ -32,7 +36,8 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
             services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(commands)), includeWorkspace: true);
         Emit(new { phase = "host-start-empty", milliseconds = started.Elapsed.TotalMilliseconds });
-        using var admin = await fixture.LoginAdministratorAsync();
+        using var preparationAdmin = await fixture.LoginAdministratorAsync();
+        var admin = preparationAdmin;
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var part = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "RuleCachePart");
@@ -40,7 +45,8 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var reads = new[] { "Part", "Document" }.Select(module => fixture.FeatureCatalog.Single(point =>
             point.ModuleId == module && point.Kind == "navigation" && point.Key == module.ToLowerInvariant() + "." + (module == "Part" ? "parts" : "documents"))).ToArray();
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "RuleCacheCapacity", "规则缓存容量", "rule-cache-capacity", "规则缓存容量账号", reads);
-        using var ordinary = actor.Client;
+        using var preparationOrdinary = actor.Client;
+        var ordinary = preparationOrdinary;
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
         var roots = Enumerable.Range(0, nodes / 4).Select(index => Node(index, 0, null)).ToArray();
         foreach (var root in roots) await SaveAsync(root);
@@ -52,13 +58,27 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         }
         // 相同正式Host重启区分完整初载和首次请求；不把准备阶段或请求分配量称为缓存驻留。
         await CaptureAsync("host-restart-with-rules", 0, 0, async _ => await fixture.RestartWithReadActionAsync(true));
+        using var restartedAdmin = fixture.CreateClient();
+        using var restartedOrdinary = fixture.CreateClient();
+        await ReconnectAsync(restartedAdmin, "admin");
+        await ReconnectAsync(restartedOrdinary, "rule-cache-capacity");
+        admin = restartedAdmin;
+        ordinary = restartedOrdinary;
         var sources = reads.Select(read => fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Single(source =>
             source.Execution == read.ModuleId.ToLowerInvariant() + "." + read.ModuleId.ToLowerInvariant() + ".authorization.view"
             && source.Provider == "authorization.object.view"
             && source.ViewKey == read.ModuleId.ToLowerInvariant() + "." + read.ModuleId.ToLowerInvariant() + ".permissions"
             && source.Surface == "read"
             && source.FeaturePositions.Contains(read.Position))).ToArray();
-        await CaptureAsync("first-request", 1, 1, ReadAsync);
+        await CaptureAsync("first-request", 1, 2, ReadAsync);
+        if (entryProbe)
+        {
+            await ReadAsync(1);
+            await CaptureAsync("maintenance", 1, 1, _ => SaveAsync(roots[0] with { Enabled = false }));
+            await SaveAsync(roots[0]);
+            await ReadAsync(0);
+            return;
+        }
         foreach (var concurrency in new[] { 1, 16, 64 })
             await CaptureAsync("steady", concurrency, 64, ReadAsync);
         await CaptureAsync("maintenance", 1, 1, _ => SaveAsync(roots[0] with { Enabled = false }));
@@ -83,6 +103,14 @@ public sealed partial class DataScopePermissionCostSqlServerTests
             using var response = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, save, HttpMethod.Put,
                 "/api/authorization/data-scope/rules/" + root.Id, root);
             Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
+        }
+
+        async Task ReconnectAsync(HttpClient client, string code)
+        {
+            await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+            using var response = await client.PostAsJsonAsync("/api/auth/login", new { ECODE = code, Password = "Audit-test-secure-938!" });
+            Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+            await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
         }
 
         DataScopeRuleDto Node(int root, int depth, string? parent)

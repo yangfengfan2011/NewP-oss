@@ -489,19 +489,17 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         granted.Add(features.Action(workspace, "cut", "list.rowActions", "folder"));
     }
 
-    // 历史宿主准备保留原ABI；当前发行物准备消费该真实动作的正式声明。
+    // 历史宿主准备保留原ABI；当前发行物仅消费真实创建按钮，不把其身份放进旧声明头。
     internal static async Task<string> CreateWorkspaceObjectAsync(HttpClient client, AcceptanceFeatureCatalog features,
         WorkspaceFolderPosition position, string model, string route, string code, string name, CancellationToken token,
         PublishedWorkspacePreparation sourcePreparation = PublishedWorkspacePreparation.CurrentRelease)
     {
         var entry = features.Behavior("Workspace", "workspace.spaces.access");
         var action = features.Action(entry, "create" + model, "list.pageActions", "folder");
-        var declaration = sourcePreparation == PublishedWorkspacePreparation.CurrentRelease
-            ? features.DeclarationAtView(action, "workspace.folder.list", "pageActions", "create" + model) : null;
         await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/" + route,
             new { position = position.CommandPosition, values = new { ECODE = code, ENAME = name } },
-            action.Position, token, model == "Part" ? null : declaration,
-            buttonId: model == "Part" && sourcePreparation == PublishedWorkspacePreparation.CurrentRelease ? features.Button(action) : null);
+            action.Position, token,
+            buttonId: sourcePreparation == PublishedWorkspacePreparation.CurrentRelease ? features.Button(action) : null);
         var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, entry.Position, token, features);
         return contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name)
             .GetProperty("associatedObject").GetProperty("id").GetString()!;

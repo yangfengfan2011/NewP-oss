@@ -227,11 +227,9 @@ internal static class WorkspaceAcceptanceFixture
     {
         var entry = features.Behavior(module, behavior);
         var create = features.Action(entry, "create", "list.pageActions");
-        var resource = module switch { "Part" => "part.part", "Document" => "document.document",
-            _ => throw new InvalidOperationException("元数据准备只接受已登记的Part/Document来源。") };
-        var result = await SendAsync(ordinary, HttpMethod.Post, path, new { ECODE = code, ENAME = name },
-            create.Position, token, module == "Document" ? features.Declaration(create, resource + ".create", "standardCrud.create", resource) : null,
-            buttonId: module == "Part" ? features.Button(create) : null);
+        if (module is not ("Part" or "Document"))
+            throw new InvalidOperationException("元数据准备只接受已登记的Part/Document来源。");
+        var result = await SendButtonAsync(ordinary, features, create, HttpMethod.Post, path, new { ECODE = code, ENAME = name }, token);
         // 受控成功回执不含可引用身份，不能伪造 ID 继续准备。
         return result.GetProperty("fields").GetProperty("EID").GetString()
             ?? throw new InvalidOperationException("正式元数据创建未返回可引用的 EID。");
@@ -252,11 +250,8 @@ internal static class WorkspaceAcceptanceFixture
             ("createPart", "/api/workspace/content/parts", $"WS-R-P-{suffix}", $"重启零组件 {suffix}"),
             ("createDocument", "/api/workspace/content/documents", $"WS-R-D-{suffix}", $"重启图文档 {suffix}")
         })
-            await SendAsync(ordinary, HttpMethod.Post, path,
-                new { position = folder.CommandPosition, values = new { ECODE = code, ENAME = name } },
-                features.Action(entry, action, "list.pageActions", "folder").Position, token,
-                dataDeclaration: action == "createDocument" ? features.DeclarationAtView(features.Action(entry, action, "list.pageActions", "folder"), "workspace.folder.list", "pageActions", action) : null,
-                buttonId: action == "createPart" ? features.Button(features.Action(entry, action, "list.pageActions", "folder")) : null);
+            await SendButtonAsync(ordinary, features, features.Action(entry, action, "list.pageActions", "folder"), HttpMethod.Post, path,
+                new { position = folder.CommandPosition, values = new { ECODE = code, ENAME = name } }, token);
         // 创建回执不含实体或关系身份；重启前后的快照只消费正式 Link 查询。
         return folder;
     }

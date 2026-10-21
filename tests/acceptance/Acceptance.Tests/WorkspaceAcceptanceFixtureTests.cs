@@ -443,7 +443,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
         var features = CurrentWorkspaceFeatures();
         var entry = features.Behavior("Workspace", "workspace.spaces.access");
         var action = features.Action(entry, "create" + model, "list.pageActions", "folder");
-        var declaration = features.DeclarationAtView(action, "workspace.folder.list", "pageActions", "create" + model);
+        var declaration = features.Button(action);
         var read = features.ReadDeclaration("Workspace", "workspace.folder.list", entry.Position);
         var writes = 0;
         using var client = new HttpClient(new AsyncHandler(async (request, token) =>
@@ -455,7 +455,11 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 writes++;
                 Assert.Equal(HttpMethod.Post, request.Method);
                 Assert.Equal(action.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
-                if (current) Assert.Equal(declaration, Assert.Single(request.Headers.GetValues(model == "Part" ? "X-NewP-Button" : "X-NewP-Data-Declaration")));
+                if (current)
+                {
+                    Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+                    Assert.Equal(declaration, Assert.Single(request.Headers.GetValues("X-NewP-Button")));
+                }
                 else
                 {
                     Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
@@ -534,8 +538,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
         var features = new AcceptanceFeatureCatalog(compiled.Plan!.FeatureCatalog, compiled.Plan.ActionDataAccessCatalog);
         var entry = features.Behavior(module, behavior);
         var create = features.Action(entry, "create", "list.pageActions");
-        var resource = module == "Part" ? "part.part" : "document.document";
-        var declaration = module == "Part" ? features.Button(create) : features.Declaration(create, resource + ".create", "standardCrud.create", resource);
+        var declaration = features.Button(create);
         var created = false;
         using var client = new HttpClient(new AsyncHandler(async (request, token) =>
         {
@@ -543,7 +546,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal(path, request.RequestUri.AbsolutePath);
             Assert.Equal(create.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
-            Assert.Equal(declaration, Assert.Single(request.Headers.GetValues(module == "Part" ? "X-NewP-Button" : "X-NewP-Data-Declaration")));
+            Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+            Assert.Equal(declaration, Assert.Single(request.Headers.GetValues("X-NewP-Button")));
             Assert.Equal("fixture-token", Assert.Single(request.Headers.GetValues("X-CSRF-TOKEN")));
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             Assert.Equal(["ECODE", "ENAME"], body.RootElement.EnumerateObject().Select(property => property.Name).ToArray());
@@ -605,8 +609,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
             };
             Assert.Equal(features.Action(entry, action, "list.pageActions", "folder").Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
             var currentAction = features.Action(entry, action, "list.pageActions", "folder");
-            Assert.Equal(action == "createDocument" ? features.DeclarationAtView(currentAction, "workspace.folder.list", "pageActions", action) : features.Button(currentAction),
-                Assert.Single(request.Headers.GetValues(action == "createDocument" ? "X-NewP-Data-Declaration" : "X-NewP-Button")));
+            Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+            Assert.Equal(features.Button(currentAction), Assert.Single(request.Headers.GetValues("X-NewP-Button")));
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             var position = body.RootElement.GetProperty("position");
             Assert.Equal("public-space", position.GetProperty("spaceId").GetString());

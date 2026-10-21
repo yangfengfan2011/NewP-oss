@@ -502,7 +502,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
 
             if (_declarationAuthorizationOnly)
             {
-                await ExerciseAuthorizationAsync(page, driver, browserRow, cancellationToken);
+                await driver.InspectAndSaveObjectAuthorizationAsync(browserRow, "example.record", cancellationToken);
                 await RecordScenarioSuccessAsync(DeclarationAuthorizationScenario, "example-authorization/browser.json", new
                 {
                     status = "passed", route = "/examples/standard-crud/persistent-records",
@@ -623,39 +623,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         if (!File.Exists(path)) throw new InvalidOperationException("Browser export download did not arrive.");
         AddArtifact(path);
         return relativePath;
-    }
-
-    // 只验证真实菜单、配置草稿与根保存可达；资格、动作值和失权语义在API/SQL层核对。
-    private static async Task ExerciseAuthorizationAsync(IPage page, StandardCrudPageDriver driver, ILocator row, CancellationToken token)
-    {
-        token.ThrowIfCancellationRequested();
-        var prefix = "/api/authorization/data-scope/objects/example.record/";
-        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
-        var explanation = page.WaitForResponseAsync(response => response.Request.Method == "GET"
-            && new Uri(response.Url).AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)
-            && new Uri(response.Url).AbsolutePath.EndsWith("/explanation", StringComparison.Ordinal));
-        await page.GetByRole(AriaRole.Menuitem, new() { Name = "查看授权", Exact = true }).ClickAsync();
-        var inspected = await explanation;
-        if (!inspected.Ok) throw new InvalidOperationException($"Example授权查看装载失败：{inspected.Status}");
-        var inspection = driver.VisibleModal();
-        await inspection.GetByRole(AriaRole.Button, new() { Name = "关闭", Exact = true }).ClickAsync();
-        await inspection.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
-        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
-        var configuration = page.WaitForResponseAsync(response => response.Request.Method == "GET"
-            && new Uri(response.Url).AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)
-            && !new Uri(response.Url).AbsolutePath[prefix.Length..].Contains('/'));
-        await page.GetByRole(AriaRole.Menuitem, new() { Name = "授权", Exact = true }).ClickAsync();
-        var loaded = await configuration;
-        if (!loaded.Ok) throw new InvalidOperationException($"Example授权配置装载失败：{loaded.Status}");
-        var dialog = driver.VisibleModal();
-        await dialog.GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
-        // 对象模式的当前正式控件是inline editor；不复用旧Drawer假设或直接写React状态。
-        var editor = dialog.Locator("[data-subject-editor]");
-        await editor.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
-        await editor.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
-        await dialog.GetByRole(AriaRole.Checkbox, new() { Name = "读取：不选", Exact = true }).ClickAsync();
-        await driver.ConfirmAsync(dialog, new("PUT", new Uri(loaded.Url).AbsolutePath, 204, "保存Example对象授权"), "保存授权");
-        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible });
     }
 
     // Restart 使用新的 Host/Shell 与 API session，证明已完成 history 不重放且正式数据仍可读。

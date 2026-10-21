@@ -141,8 +141,7 @@ internal sealed class WorkspacePageDriver(IPage page)
             if (!current.Ok) throw new InvalidOperationException($"批量授权当前配置核对失败：{current.Status} {await current.TextAsync()}");
             await dialog.GetByRole(AriaRole.Button, new() { Name = "开始新的授权操作", Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
             if (submissions != 1) throw new InvalidOperationException("核对当前配置不能重放批量保存。");
-            await dialog.Locator(".ant-modal-footer").GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^取\s*消$") }).ClickAsync();
-            await dialog.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+            await crud.CancelAndDiscardReviewAsync(dialog);
         }
         finally { await page.UnrouteAsync(routePattern, loseCommittedReply); }
     }

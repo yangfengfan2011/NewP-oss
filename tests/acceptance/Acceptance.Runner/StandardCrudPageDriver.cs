@@ -175,6 +175,48 @@ internal sealed class StandardCrudPageDriver
     internal ILocator ConfirmDialogWithText(string text) =>
         Page.GetByRole(AriaRole.Dialog).Filter(new LocatorFilterOptions { HasTextString = text });
 
+    // 已编辑的Review沿标准取消及丢弃确认退出，不重放保存或直接关闭容器。
+    internal async Task CancelAndDiscardReviewAsync(ILocator dialog)
+    {
+        await dialog.Locator(".ant-modal-footer").GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^取\s*消$") }).ClickAsync();
+        var discard = Page.GetByRole(AriaRole.Dialog, new() { Name = "放弃未保存的草稿？", Exact = true });
+        await discard.GetByRole(AriaRole.Button, new() { Name = "放弃修改", Exact = true }).ClickAsync();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+    }
+
+    // 只验证真实查看菜单的关闭及管理草稿的一次保存；授权语义由API/SQL层承担。
+    internal async Task InspectAndSaveObjectAuthorizationAsync(ILocator row, string resourceKey, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var prefix = $"/api/authorization/data-scope/objects/{resourceKey}/";
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var explanation = Page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)
+            && new Uri(response.Url).AbsolutePath.EndsWith("/explanation", StringComparison.Ordinal));
+        await Page.GetByRole(AriaRole.Menuitem, new() { Name = "查看授权", Exact = true }).ClickAsync();
+        var inspected = await explanation;
+        if (!inspected.Ok) throw new InvalidOperationException($"对象授权查看装载失败：{inspected.Status}");
+        var inspection = VisibleModal();
+        await inspection.GetByRole(AriaRole.Button, new() { Name = "关闭", Exact = true }).ClickAsync();
+        await inspection.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var configuration = Page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)
+            && !new Uri(response.Url).AbsolutePath[prefix.Length..].Contains('/'));
+        await Page.GetByRole(AriaRole.Menuitem, new() { Name = "授权", Exact = true }).ClickAsync();
+        var loaded = await configuration;
+        if (!loaded.Ok) throw new InvalidOperationException($"对象授权配置装载失败：{loaded.Status}");
+        var dialog = VisibleModal();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
+        // 对象模式的正式控件是inline editor，不能借通用规则编辑器的Drawer替代。
+        var editor = dialog.Locator("[data-subject-editor]");
+        await editor.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
+        await editor.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        await dialog.GetByRole(AriaRole.Checkbox, new() { Name = "读取：不选", Exact = true }).ClickAsync();
+        await ConfirmAsync(dialog, new("PUT", new Uri(loaded.Url).AbsolutePath, 204, "保存对象授权"), "保存授权");
+        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+    }
+
     // 在弹窗内点击确认，等待期望响应并校验，再等待弹窗关闭。
     internal async Task<IResponse> ConfirmAsync(ILocator dialog, ApiExpectation expectation, string? buttonLabel = null)
     {

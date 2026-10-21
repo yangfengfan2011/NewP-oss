@@ -408,7 +408,31 @@ public sealed class AcceptanceGateTests
     public async Task ExampleObjectAuthorization_UsesFormalCrossModuleBinding()
     {
         var (root, runId) = PrepareRun("example-authorization-execution");
-        await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId, declarationAuthorizationOnly: true).RunAsync(CancellationToken.None);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        var code = "AUTH329-" + runId[..8];
+        var name = "正式示例授权 " + runId[..8];
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            prepareJourney: async (client, features, _, _, token) =>
+            {
+                var entry = features.Behavior("Example", "example.record.read");
+                var create = features.Action(entry, "create", "list.pageActions");
+                // 当前Example创建仍由#330迁移；这里只消费实际目录中的正式创建声明，保留字段大小写。
+                await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/example/records",
+                    new { ECODE = code, ENAME = name, RecordSource = "Manual" }, create.Position, token,
+                    dataDeclaration: features.DeclarationAtView(create, "example.record.list", "pageActions", "create"));
+            },
+            browserJourney: async (page, token) =>
+            {
+                await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "持久化记录示例", Exact = true }).ClickAsync();
+                await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/examples/standard-crud/persistent-records");
+                var driver = new StandardCrudPageDriver(page);
+                var row = await driver.WaitForRowAsync(code, name);
+                await driver.InspectAndSaveObjectAuthorizationAsync(row, "example.record", token);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "example-authorization.png"));
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, journey = "example-object-authorization", browserActor = "administrator" }, token);
+            }).RunAsync(CancellationToken.None);
     }
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "共享SQL租约与同一正式宿主的Example、Person页面current/all下载接线")]

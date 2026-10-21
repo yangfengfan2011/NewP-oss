@@ -7,6 +7,101 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实Chromium复现整组核对后Review仍dirty，取消必须经标准丢弃确认，无服务器或端口")]
+    public async Task ReconciledBatchReview_CancelsThroughTheExistingDiscardConfirmationWithoutSaving()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        await page.SetContentAsync("""
+            <meta charset="utf-8"><div class="ant-modal" role="dialog" aria-label="批量授权">
+              <button>开始新的授权操作</button><div class="ant-modal-footer"><button id="cancel">取消</button><button id="save" disabled>确认</button></div>
+            </div>
+            <script>
+              window.saveCount=0; window.discardCount=0;
+              document.querySelector('#save').onclick=()=>window.saveCount++;
+              document.querySelector('#cancel').onclick=()=>{
+                const discard=document.createElement('div'); discard.className='ant-modal'; discard.role='dialog';
+                discard.setAttribute('aria-label','放弃未保存的草稿？');
+                discard.innerHTML='<h2>放弃未保存的草稿？</h2><button>继续编辑</button><button id="discard">放弃修改</button>';
+                document.body.append(discard);
+                discard.querySelector('#discard').onclick=()=>{window.discardCount++; document.querySelectorAll('.ant-modal').forEach(element=>element.remove());};
+              };
+            </script>
+            """);
+        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "批量授权", Exact = true });
+        await new StandardCrudPageDriver(page).CancelAndDiscardReviewAsync(dialog);
+        Assert.Equal(0, await page.EvaluateAsync<int>("window.saveCount"));
+        Assert.Equal(1, await page.EvaluateAsync<int>("window.discardCount"));
+        await Assertions.Expect(page.GetByRole(AriaRole.Dialog)).ToHaveCountAsync(0);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实Chromium核对共用对象授权driver只读关闭零写、管理仅一次保存，无Host或SQL")]
+    public async Task ObjectAuthorization_ClosesInspectionWithoutWritingAndSavesManagementOnce()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        var requests = new List<string>();
+        const string target = "/api/authorization/data-scope/objects/example.record/record";
+        await page.RouteAsync("http://example.test/**", async route =>
+        {
+            var path = new Uri(route.Request.Url).AbsolutePath;
+            if (path.StartsWith(target, StringComparison.Ordinal))
+            {
+                requests.Add(route.Request.Method + " " + path);
+                if (route.Request.Method == "PUT")
+                    await route.FulfillAsync(new() { Status = 204 });
+                else await route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" });
+                return;
+            }
+            await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><table><tr><td>Example record</td><td><button id="more">更多</button></td></tr></table>
+                <div role="menu" hidden><button role="menuitem" id="inspect">查看授权</button><button role="menuitem" id="manage">授权</button></div>
+                <script>
+                  const target='/api/authorization/data-scope/objects/example.record/record';
+                  const menu=document.querySelector('[role=menu]'); window.inspectionClosed=0;
+                  document.querySelector('#more').onclick=()=>menu.hidden=false;
+                  document.querySelector('#inspect').onclick=async()=>{
+                    menu.hidden=true; await fetch(target+'/inspection/explanation');
+                    const dialog=document.createElement('div'); dialog.className='ant-modal'; dialog.role='dialog';
+                    dialog.innerHTML='<button>关闭</button>'; document.body.append(dialog);
+                    dialog.querySelector('button').onclick=()=>{window.inspectionClosed++; dialog.remove();};
+                  };
+                  document.querySelector('#manage').onclick=async()=>{
+                    menu.hidden=true; await fetch(target);
+                    const dialog=document.createElement('div'); dialog.className='ant-modal'; dialog.role='dialog';
+                    dialog.innerHTML='<button id="add">添加主体项</button><label><input type="checkbox">读取：不选</label><button id="save">保存授权</button>';
+                    document.body.append(dialog);
+                    dialog.querySelector('#add').onclick=()=>{
+                      const editor=document.createElement('section'); editor.setAttribute('data-subject-editor','');
+                      editor.innerHTML='<button>确定</button>'; dialog.append(editor);
+                      editor.querySelector('button').onclick=()=>editor.remove();
+                    };
+                    dialog.querySelector('#save').onclick=async()=>{await fetch(target,{method:'PUT'}); dialog.remove();};
+                  };
+                </script>
+                """ });
+        });
+        await page.GotoAsync("http://example.test/");
+        var driver = new StandardCrudPageDriver(page);
+        var row = await driver.WaitForRowAsync("Example record");
+        await driver.InspectAndSaveObjectAuthorizationAsync(row, "example.record", CancellationToken.None);
+        Assert.Equal(1, await page.EvaluateAsync<int>("window.inspectionClosed"));
+        Assert.Equal(new[] { "GET " + target + "/inspection/explanation", "GET " + target, "PUT " + target }, requests);
+        await Assertions.Expect(page.GetByRole(AriaRole.Dialog)).ToHaveCountAsync(0);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "待补齐页driver等待本次pending响应完成后才开始默认UI断言，旧请求或非匹配响应不能解锁，无服务器或端口")]
     public async Task OwnershipInitialization_WaitsForItsOwnPendingResponseBeforeTheDefaultUiAssertion()
     {

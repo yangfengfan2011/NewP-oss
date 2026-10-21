@@ -8,6 +8,7 @@ using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
 
 namespace ICP.Platform.Modules.Authorization.Tests;
@@ -16,9 +17,9 @@ public sealed class DataScopeRuleSnapshotTests : IDisposable
 {
     private const string Role = "authorization.role";
     private const string Lost = "lost.resource";
-    // 与其他授权测试使用同一完整模型集合，避免并行测试共享 EF 模型缓存时得到缺少模型的上下文。
     private readonly EfPlatformDbContext db = new(new DbContextOptionsBuilder<EfPlatformDbContext>()
-        .UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options, AuthorizationModelDefinitions.All);
+        .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+        .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options, AuthorizationModelDefinitions.All);
     private readonly DataScopeCatalog catalog;
 
     public DataScopeRuleSnapshotTests()

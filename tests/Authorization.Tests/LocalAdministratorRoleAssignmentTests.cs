@@ -3,6 +3,7 @@ using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
 
 namespace ICP.Platform.Authorization.Tests;
@@ -44,6 +45,7 @@ public sealed class LocalAdministratorRoleAssignmentTests
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
             .Options;
         return new EfPlatformDbContext(options, AuthorizationModelDefinitions.All);
     }

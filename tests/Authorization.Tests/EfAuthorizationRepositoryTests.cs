@@ -4,6 +4,7 @@ using ICP.Platform.Modules.Authorization.Persistence.Ef;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
 
 namespace ICP.Platform.Modules.Authorization.Tests;
@@ -78,6 +79,7 @@ public class EfAuthorizationRepositoryTests
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
             .Options;
 
         return new EfPlatformDbContext(options, AuthorizationModelDefinitions.All);

@@ -12,6 +12,7 @@ using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
 
 namespace ICP.Platform.Modules.Authorization.Tests;
@@ -180,8 +181,10 @@ public sealed class DataScopeObjectManagementTests
     private sealed class Fixture : IDisposable
     {
         // 仅登记实际目标模型；不登记直接项存储模型，越过拒绝结果读取配置时真实 EF 依赖仍立即失败。
+        // 部分模型必须按定义签名缓存，否则会与同进程内登记全部模型的上下文互相复用。
         private readonly EfPlatformDbContext db = new(new DbContextOptionsBuilder<EfPlatformDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options,
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options,
             [AuthorizationModelDefinitions.All.Single(model => model.Name == "Role")]);
         internal FeatureSource Features { get; } = new();
         internal ObjectDecisions Decisions { get; } = new();

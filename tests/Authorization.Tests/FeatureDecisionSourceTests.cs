@@ -6,6 +6,7 @@ using ICP.Platform.Modules.Authorization.Persistence.Ef;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
 namespace ICP.Platform.Modules.Authorization.Tests;
 public sealed class FeatureDecisionSourceTests
@@ -25,7 +26,8 @@ public sealed class FeatureDecisionSourceTests
     [Fact]
     public async Task UsesEnabledRoleUnionAndCurrentLinksWithoutSubstitutingAnotherBehavior()
     {
-        using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options,
+        using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options,
             new AuthorizationModelMetadataProvider().GetDefinitions());
         var roles = new EfRoleRepository(db);
         var role = new Role { Code = "Editor", Name = "Editor", IsEnabled = true }; await roles.CreateAsync(role);

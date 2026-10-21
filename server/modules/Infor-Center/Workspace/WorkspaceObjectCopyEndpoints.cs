@@ -11,25 +11,28 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed partial class WorkspaceContentsController
 {
     /// <summary>受控确认仅接受真实来源选择及目标位置，不接收客户端对象类型或实体身份。</summary>
-    [HttpPost("content/objects/copy/prepare"), RequireFeature("workspace.folder.pasteObjectCopy"), WorkspaceClipboardExecution(WorkspaceObjectCopyExecutions.Copy, "prepare")]
+    [HttpPost("content/objects/copy/prepare"), RequireFeature("workspace.folder.pasteObjectCopy"), ButtonBusinessHandler(typeof(WorkspaceObjectCopyPreparationHandler))]
     public async Task<IResult> PrepareObjectCopy(JsonElement input, CancellationToken token)
     {
         try
         {
+            copyAccess.BindHandler(typeof(WorkspaceObjectCopyPreparationHandler));
             var request = ReadClipboardInput(input, true);
             return Results.Ok(await contents.PrepareObjectCopyAsync(Actor(), request.Mode, request.SourcePosition,
                 request.LinkIds, request.TargetPosition!, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
         catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
     }
 
     /// <summary>唯一操作记录绑定来源及目标，提交仅接收正常可写值，成功回执不要求新对象可读。</summary>
-    [HttpPost("content/objects/copy"), RequireFeature("workspace.folder.pasteObjectCopy"), WorkspaceClipboardExecution(WorkspaceObjectCopyExecutions.Copy, "submit")]
+    [HttpPost("content/objects/copy"), RequireFeature("workspace.folder.pasteObjectCopy"), ButtonBusinessHandler(typeof(WorkspaceObjectCopyHandler))]
     public async Task<IResult> CopyObject(JsonElement input, CancellationToken token)
     {
         try
         {
+            copyAccess.BindHandler(typeof(WorkspaceObjectCopyHandler));
             var id = ReadCopyOperationInput(input, true);
             var values = input.GetProperty("values").Deserialize<Dictionary<string, JsonElement>>()!;
             var result = await contents.SubmitObjectCopyAsync(Actor(), id, values, operations, token);
@@ -44,6 +47,7 @@ public sealed partial class WorkspaceContentsController
                 receipt.State == "cancelled" ? "Workspace.CopyCancelled" : "Workspace.CopyOutcomeUnknown"));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
         catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
     }
 
@@ -60,6 +64,7 @@ public sealed partial class WorkspaceContentsController
     {
         try { return Results.Ok(await contents.ObjectCopyResultAsync(Actor(), ReadCopyOperationInput(input, false), cancel, token)); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
         catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
     }
 

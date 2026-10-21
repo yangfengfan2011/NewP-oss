@@ -32,15 +32,18 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             "/api/workspace/content/objects/copy/prepare",
             input);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("ActionDataAccess.DeclarationInvalid", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        Assert.Equal("ButtonExecution.BindingInvalid", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         Assert.Empty(await Rows(fixture, "WorkspaceObjectCopy"));
         Assert.Single(await Rows(fixture, "Part"));
-        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy", copy);
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteObjectCopy", copy);
         var sourceId = (string)link["CEID"]!;
         await Rule(fixture, admin, "PartPrepareNoSourceEdit", "part.part", sourceId, "edit", "deny");
-        using (var allowed = await FeatureHttpTestRequests.SendAsync(ordinary, copy, HttpMethod.Post,
-            "/api/workspace/content/objects/copy/prepare", input, declaration))
+        // 引用真实生效动作的身份，直接送新按钮协议；旧入口不能靠旧声明补救本次合法请求。
+        using (var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/objects/copy/prepare") { Content = JsonContent.Create(input) })
         {
+            request.Headers.Add("X-NewP-Feature", copy.Position);
+            request.Headers.Add("X-NewP-Button", declaration.Id);
+            using var allowed = await ordinary.SendAsync(request);
             Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
             var prepared = await allowed.Content.ReadFromJsonAsync<JsonElement>();
             Assert.Equal("", prepared.GetProperty("values").GetProperty("ECODE").GetString());
@@ -49,7 +52,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var alternate = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.copy", Point(fixture, "workspace.folder.copy"));
         using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, copy, HttpMethod.Post,
             "/api/workspace/content/objects/copy/prepare", input, alternate))
-            await Problem(swapped, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Problem(swapped, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         await Rule(fixture, admin, "PartPrepareCopy", "part.part", sourceId, "partObjectCopy", "deny");
         using (var copyDenied = await FeatureHttpTestRequests.SendAsync(ordinary, copy, HttpMethod.Post,
             "/api/workspace/content/objects/copy/prepare", input, declaration))
@@ -154,7 +157,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         PartCopyDataPhase phase, object body)
     {
         var point = Point(fixture, "workspace.folder.pasteObjectCopy");
-        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy", point);
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteObjectCopy", point);
         return FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post,
             phase == PartCopyDataPhase.Prepare ? "/api/workspace/content/objects/copy/prepare" : "/api/workspace/content/objects/copy", body, declaration);
     }

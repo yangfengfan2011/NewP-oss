@@ -168,13 +168,7 @@ public sealed partial class WorkspaceContents
         var targets = await ReadClipboardTargetsAsync(parentId, linkIds, token);
         foreach (var target in targets)
         {
-            if (target.ModelKey == "Document")
-            {
-                await foreach (var result in executionAccess.EvaluateObjectsAsync(WorkspaceObjectCopyExecutions.Binding(stage, "Document", batch),
-                    batch ? "visibility" : "confirmationVisibility", [new("document.document", target.Id, target)], token))
-                    if (result.Decision != DataExecutionDecision.Allowed) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            }
-            else if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+            if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
             await RequireNonRootClipboardTargetAsync(target, token);
         }
         return targets;

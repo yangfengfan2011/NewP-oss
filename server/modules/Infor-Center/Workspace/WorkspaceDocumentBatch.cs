@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using ICP.Platform.Authorization.Contracts;
 using System.Globalization;
 using System.Text.Json;
 using ICP.Platform.Crud.LinkQueries;
@@ -26,22 +28,31 @@ public sealed partial class WorkspaceContents
         RequireContainer(targetPosition, target, "Document");
         var sources = new List<WorkspaceDocumentCopySource>();
         var items = new List<WorkspaceDocumentCopyItemPreparation>();
-        for (var index = 0; index < endpoints.Length; index++)
+        // 批量原顺序是全部visibility、目标父、逐来源用途与确认，不能套成单项的先用途后父。
+        return await ExecuteCopyPreparationButtonAsync(new ButtonTargetSequence(PrepareSources), checkedToken =>
         {
-            if (!await ObjectCopyAllowedAsync("prepare", "source", "Document", endpoints[index].Id, cancellation, batch: true)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
-            var source = await documentCopies.ReadCopySourceAsync(endpoints[index].Id, cancellation);
-            sources.Add(new(linkIds[index], endpoints[index].Id, source.Code, source.Name, source.Description, source.Confirmation));
-            items.Add(new(linkIds[index], [.. parent.Names, source.Name], new Dictionary<string, object?> {
-                ["ECODE"] = "", ["ENAME"] = source.Name, ["Description"] = source.Description }, source.FileCount, source.TotalBytes));
+            var first = sources[0];
+            var input = new WorkspaceObjectCopyInput(sourcePosition, linkIds, targetPosition, first.Id, first.Code, first.Name,
+                first.Description, "Document", Documents: sources.ToArray());
+            var id = ids.NewId("WorkspaceObjectCopy");
+            var row = new Dictionary<string, object?> { ["EID"] = id, ["ActorId"] = actor, ["State"] = "ready", ["Input"] = JsonSerializer.Serialize(input) };
+            audit.ForCreate().ApplyTo(row); ObjectCopies.Add(row);
+            return Task.FromResult<WorkspaceObjectCopyPreparation>(new(id, new Dictionary<string, object?> { ["items"] = items.Select(item => new { item.SourceLinkId, item.Values }).ToArray() },
+                parent.Names, target.Names, "Document", items.Sum(item => item.FileCount), items.Sum(item => item.TotalBytes), items.ToArray()));
+        }, cancellation);
+
+        // 平台立即检查当前来源后才推进下一行，确认快照仍由Document owner生成。
+        async IAsyncEnumerable<ButtonObjectTarget> PrepareSources([EnumeratorCancellation] CancellationToken checkedToken)
+        {
+            for (var index = 0; index < endpoints.Length; index++)
+            {
+                yield return ObjectCopySourceTarget(endpoints[index]);
+                var source = await documentCopies.ReadCopySourceAsync(endpoints[index].Id, checkedToken);
+                sources.Add(new(linkIds[index], endpoints[index].Id, source.Code, source.Name, source.Description, source.Confirmation));
+                items.Add(new(linkIds[index], [.. parent.Names, source.Name], new Dictionary<string, object?> {
+                    ["ECODE"] = "", ["ENAME"] = source.Name, ["Description"] = source.Description }, source.FileCount, source.TotalBytes));
+            }
         }
-        var first = sources[0];
-        var input = new WorkspaceObjectCopyInput(sourcePosition, linkIds, targetPosition, first.Id, first.Code, first.Name,
-            first.Description, "Document", Documents: sources.ToArray());
-        var id = ids.NewId("WorkspaceObjectCopy");
-        var row = new Dictionary<string, object?> { ["EID"] = id, ["ActorId"] = actor, ["State"] = "ready", ["Input"] = JsonSerializer.Serialize(input) };
-        audit.ForCreate().ApplyTo(row); ObjectCopies.Add(row);
-        return new(id, new Dictionary<string, object?> { ["items"] = items.Select(item => new { item.SourceLinkId, item.Values }).ToArray() },
-            parent.Names, target.Names, "Document", items.Sum(item => item.FileCount), items.Sum(item => item.TotalBytes), items.ToArray());
     }, token);
 
     // 兼容旧单Document操作的持久输入和文件key；集合的序号来自服务器固定顺序，不能跨行或跨请求借用准备。
@@ -82,6 +93,23 @@ public sealed partial class WorkspaceContents
     private static StandardCrudError CopyRowError(WorkspaceObjectCopyInput input, int index, StandardCrudError error) => input.Documents is null ? error
         : error with { FieldErrors = error.FieldErrors.Select(field => field with { Field = $"items.{input.Documents[index].LinkId}.{field.Field}" }).ToArray() };
 
+    // 原可见性全批完成后逐项交平台；每项用途允许后才确认当前源快照，后项不能抢占首错。
+    private async IAsyncEnumerable<ButtonObjectTarget> PrepareDocumentCopySourceTargetsAsync(string actor, WorkspaceObjectCopyInput input,
+        [EnumeratorCancellation] CancellationToken token)
+    {
+        var parent = await positions.ResolveAsync(actor, input.SourcePosition, token);
+        var sources = CopySources(input);
+        var endpoints = await ResolveDocumentCopyTargetsAsync(parent.FolderId, input.LinkIds, "submit", token, input.Documents is not null);
+        if (endpoints.Length != sources.Length) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
+        for (var index = 0; index < sources.Length; index++)
+        {
+            if (endpoints[index].ModelKey != "Document" || endpoints[index].Id != sources[index].Id) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
+            yield return ObjectCopySourceTarget(endpoints[index]);
+            var current = await documentCopies.ReadCopySourceAsync(sources[index].Id, token);
+            if (current.Confirmation != sources[index].Confirmation) throw new LinkQueryException(409, "Workspace.CopySourceChanged");
+        }
+    }
+
     // 每次阶段切换及最后提交重新核对全部源，任何一行失效都会拒绝整个集合。
     private async Task RequireDocumentSourcesAsync(string actor, WorkspaceObjectCopyInput input, CancellationToken token)
     {
@@ -92,7 +120,7 @@ public sealed partial class WorkspaceContents
         for (var index = 0; index < sources.Length; index++)
         {
             if (endpoints[index].ModelKey != "Document" || endpoints[index].Id != sources[index].Id) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-            if (!await ObjectCopyAllowedAsync("submit", "source", "Document", sources[index].Id, token, input.Documents is not null)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
+            if (!await ObjectCopyAllowedAsync("source", "Document", sources[index].Id, token)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
             var current = await documentCopies.ReadCopySourceAsync(sources[index].Id, token);
             if (current.Confirmation != sources[index].Confirmation) throw new LinkQueryException(409, "Workspace.CopySourceChanged");
         }
@@ -104,30 +132,32 @@ public sealed partial class WorkspaceContents
     {
         if (!Equals(row["State"], "preparing")) throw new LinkQueryException(409, "Workspace.CopyCancelled");
         var candidates = ReadCopyValues(input, values);
-        await RequireDocumentSourcesAsync(actor, input, token);
-        var parent = await positions.ResolveAsync(actor, input.SourcePosition, token);
-        var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", token, batch: true);
-        RequireContainer(input.TargetPosition, target, "Document");
-        var created = new List<IReadOnlyDictionary<string, object?>>();
-        for (var index = 0; index < input.Documents!.Length; index++)
+        return await ExecuteCopyButtonAsync(new ButtonTargetSequence(inner => PrepareDocumentCopySourceTargetsAsync(actor, input, inner)), async checkedToken =>
         {
-            var source = input.Documents[index];
-            var result = await operations.ExecuteAsync("document.document.copy", new("copy"), null,
-                new Dictionary<string, object?> { ["Confirmation"] = source.Confirmation, ["OperationKey"] = CopyOperationKey(input, operationId, index), ["Values"] = candidates[index] }, token);
-            if (!result.Succeeded) return StandardCrudMutationResult.Failure(CopyRowError(input, index, result.Error!));
-            var fields = result.Detail!.Fields; var id = (string)fields["EID"]!;
-            var link = await RegisterCreatedReferenceAsync(target.FolderId, "Document", id, token);
-            await referenceAudit.ObjectCopiedAsync(source.LinkId, parent.FolderId, new("Document", source.Id), link, target.FolderId, id, token);
-            created.Add(fields);
-        }
-        // 最后一行的操作也可能触发授权变化；所有来源和新候选要在提交前再次裁决。
-        await RequireDocumentSourcesAsync(actor, input, token);
-        await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", token, batch: true);
-        foreach (var fields in created)
-            if (await executionAccess.EvaluateCandidateAsync(DocumentCopyFinalCandidateSource(nameof(CopyDocumentBatchAsync)), "document.document", "candidate", fields, token)
-                != ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");
-        row["State"] = "committed";
-        audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
-        return StandardCrudMutationResult.Success();
+            var parent = await positions.ResolveAsync(actor, input.SourcePosition, checkedToken);
+            var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", checkedToken, batch: true);
+            RequireContainer(input.TargetPosition, target, "Document");
+            var created = new List<IReadOnlyDictionary<string, object?>>();
+            for (var index = 0; index < input.Documents!.Length; index++)
+            {
+                var source = input.Documents[index];
+                var result = await operations.ExecuteAsync("document.document.copy", new("copy"), null,
+                    new Dictionary<string, object?> { ["Confirmation"] = source.Confirmation, ["OperationKey"] = CopyOperationKey(input, operationId, index), ["Values"] = candidates[index] }, checkedToken);
+                if (!result.Succeeded) return StandardCrudMutationResult.Failure(CopyRowError(input, index, result.Error!));
+                var fields = result.Detail!.Fields; var id = (string)fields["EID"]!;
+                var link = await RegisterCreatedReferenceAsync(target.FolderId, "Document", id, checkedToken);
+                await referenceAudit.ObjectCopiedAsync(source.LinkId, parent.FolderId, new("Document", source.Id), link, target.FolderId, id, checkedToken);
+                created.Add(fields);
+            }
+            // 最后一行的操作也可能触发授权变化；所有来源和新候选要在提交前再次裁决。
+            await RequireDocumentSourcesAsync(actor, input, checkedToken);
+            await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", checkedToken, batch: true);
+            foreach (var fields in created)
+                if (await executionAccess.EvaluateCandidateAsync(DocumentCopyFinalCandidateSource(nameof(CopyDocumentBatchAsync)), "document.document", "candidate", fields, checkedToken)
+                    != ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");
+            row["State"] = "committed";
+            audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
+            return StandardCrudMutationResult.Success();
+        }, token);
     }
 }

@@ -16,8 +16,7 @@ public sealed partial class WorkspaceContents
         var existing = await ObjectCopies.AsNoTracking().SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == operationId
             && EF.Property<string>(row, "ActorId") == actor, token) ?? throw new LinkQueryException(404, "Workspace.CopyOperationUnavailable");
         var input = JsonSerializer.Deserialize<WorkspaceObjectCopyInput>((string)existing["Input"]!)!;
-        if (input.SourceModel is "Part" or "Document") executionAccess.Validate([WorkspaceObjectCopyExecutions.Binding("submit", input.SourceModel, input.Documents is not null)], Resource(input.SourceModel));
-        else throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
+        if (input.SourceModel is not ("Part" or "Document")) throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
         if (Equals(existing["State"], "committed")) return StandardCrudMutationResult.Success();
         if (input.SourceModel == "Part") return await Execute(WorkspaceObjectCopyBehavior.CopyPart);
         var candidates = ReadCopyValues(input, values);
@@ -33,11 +32,15 @@ public sealed partial class WorkspaceContents
                 var error = await documentCopies.ValidateCopyCandidateAsync(candidates[index], cancellation);
                 if (error is not null) return CopyRowError(input, index, error);
             }
-            await RequireDocumentSourcesAsync(actor, input, cancellation);
-            var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", cancellation, input.Documents is not null);
-            RequireContainer(input.TargetPosition, target, "Document");
-            row["State"] = "preparing";
-            audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
+            await ExecuteCopyButtonAsync(new ICP.Platform.Authorization.Contracts.ButtonTargetSequence(
+                inner => PrepareDocumentCopySourceTargetsAsync(actor, input, inner)), async checkedToken =>
+            {
+                var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", checkedToken, input.Documents is not null);
+                RequireContainer(input.TargetPosition, target, "Document");
+                row["State"] = "preparing";
+                audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
+                return StandardCrudMutationResult.Success();
+            }, cancellation);
             return null;
         }, token);
         if (invalid is not null) return StandardCrudMutationResult.Failure(invalid);

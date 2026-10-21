@@ -20,20 +20,19 @@ public static class WorkspaceObjectCopyExecutions
 
 public sealed partial class WorkspaceContents
 {
-    // 固定对象角色在原read/copy点逐项执行，不把先前允许带入后续阶段或事务。
-    private async Task<bool> ObjectCopyAllowedAsync(string stage, string role, string model, string id, CancellationToken token, bool batch = false) =>
-        await executionAccess.EvaluateObjectAsync(WorkspaceObjectCopyExecutions.Binding(stage, model, batch), Resource(model), role, id, token)
-            == DataExecutionDecision.Allowed;
+    // 原业务关联和末次裁决主动检查当前事实，不依赖按钮合同或固定内部动作下限。
+    private async Task<bool> ObjectCopyAllowedAsync(string role, string model, string id, CancellationToken token) =>
+        await objectActions.CheckAsync(model, id, role == "visibility" ? ["read"] : model switch
+        {
+            "Part" => ["partObjectCopy"], "Document" => ["documentObjectCopy"],
+            _ => throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired")
+        }, token) == DataExecutionDecision.Allowed;
 
-    // 原最终候选复核固定实际调用者；创建后不可读不成为结果读取门槛。
-    private static DataExecutionWriteContext PartCopyFinalCandidateSource() =>
-        new(new("part.part.copy.finalCandidate", "standardCrud.create", "submit"), "part.part", null)
-        { Internal = new("part.part.copy.finalCandidate", "standardCrud.create", typeof(WorkspaceContents), nameof(CopyObjectAsync)) };
     // Document最终新候选原点以真实调用方法固定来源，不增加新对象read。
     private static DataExecutionWriteContext DocumentCopyFinalCandidateSource(string member) => new(
         new("document.document.copy.finalCandidate", "standardCrud.create", "submit"), "document.document", null)
         { Internal = new("document.document.copy.finalCandidate", "standardCrud.create", typeof(WorkspaceContents), member) };
     // 原位置完整read仍由既有resolver取得，再执行同一次父edit，不加authorize或额外查询。
     private Task<WorkspacePositionPath> ObjectCopyTargetPositionAsync(string actor, WorkspacePosition position,
-        string model, string stage, CancellationToken token, bool batch = false) => ResolveClipboardPositionAsync(WorkspaceObjectCopyExecutions.Binding(stage, model, batch), "parent", position, token);
+        string model, string stage, CancellationToken token, bool batch = false) => ResolveWritableButtonPositionAsync(actor, position, token);
 }

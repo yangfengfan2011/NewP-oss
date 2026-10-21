@@ -442,7 +442,7 @@ describe('standard CRUD route projection compiler', () => {
     }];
     const views: RuntimeViewDocument[] = ['alpha', 'beta'].map((key) => ({
       type: 'view',
-      view: { key: `${key}.records.list`, mode: 'list' },
+      view: { key: `${key}.records.list`, mode: 'list', pageActions: [{ key: 'create', standardAction: 'create' }] },
     }));
 
     expectProjectionFailure(

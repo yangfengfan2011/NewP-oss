@@ -34,6 +34,7 @@ const state = vi.hoisted(() => ({
   localAdministratorOnly: false,
   standardCrudTargetKey: undefined as string | undefined,
   standardCrudDetailViewKey: undefined as string | undefined,
+  standardCrudCreateAction: false,
 }));
 
 vi.mock('@icp-platform/core', async (importOriginal) => ({
@@ -127,6 +128,7 @@ vi.mock('../metadata/runtimeMetadataLoader', () => ({
       view: {
         key: state.standardCrudTargetKey,
         mode: 'list',
+        pageActions: state.standardCrudCreateAction ? [{ key: 'create', standardAction: 'create' }] : [],
         ...(state.standardCrudDetailViewKey
           ? { detailViewKey: state.standardCrudDetailViewKey }
           : {}),
@@ -160,6 +162,7 @@ describe('route capability authorization ordering', () => {
     state.localAdministratorOnly = false;
     state.standardCrudTargetKey = undefined;
     state.standardCrudDetailViewKey = undefined;
+    state.standardCrudCreateAction = false;
     state.user = {
       id: 'user-1',
       ecode: 'user',
@@ -380,6 +383,7 @@ describe('route capability authorization ordering', () => {
   it('keeps the legacy new route redirect to the standard CRUD drawer URL', async () => {
     window.history.replaceState({}, '', '/records/new');
     state.standardCrudTargetKey = 'records-redirect.list';
+    state.standardCrudCreateAction = true;
     ModuleRegistry.replaceAll([{
       metadata: { moduleId: 'records-redirect', displayName: 'Records Redirect', version: '1.0.0' },
       standardCrudResources: [{

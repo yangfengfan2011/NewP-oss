@@ -775,7 +775,6 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
     {
         var folderExecution = feature.BehaviorKey switch
         {
-            "workspace.folder.pasteObjectCopy" => "workspace.objectCopy",
             "workspace.folder.pasteFolderCopy" => "workspace.folder.shallowCopy",
             "workspace.folder.pasteFolderStructure" => "workspace.folder.structureCopy",
             _ => null

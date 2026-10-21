@@ -87,10 +87,10 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var submit = new { operationId = prepared.GetProperty("operationId").GetString(), values = new { ECODE = "NEVER-PART", ENAME = "不创建" } };
         var point = Point(fixture, "workspace.folder.pasteObjectCopy");
         using (var missing = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/content/objects/copy", submit))
-            await Problem(missing, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Problem(missing, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         var wrong = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.copy", Point(fixture, "workspace.folder.copy"));
         using (var swapped = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/content/objects/copy", submit, wrong))
-            await Problem(swapped, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Problem(swapped, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         var recovered = await Command(fixture, admin, "workspace.folder.resolveObjectCopy", "/api/workspace/content/objects/copy/result", new { submit.operationId });
         Assert.Equal("ready", recovered.GetProperty("state").GetString());
         Assert.Single(await Rows(fixture, "Part"));
@@ -104,17 +104,17 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var wrongDeclaration = wrong.Id;
         foreach (var header in new[] { " ", "not-a-declaration", wrongDeclaration })
         {
-            using var rejected = await WithDeclaration("objects/copy/prepare", documentInput, header);
-            await Problem(rejected, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            using var rejected = await WithButton("objects/copy/prepare", documentInput, header);
+            await Problem(rejected, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         }
         var docPrepared = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", documentInput);
         var docSubmit = new { operationId = docPrepared.GetProperty("operationId").GetString(), values = new { ECODE = "STAGE-DOCUMENT-COPY", ENAME = "正式Document副本" } };
         using (var missing = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/content/objects/copy", docSubmit))
-            await Problem(missing, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Problem(missing, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         foreach (var header in new[] { " ", "not-a-declaration", wrongDeclaration })
         {
-            using var rejected = await WithDeclaration("objects/copy", docSubmit, header);
-            await Problem(rejected, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            using var rejected = await WithButton("objects/copy", docSubmit, header);
+            await Problem(rejected, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         }
         Assert.Single(await Rows(fixture, "Document"));
         var copied = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy", docSubmit);
@@ -123,26 +123,26 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         Assert.Single(await Rows(fixture, "Part"));
 
         // TestServer会移除零长度头；使用已证实到达服务端的空白/错误/其他执行声明，不伪称空值已送达。
-        async Task<HttpResponseMessage> WithDeclaration(string path, object body, string declaration)
+        async Task<HttpResponseMessage> WithButton(string path, object body, string declaration)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/" + path) { Content = JsonContent.Create(body) };
             request.Headers.Add("X-NewP-Feature", point.Position);
-            request.Headers.TryAddWithoutValidation("X-NewP-Data-Declaration", declaration);
+            request.Headers.TryAddWithoutValidation("X-NewP-Button", declaration);
             return await admin.SendAsync(request);
         }
     }
 
     [Fact]
-    public async Task ObjectCopy_DeclarationTransportReportsActualEmptyHeaderPresence()
+    public async Task ObjectCopy_ButtonTransportReportsActualEmptyHeaderPresence()
     {
         using var server = new TestServer(new WebHostBuilder().Configure(app => app.Run(context =>
-            context.Response.WriteAsJsonAsync(new { specified = context.Request.Headers.ContainsKey("X-NewP-Data-Declaration") }))));
+            context.Response.WriteAsJsonAsync(new { specified = context.Request.Headers.ContainsKey("X-NewP-Button") }))));
         using var client = server.CreateClient();
         foreach (var (kind, value) in new[] { ("empty", ""), ("whitespace", " "), ("invalid", "not-a-declaration") })
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/");
-            Assert.True(request.Headers.TryAddWithoutValidation("X-NewP-Data-Declaration", value));
-            Assert.True(request.Headers.Contains("X-NewP-Data-Declaration"));
+            Assert.True(request.Headers.TryAddWithoutValidation("X-NewP-Button", value));
+            Assert.True(request.Headers.Contains("X-NewP-Button"));
             using var response = await client.SendAsync(request);
             var present = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("specified").GetBoolean();
             Console.WriteLine(JsonSerializer.Serialize(new { transport = kind, specified = present }));
@@ -150,7 +150,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         }
     }
 
-    // 正常Part消费者显式选择真实阶段；恢复/取消仍走原凭据入口，不按URL推断声明。
+    // 正常Part消费者显式选择真实阶段；结果使用自身按钮，取消仍走原凭据入口，不按URL推断来源。
     private enum PartCopyDataPhase { Prepare, Submit }
 
     private static Task<HttpResponseMessage> PartCopySend(BusinessAuditHostFixture fixture, HttpClient client,

@@ -24,7 +24,7 @@ public sealed partial class WorkspaceContents
         var parent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
         var endpoints = await ResolveDocumentCopyTargetsAsync(parent.FolderId, linkIds, "prepare", cancellation);
         if (endpoints.Any(endpoint => endpoint.ModelKey != "Document")) throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
-        var target = await ObjectCopyTargetPositionAsync(actor, targetPosition, "Document", "prepare", cancellation, batch: true);
+        var target = await ObjectCopyTargetPositionAsync(actor, targetPosition, cancellation);
         RequireContainer(targetPosition, target, "Document");
         var sources = new List<WorkspaceDocumentCopySource>();
         var items = new List<WorkspaceDocumentCopyItemPreparation>();
@@ -135,7 +135,7 @@ public sealed partial class WorkspaceContents
         return await ExecuteCopyButtonAsync(new ButtonTargetSequence(inner => PrepareDocumentCopySourceTargetsAsync(actor, input, inner)), async checkedToken =>
         {
             var parent = await positions.ResolveAsync(actor, input.SourcePosition, checkedToken);
-            var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", checkedToken, batch: true);
+            var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, checkedToken);
             RequireContainer(input.TargetPosition, target, "Document");
             var created = new List<IReadOnlyDictionary<string, object?>>();
             for (var index = 0; index < input.Documents!.Length; index++)
@@ -151,7 +151,7 @@ public sealed partial class WorkspaceContents
             }
             // 最后一行的操作也可能触发授权变化；所有来源和新候选要在提交前再次裁决。
             await RequireDocumentSourcesAsync(actor, input, checkedToken);
-            await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", checkedToken, batch: true);
+            await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, checkedToken);
             foreach (var fields in created)
                 if (await executionAccess.EvaluateCandidateAsync(DocumentCopyFinalCandidateSource(nameof(CopyDocumentBatchAsync)), "document.document", "candidate", fields, checkedToken)
                     != ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");

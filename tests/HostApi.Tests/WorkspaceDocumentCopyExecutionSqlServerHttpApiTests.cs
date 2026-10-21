@@ -33,12 +33,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         Assert.Equal(2, (await Rows(fixture, "FileUsage")).Length);
 
         var point = Point(fixture, "workspace.folder.pasteObjectCopy");
-        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy", point);
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteObjectCopy", point);
         var body = new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target };
         var wrong = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.copy", Point(fixture, "workspace.folder.copy"));
         using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, point, HttpMethod.Post,
             "/api/workspace/content/objects/copy/prepare", body, wrong))
-            await Problem(swapped, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Problem(swapped, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         var sourceId = (string)Assert.Single(await Rows(fixture, "Document"))["EID"]!;
         await Rule(fixture, admin, "DocumentPrepareCopy", "document.document", sourceId, "documentObjectCopy", "deny");
         using (var denied = await SendPrepare()) await Problem(denied, HttpStatusCode.Forbidden, "Workspace.ObjectCopyDenied");

@@ -205,12 +205,14 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
   return { router, container, writes, request, select, button, disabled, click, hasAction, copyRows, cleanup, openTreeMenu, waitFor };
 }
 
-it.each(['Part', 'Document'] as const)('routes the actual %s object-copy drawer through the bound Provider and the explicit model transport', async model => {
+it.each(['Part', 'Document'] as const)('routes the actual %s object-copy drawer through the bound Provider and the same formal button transport', async model => {
   const page = await mount({ formalDeclarations: true });
   const declarations = clipboardContract.declarations.filter(item => item.viewKey === list.view.key && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy');
   expect(declarations).toHaveLength(1);
-  const declaration = declarations[0];
-  expect(declaration.execution).toBe('workspace.objectCopy');
+  const declaration = declarations[0] as ActionDataAccessRequirement;
+  expect(declaration.execution).toBe('');
+  expect(declaration.businessBinding).toBe('workspace.folder.pasteObjectCopy');
+  expect(declaration.objectRequirements?.find(target => target.object === model)?.actions).toEqual([model === 'Part' ? 'partObjectCopy' : 'documentObjectCopy']);
   await page.copyRows([model]);
   await page.select('B');
   await page.waitFor(async () => expect(await page.disabled('粘贴对象副本')).toBe(false));
@@ -228,7 +230,8 @@ it.each(['Part', 'Document'] as const)('routes the actual %s object-copy drawer 
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) {
       const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
-      expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+      expect(headers.get('X-NewP-Button')).toBe(declaration.id);
+      expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
       expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
     }
   }
@@ -239,7 +242,7 @@ it('routes every Document batch row through the actual PageEntry Provider and th
   const page = await mount({ formalDeclarations: true, documentBatch: true });
   const declarations = clipboardContract.declarations.filter(item => item.viewKey === list.view.key && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy');
   expect(declarations).toHaveLength(1);
-  const declaration = declarations[0];
+  const declaration = declarations[0] as ActionDataAccessRequirement;
   await page.copyRows(['Document', 'SecondDocument']);
   await page.select('B');
   await page.waitFor(async () => expect(await page.disabled('粘贴对象副本')).toBe(false));
@@ -265,7 +268,8 @@ it('routes every Document batch row through the actual PageEntry Provider and th
   await act(async () => close.click());
   for (const call of page.request.mock.calls.filter(([input]) => /\/objects\/copy(?:\/prepare)?$/.test(new URL(input instanceof Request ? input.url : String(input), 'http://localhost').pathname))) {
     const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
-    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(headers.get('X-NewP-Button')).toBe(declaration.id);
+      expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
     expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
   }
 });

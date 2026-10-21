@@ -1,5 +1,4 @@
 using ICP.Platform.Kernel.ModulePlanning;
-using ICP.Platform.Modules.Document;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -14,26 +13,17 @@ public sealed class DocumentObjectCopyExecutionContractTests
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
         Assert.True(compiled.IsSuccess, string.Join(";", compiled.Diagnostics.Select(item => item.Message)));
         var plan = compiled.Plan!;
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.objectCopy");
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.pasteObjectCopy");
         Assert.Equal(("workspace.folder.list", "pageActions", "pasteObjectCopy"), (declaration.ViewKey, declaration.Surface, declaration.ActionKey));
-        Assert.Equal(new[] { "part.part", "document.document", "workspace.folder" }, declaration.Resources);
+        Assert.Empty(declaration.Execution);
+        Assert.Null(declaration.Requirements);
+        Assert.Equal(new[] { "part.part", "document.document" }, declaration.Resources);
+        var target = Assert.Single(declaration.GetObjectRequirements(), item => item.Object == "Document");
+        Assert.Equal("document.document", target.ResourceKey);
+        Assert.Equal(new[] { "documentObjectCopy" }, target.Actions);
         var workspace = Assert.Single(plan.Modules, module => module.ModuleId == "Workspace");
-        Assert.Equal(new[] { "part", "document", "documentBatch" }, Assert.Single(workspace.DataExecutions, item => item.Key == declaration.Execution).Branches);
-        foreach (var stage in new[] { "prepare", "submit" })
-        {
-            foreach (var branch in new[] { "document", "documentBatch" })
-            {
-                var requirements = declaration.Requirements!.Where(item => item.Stage == stage && (item.Branch is null || item.Branch == branch)).ToArray();
-                var visibility = Assert.Single(requirements, item => item.Role == "visibility");
-                Assert.Equal(new[] { "read" }, Assert.Single(visibility.AnyOf));
-                Assert.Equal(branch == "documentBatch" ? "workspace.clipboard.endpoint" : null, visibility.ReadResolverKey);
-                var source = Assert.Single(requirements, item => item.Role == "source");
-                Assert.Equal(new[] { "document.document" }, source.Resources);
-                Assert.Equal(new[] { "documentObjectCopy" }, Assert.Single(source.AnyOf));
-                Assert.Null(source.ReadResolverKey);
-                Assert.Equal(new[] { "read", "edit" }, Assert.Single(Assert.Single(requirements, item => item.Role == "parent").AnyOf));
-            }
-        }
+        Assert.DoesNotContain(workspace.DataExecutions, item => item.Key == "workspace.objectCopy");
+        // Document文件复制本体尚未迁移，原owner来源与文件证明继续由同一业务实现消费。
         var owner = Assert.Single(plan.Modules, module => module.ModuleId == "Document");
         var copy = Assert.Single(DataExecutionProviders.Resolve(owner.DataExecutions.Where(item => item.Key == "document.files.copySource").ToArray(), owner.DataExecutionProviders));
         Assert.Equal(new[] { "read", "documentObjectCopy" }, Assert.Single(Assert.Single(copy.Requirements).AnyOf));

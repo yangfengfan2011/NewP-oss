@@ -35,7 +35,7 @@ public sealed partial class WorkspaceContents
             await ExecuteCopyButtonAsync(new ICP.Platform.Authorization.Contracts.ButtonTargetSequence(
                 inner => PrepareDocumentCopySourceTargetsAsync(actor, input, inner)), async checkedToken =>
             {
-                var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", checkedToken, input.Documents is not null);
+                var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, checkedToken);
                 RequireContainer(input.TargetPosition, target, "Document");
                 row["State"] = "preparing";
                 audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);

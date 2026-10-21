@@ -943,270 +943,33 @@
       "viewKey": "workspace.folder.list",
       "surface": "pageActions",
       "actionKey": "pasteObjectCopy",
-      "execution": "workspace.objectCopy",
+      "execution": "",
       "resources": [
         "part.part",
-        "document.document",
-        "workspace.folder"
+        "document.document"
       ],
-      "actions": [
-        "read",
-        "partObjectCopy",
-        "documentObjectCopy",
-        "edit"
-      ],
+      "actions": [],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:pasteObjectCopy",
         "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:pasteObjectCopy"
       ],
-      "requirements": [
+      "businessBinding": "workspace.folder.pasteObjectCopy",
+      "objectRequirements": [
         {
-          "role": "visibility",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "part.part"
+          "object": "Part",
+          "actions": [
+            "partObjectCopy"
           ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "part"
+          "resourceKey": "part.part"
         },
         {
-          "role": "visibility",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "document.document"
+          "object": "Document",
+          "actions": [
+            "documentObjectCopy"
           ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "document"
-        },
-        {
-          "role": "visibility",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "documentBatch",
-          "readResolverKey": "workspace.clipboard.endpoint"
-        },
-        {
-          "role": "source",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "part.part"
-          ],
-          "anyOf": [
-            [
-              "partObjectCopy"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "part"
-        },
-        {
-          "role": "source",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "documentObjectCopy"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "document"
-        },
-        {
-          "role": "source",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "documentObjectCopy"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "documentBatch"
-        },
-        {
-          "role": "parent",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        },
-        {
-          "role": "visibility",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "part.part"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "part"
-        },
-        {
-          "role": "visibility",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "document"
-        },
-        {
-          "role": "visibility",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "documentBatch",
-          "readResolverKey": "workspace.clipboard.endpoint"
-        },
-        {
-          "role": "source",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "part.part"
-          ],
-          "anyOf": [
-            [
-              "partObjectCopy"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "part"
-        },
-        {
-          "role": "source",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "documentObjectCopy"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "document"
-        },
-        {
-          "role": "source",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "documentObjectCopy"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "documentBatch"
-        },
-        {
-          "role": "confirmationVisibility",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "branch": "document",
-          "readResolverKey": "workspace.clipboard.endpoint"
-        },
-        {
-          "role": "parent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
+          "resourceKey": "document.document"
         }
-      ],
-      "provider": "workspace.backend"
+      ]
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:removeSelected",

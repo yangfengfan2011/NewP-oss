@@ -131,7 +131,7 @@ public sealed class PartWriteExecutionSqlServerTests
         }
         finally { accessor.HttpContext = previous; }
     }
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实普通Part入口、保留的复制创建来源与显式内部更新删除核对精确目标")]
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实普通Part入口与显式可信内部创建更新删除核对精确目标，已退役复制合同不可复用")]
     public async Task EntryAndInternalWrites_RequireExactSourceAndPreserveClosedHttpOperations()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includePart: true);
@@ -164,14 +164,16 @@ public sealed class PartWriteExecutionSqlServerTests
         {
             var executor = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
             var key = "part.part.internal.create";
-            var source = new ObjectOperationWriteSource.Declared(new(new(key, "standardCrud.create", "submit"), "part.part", null)
+            var retired = new ObjectOperationWriteSource.Declared(new(new(key, "standardCrud.create", "submit"), "part.part", null)
             { Internal = new(key, "standardCrud.create", typeof(ICP.Platform.Modules.Part.PartCopyBehavior), "ExecuteAsync") });
             var input = new Dictionary<string, object?> { ["ECODE"] = "PART-SOURCE-INTERNAL", ["ENAME"] = "可信内部候选" };
+            Assert.Equal(400, (await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", ObjectOperationAction.Create, null, input, retired))).Status);
+            var source = new ObjectOperationWriteSource.Internal("part.part", "Part", ObjectOperationAction.Create, null);
             foreach (var wrong in new[]
             {
-                source with { Context = source.Context with { ResourceKey = "document.document" } },
-                source with { Context = source.Context with { ObjectId = entryId } },
-                source with { Context = source.Context with { Internal = source.Context.Internal! with { Member = "ReadEditValuesAsync" } } }
+                source with { ResourceKey = "document.document" },
+                source with { ObjectId = entryId },
+                source with { Action = ObjectOperationAction.Update }
             })
             {
                 var error = await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", ObjectOperationAction.Create, null, input, wrong));

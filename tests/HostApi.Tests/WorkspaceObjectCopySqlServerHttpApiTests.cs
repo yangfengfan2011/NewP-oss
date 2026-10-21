@@ -34,7 +34,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             await reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
             observer.WatchEditGraph = true;
             var point = RowPoint(fixture, "edit");
-            edit = FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Put, "/api/workspace/content/" + link["LID"], new { position = source, values = new { ENAME = "之后的源", Description = "之后的说明" } });
+            edit = FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Put, "/api/workspace/content/" + link["LID"], new { position = source, values = new { ENAME = "之后的源", Description = "之后的说明" } }, ClipboardDeclaration(fixture, point));
             await observer.EditGraphReached.Task.WaitAsync(TimeSpan.FromSeconds(20));
             await Task.WhenAny(edit, Task.Delay(TimeSpan.FromMilliseconds(500)));
             Assert.False(edit.IsCompleted, "正常源编辑不能在副本事务固定快照后、提交前穿越。");
@@ -167,7 +167,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/objects/copy") { Content = JsonContent.Create(new { operationId, values = new { ECODE = "DURABLE-COPY", ENAME = "中断副本" } }, options: new JsonSerializerOptions()) };
         var submitPoint = Point(fixture, "workspace.folder.pasteObjectCopy");
         request.Headers.Add("X-NewP-Feature", submitPoint.Position);
-        request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy", submitPoint).Id);
+        request.Headers.Add("X-NewP-Button", new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteObjectCopy", submitPoint).Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try
         {

@@ -38,7 +38,7 @@ public sealed partial class WorkspaceContents
             if (endpoint.ModelKey is not ("Part" or "Document")) throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
             return await ExecuteCopyPreparationButtonAsync(ObjectCopySourceTarget(endpoint), async checkedToken =>
             {
-                var target = await ObjectCopyTargetPositionAsync(actor, targetPosition, endpoint.ModelKey, "prepare", checkedToken);
+                var target = await ObjectCopyTargetPositionAsync(actor, targetPosition, checkedToken);
                 RequireContainer(targetPosition, target, endpoint.ModelKey);
                 var detail = await crud.GetDetailFromSourceAsync(resources.FindByResourceKey(Resource(endpoint.ModelKey))!, endpoint.Id,
                     new("workspace.objectCopy.detail", "workspace.backend", typeof(WorkspaceContents), nameof(PrepareObjectCopyAsync)), checkedToken)
@@ -74,7 +74,7 @@ public sealed partial class WorkspaceContents
         if (endpoint.ModelKey != prepared.SourceModel || endpoint.Id != prepared.SourceId) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
         return await ExecuteCopyButtonAsync(ObjectCopySourceTarget(endpoint), async checkedToken =>
         {
-            var target = await ObjectCopyTargetPositionAsync(actor, prepared.TargetPosition, endpoint.ModelKey, "submit", checkedToken);
+            var target = await ObjectCopyTargetPositionAsync(actor, prepared.TargetPosition, checkedToken);
             RequireContainer(prepared.TargetPosition, target, endpoint.ModelKey);
             if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == endpoint.ModelKey))
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
@@ -90,9 +90,9 @@ public sealed partial class WorkspaceContents
             await referenceAudit.ObjectCopiedAsync(prepared.LinkIds[0], parent.FolderId, endpoint, linkId, target.FolderId, id, checkedToken);
             // 授权规则写入不取得目录图锁；在业务图和审计登记之后再次裁决，不能把前次允许沿用到提交。
             var finalParent = await positions.ResolveAsync(actor, prepared.SourcePosition, checkedToken);
-            var finalSource = await ResolveObjectCopySourceAsync(finalParent.FolderId, prepared.LinkIds, "submit", checkedToken);
+            var finalSource = await ResolveObjectCopySourceAsync(finalParent.FolderId, prepared.LinkIds, checkedToken);
             if (finalSource != endpoint) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-            await ObjectCopyTargetPositionAsync(actor, prepared.TargetPosition, endpoint.ModelKey, "submit", checkedToken);
+            await ObjectCopyTargetPositionAsync(actor, prepared.TargetPosition, checkedToken);
             var candidateAllowed = endpoint.ModelKey == "Part"
                 ? await objectActions.CheckCandidateAsync("Part", result.Detail.Fields, ["create"], checkedToken)
                     == ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed
@@ -148,7 +148,7 @@ public sealed partial class WorkspaceContents
     }
 
     // 最终重验仍在原登记之后发生，不沿用平台先前的允许结果。
-    private async Task<LinkObjectReference> ResolveObjectCopySourceAsync(string parentId, string[] linkIds, string stage, CancellationToken token)
+    private async Task<LinkObjectReference> ResolveObjectCopySourceAsync(string parentId, string[] linkIds, CancellationToken token)
     {
         var source = await ResolveObjectCopyVisibleSourceAsync(parentId, linkIds, token);
         if (!await ObjectCopyAllowedAsync("source", source.ModelKey, source.Id, token)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");

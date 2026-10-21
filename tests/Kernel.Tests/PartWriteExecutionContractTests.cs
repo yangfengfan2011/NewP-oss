@@ -9,7 +9,7 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class PartWriteExecutionContractTests
 {
     [Fact]
-    public void PartCreate_UsesOneButtonDeclarationAndPreservesOnlyTheUnmigratedCopySource()
+    public void PartCreate_UsesOneButtonDeclarationWithoutRetiredCopyCreationSources()
     {
         var compiled = new CanonicalModulePlanCompiler().Compile("part-write-consumer",
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
@@ -31,12 +31,7 @@ public sealed class PartWriteExecutionContractTests
             Assert.False(descriptor.DataExecutions.ContainsKey(operation));
             Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "part.part." + operation);
         }
-        var copy = Assert.Single(owner.DataExecutions, item => item.Key == "part.part.internal.create");
-        Assert.Equal("internal", copy.Boundary);
-        Assert.Equal("standardCrud.create", copy.Provider);
-        Assert.Empty(copy.FeatureBehaviors);
-        Assert.EndsWith("PartCopyBehavior.ExecuteAsync", Assert.Single(copy.FixedBindings).Caller);
-        Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.Execution == copy.Key);
+        Assert.DoesNotContain(owner.DataExecutions, item => item.Key is "part.part.internal.create" or "part.part.copy.source" or "part.part.copy.finalCandidate");
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "ICP-Platform.sln"))) root = root.Parent;
         var path = Path.Combine(root!.FullName, "tests/Kernel.Tests/Fixtures/PartWriteDataAccess.contract.json");

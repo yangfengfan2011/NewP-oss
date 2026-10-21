@@ -13,7 +13,7 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class WorkspaceClipboardExecutionEndpointCoverageTests
 {
     [Fact]
-    public void ActualWorkspaceClipboardEndpoints_BindButtonsAndRetainTheSeparateObjectCopyStages()
+    public void ActualWorkspaceClipboardEndpoints_BindButtonsAndRetainOnlyUnmigratedFolderCopyContracts()
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));
         var compiled = new CanonicalModulePlanCompiler().Compile("workspace-clipboard-coverage", candidates);
@@ -23,22 +23,30 @@ public sealed class WorkspaceClipboardExecutionEndpointCoverageTests
         using var app = builder.Build();
         app.MapControllers();
         var allEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).ToArray();
-        Type[] handlers = [typeof(WorkspaceClipboardSelectionHandler), typeof(WorkspacePasteReferencesHandler), typeof(WorkspaceRemoveReferencesHandler)];
+        Type[] handlers = [typeof(WorkspaceClipboardSelectionHandler), typeof(WorkspacePasteReferencesHandler), typeof(WorkspaceRemoveReferencesHandler),
+            typeof(WorkspaceObjectCopyPreparationHandler), typeof(WorkspaceObjectCopyHandler), typeof(WorkspaceObjectCopyResultHandler)];
         var buttonEndpoints = allEndpoints.Where(endpoint => handlers.Contains(endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.HandlerType)).ToArray();
         var buttons = compiled.Plan!.ActionDataAccessCatalog.Where(button => button.ModuleId == "Workspace"
-            && button.ViewKey == "workspace.folder.list" && button.GetObjectRequirements().Count > 0
-            && button.ActionKey is "copy" or "copySelected" or "cut" or "cutSelected" or "paste" or "remove" or "removeSelected").ToArray();
+            && button.ViewKey == "workspace.folder.list"
+            && button.ActionKey is "copy" or "copySelected" or "cut" or "cutSelected" or "paste" or "remove" or "removeSelected" or "pasteObjectCopy" or "resolveObjectCopy").ToArray();
         Assert.NotEmpty(buttons);
         Assert.All(buttons, button => Assert.Contains(buttonEndpoints, endpoint => ButtonBusinessEndpointBindings.Matches(endpoint, button.ModuleId, button.BusinessBinding!)));
         Assert.All(buttonEndpoints, endpoint => Assert.Contains(buttons, button => ButtonBusinessEndpointBindings.Matches(endpoint, button.ModuleId, button.BusinessBinding!)));
-        var endpoints = allEndpoints.Select(endpoint => endpoint.Metadata.GetMetadata<WorkspaceClipboardExecutionAttribute>()).Where(binding => binding is not null).ToArray();
-        Assert.NotEmpty(endpoints);
-        var contracts = compiled.Plan!.Modules.SelectMany(module => module.DataExecutions)
-            .Where(contract => contract.Key.StartsWith("workspace.clipboard.", StringComparison.Ordinal)
-                || contract.Key == WorkspaceObjectCopyExecutions.Copy).ToArray();
-        Assert.NotEmpty(contracts);
-        Assert.All(contracts, contract => Assert.Contains(endpoints, endpoint => endpoint!.Binding.Execution == contract.Key
-            && endpoint.Binding.Provider == contract.Provider && contract.Requirements.Any(requirement => requirement.Stage == endpoint.Binding.Stage)));
-        Assert.All(endpoints, endpoint => Assert.Contains(contracts, contract => contract.Key == endpoint!.Binding.Execution));
+        // Folder副本仍由原实际方法固定prepare/submit来源；它们没有挂载已退役的剪贴板filter。
+        var folderContracts = compiled.Plan!.Modules.SelectMany(module => module.DataExecutions)
+            .Where(contract => contract.Key is WorkspaceFolderCopyExecutions.Shallow or WorkspaceFolderCopyExecutions.Structure).ToArray();
+        Assert.Equal(2, folderContracts.Length);
+        foreach (var contract in folderContracts)
+        {
+            Assert.Contains(contract.Requirements, requirement => requirement.Stage == "prepare");
+            Assert.Contains(contract.Requirements, requirement => requirement.Stage == "submit");
+            var declarations = compiled.Plan.ActionDataAccessCatalog.Where(item => item.Execution == contract.Key).ToArray();
+            Assert.NotEmpty(declarations);
+            var endpoints = allEndpoints.Where(endpoint => contract.FeatureBehaviors.Contains(
+                endpoint.Metadata.GetMetadata<RequireFeatureAttribute>()?.BehaviorKey ?? "")).ToArray();
+            Assert.Equal(2, endpoints.Length);
+            Assert.Contains(endpoints.Cast<RouteEndpoint>(), endpoint => endpoint.RoutePattern.RawText!.EndsWith("/prepare", StringComparison.Ordinal));
+            Assert.Contains(endpoints.Cast<RouteEndpoint>(), endpoint => !endpoint.RoutePattern.RawText!.EndsWith("/prepare", StringComparison.Ordinal));
+        }
     }
 }

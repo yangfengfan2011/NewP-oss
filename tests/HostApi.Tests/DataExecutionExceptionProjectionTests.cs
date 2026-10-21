@@ -6,7 +6,6 @@ using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Modules.Example.Crud;
 using ICP.Platform.Modules.Organization.Controllers;
-using ICP.Platform.Modules.Workspace;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
@@ -20,8 +19,6 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class DataExecutionExceptionProjectionTests
 {
     [Theory]
-    [InlineData("workspace", 400)]
-    [InlineData("workspace", 403)]
     [InlineData("organization", 400)]
     [InlineData("organization", 403)]
     [InlineData("standard", 400)]
@@ -40,7 +37,7 @@ public sealed class DataExecutionExceptionProjectionTests
         Assert.Equal(caller == "global" ? error.Message : error.Code, problem.Title);
         Assert.Equal(error.Code, Assert.Single(problem.Extensions).Value);
         Assert.True(problem.Extensions.ContainsKey("code"));
-        Assert.Equal(caller is "workspace" or "global", result.Handled);
+        Assert.Equal(caller == "global", result.Handled);
         Assert.Equal(caller is "organization" or "standard" ? new[] { "validate" } : [], events);
     }
 
@@ -65,7 +62,7 @@ public sealed class DataExecutionExceptionProjectionTests
     public async Task NonTargetErrorsAndCancellation_KeepTheirOriginalPropagation(bool cancel)
     {
         Exception error = cancel ? new OperationCanceledException() : new InvalidOperationException("business-failure");
-        foreach (var caller in new[] { "workspace", "global" })
+        foreach (var caller in new[] { "global" })
         {
             var result = await InvokeAsync(caller, error, false, []);
             Assert.Null(result.Result);
@@ -86,11 +83,10 @@ public sealed class DataExecutionExceptionProjectionTests
     {
         var context = new ActionContext(new DefaultHttpContext(), new RouteData(), new ActionDescriptor());
         var filters = new List<IFilterMetadata>();
-        if (caller is "workspace" or "global")
+        if (caller == "global")
         {
             var failure = new ExceptionContext(context, filters) { Exception = error! };
-            if (caller == "workspace") await new WorkspaceClipboardExecutionAttribute(WorkspaceObjectCopyExecutions.Copy, "prepare").OnExceptionAsync(failure);
-            else new DataExecutionExceptionFilter().OnException(failure);
+            new DataExecutionExceptionFilter().OnException(failure);
             Assert.Same(error, failure.Exception);
             return (failure.Result, failure.ExceptionHandled);
         }

@@ -298,14 +298,18 @@ public sealed class StandardCrudService : IStandardCrudService
     /// 按描述符白名单更新资源；必需业务记录的资源从保护旧值到登记都在唯一事务中完成。
     /// 既有 revision 资源保留条件更新协议，数据库约束竞争统一投影为稳定公共冲突。
     /// </summary>
-    public async Task<StandardCrudMutationResult> UpdateAsync(
+    public Task<StandardCrudMutationResult> UpdateAsync(
         StandardCrudDescriptor descriptor,
         string id,
         IReadOnlyDictionary<string, object?> values,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) => UpdateEntryAsync(descriptor, id, values, "update", cancellationToken);
+
+    // 启停保留各自入口身份；实际领域行为和受保护旧值仍复用标准更新核心。
+    private async Task<StandardCrudMutationResult> UpdateEntryAsync(StandardCrudDescriptor descriptor, string id,
+        IReadOnlyDictionary<string, object?> values, string entryOperation, CancellationToken cancellationToken)
     {
         using var operationScope = _evaluation?.BeginOperation();
-        var source = EntryWriteSource(descriptor, "update", id);
+        var source = EntryWriteSource(descriptor, entryOperation, id);
         if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Update) == true)
         {
             try
@@ -371,7 +375,7 @@ public sealed class StandardCrudService : IStandardCrudService
             });
         }
 
-        return await UpdateAsync(descriptor, id, new Dictionary<string, object?> { [descriptor.EnabledField] = enabled }, cancellationToken);
+        return await UpdateEntryAsync(descriptor, id, new Dictionary<string, object?> { [descriptor.EnabledField] = enabled }, enabled ? "enable" : "disable", cancellationToken);
     }
 
     /// <summary>按资源声明提前协调条件删除与普通删除，并统一发布提交结果。</summary>
@@ -398,12 +402,15 @@ public sealed class StandardCrudService : IStandardCrudService
 
     // 仅已登记的入口生成本次目标绑定；正式来源仍由统一执行器核对原请求声明。
     private ObjectOperationWriteSource EntryWriteSource(StandardCrudDescriptor descriptor, string operation, string? id)
-        => descriptor.DataExecutions.TryGetValue(operation, out var execution)
-            ? new ObjectOperationWriteSource.Declared(new(new(execution, "standardCrud." + operation, "submit"), descriptor.ResourceKey, id))
-            : operation is "create" or "update" or "delete"
-                ? new ObjectOperationWriteSource.Button((_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED"))
-                    .Bind(descriptor.ResourceKey, descriptor.ModelName, operation, id))
-                : throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
+    {
+        var writeOperation = operation is "enable" or "disable" ? "update" : operation;
+        if (descriptor.DataExecutions.TryGetValue(writeOperation, out var execution))
+            return new ObjectOperationWriteSource.Declared(new(new(execution, "standardCrud." + writeOperation, "submit"), descriptor.ResourceKey, id));
+        return operation is "create" or "update" or "delete" or "enable" or "disable"
+            ? new ObjectOperationWriteSource.Button((_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED"))
+                .Bind(descriptor.ResourceKey, descriptor.ModelName, operation, id))
+            : throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
+    }
 
     // 查询扩展点只产出标准条件；列表真正执行统一收口到平台查询内核，避免模块逻辑直接进入持久化实现。
     private IReadOnlyList<StandardCrudQueryCondition> BuildConditions(StandardCrudDescriptor descriptor, StandardCrudListQuery query)

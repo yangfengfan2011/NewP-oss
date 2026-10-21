@@ -90,7 +90,7 @@ public static class StandardCrudDataExecutions
         {
             var buttons = services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog
                 .Where(item => item.BusinessBinding == descriptor.ResourceKey + "." + operation).ToArray();
-            if (operation is not ("create" or "update" or "delete") || buttons.Length == 0 || buttons.Any(item => item.ModuleId != descriptor.ModuleId
+            if (operation is not ("create" or "update" or "delete" or "enable" or "disable") || buttons.Length == 0 || buttons.Any(item => item.ModuleId != descriptor.ModuleId
                 || item.GetObjectRequirements().Count > 0 && !item.GetObjectRequirements().Any(requirement =>
                     requirement.Object == descriptor.ModelName && requirement.ResourceKey == descriptor.ResourceKey)))
                 throw new InvalidOperationException("STANDARD_CRUD_BUTTON_BINDING_INVALID");

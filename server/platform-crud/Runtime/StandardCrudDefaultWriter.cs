@@ -452,7 +452,7 @@ public sealed class StandardCrudDefaultWriter
         return result == DataExecutionDecision.Allowed ? null : result == DataExecutionDecision.NotFound ? NotFound(descriptor, id) : ScopeDenied(descriptor);
     }
 
-    // 来源只能是本次正式写；资源、操作和目标必须与实际owner调用完全一致。
+    // 来源只能是本次正式写；启停复用update核心，但随后仍按其原入口重新绑定并检查同一目标。
     private void AssertWriteSource(StandardCrudDescriptor descriptor, string operation, string? id, ObjectOperationWriteSource? source)
     {
         if (source is ObjectOperationWriteSource.CreateContinuation continuation)
@@ -474,7 +474,9 @@ public sealed class StandardCrudDefaultWriter
         if (source is ObjectOperationWriteSource.Button button)
         {
             if (operation is not ("create" or "update" or "delete") || button.Context.ResourceKey != descriptor.ResourceKey || button.Context.ObjectName != descriptor.ModelName
-                || button.Context.ObjectId != id || button.Context.BusinessBinding != descriptor.ResourceKey + "." + operation
+                || button.Context.ObjectId != id || !(button.Context.BusinessBinding == descriptor.ResourceKey + "." + operation
+                    || operation == "update" && (button.Context.BusinessBinding == descriptor.ResourceKey + ".enable"
+                        || button.Context.BusinessBinding == descriptor.ResourceKey + ".disable"))
                 || descriptor.DataExecutions.ContainsKey(operation))
                 throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
             return;

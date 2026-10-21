@@ -9,6 +9,7 @@ import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
   isStandardCrudRecord,
+  standardCrudInputReadSource,
   applyStandardCrudLookupValueChange,
   createStandardCrudOperationResultPresenterRegistry,
 } from '@icp-platform/sdk';
@@ -1013,9 +1014,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     drawerState.mode === 'create' ? 'create' : 'edit',
     drawerState.mode === 'create' ? 'list.pageActions' : drawerState.editActionScope ?? 'list.rowActions',
   );
-  const drawerDataAccess = (drawerState.mode === 'create'
+  const drawerAction = drawerState.mode === 'create'
     ? schema.pageActions.find(action => action.standardAction === 'create')
-    : drawerState.editAction ?? schema.rowActions.find(action => action.standardAction === 'edit'))?.dataAccess;
+    : drawerState.editAction ?? schema.rowActions.find(action => action.standardAction === 'edit');
+  const drawerDataAccess = drawerAction?.dataAccess;
+  // 无Detail的编辑输入只消费其显式读取来源；提交按钮不能代替读取身份。
+  const drawerInputRead = drawerState.mode === 'edit' && drawerDataAccess?.businessBinding && !detailDataAccess
+    ? standardCrudInputReadSource({ action: drawerAction, featurePosition: resolvedFeaturePosition(drawerActionResolution), dataAccessDeclarations: inputReadDeclarations })
+    : undefined;
   const drawerDetailQuery = useStandardCrudDetailQuery({
     resourceKey: registration.resourceKey,
     id: drawerState.mode === 'view' || drawerState.mode === 'edit' ? drawerState.id : null,
@@ -1023,7 +1029,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     featurePosition: drawerState.mode === 'edit'
       ? resolvedFeaturePosition(drawerActionResolution)
       : readPosition,
-    dataAccess: drawerState.mode === 'edit' && !drawerDataAccess?.businessBinding ? drawerDataAccess ?? detailDataAccess : detailDataAccess,
+    dataAccess: drawerState.mode === 'edit' && !drawerDataAccess?.businessBinding ? drawerDataAccess ?? detailDataAccess : detailDataAccess ?? drawerInputRead,
   });
   const detailFields = useMemo(
     () => drawerDetailQuery.detail?.normalized.fields ?? {},

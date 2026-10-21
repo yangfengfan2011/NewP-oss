@@ -273,6 +273,7 @@ describe('StandardCrudListPageHost', () => {
     initialEntry = '/organization/persons',
     options: {
       strictMode?: boolean;
+      inputDeclarations?: ActionDataAccessRequirement[];
       feature?: {
         entry: string;
         create?: string;
@@ -314,7 +315,7 @@ describe('StandardCrudListPageHost', () => {
             <PlatformQueryProvider scopeKey="user-1">
               <RuntimeMetadataProvider
                 value={{
-                  manifest: { modules: options.feature ? [{ moduleId: "Organization", metadataBasePath: "", navFiles: [], viewFiles: [], modelFiles: [], features: options.feature.points ?? (options.feature.create ? [{ key: "create", kind: "action", position: options.feature.create, parentPosition: options.feature.entry, actionScope: "list.pageActions" }] : []) }] : [] },
+                  manifest: { modules: options.feature ? [{ moduleId: "Organization", metadataBasePath: "", navFiles: [], viewFiles: [], modelFiles: [], features: options.feature.points ?? (options.feature.create ? [{ key: "create", kind: "action", position: options.feature.create, parentPosition: options.feature.entry, actionScope: "list.pageActions" }] : []) }] : options.inputDeclarations ? [{ moduleId: "Organization", metadataBasePath: "", navFiles: [], viewFiles: [], modelFiles: [], dataAccess: options.inputDeclarations }] : [] },
                   navDocuments: [],
                   modelDocuments: [options.modelDocument ?? personModelDocument],
                   viewDocuments: [viewDocument, personDetailViewDocument],
@@ -2758,6 +2759,45 @@ describe('StandardCrudListPageHost', () => {
     const closeResult = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === '关闭结果');
     await act(async () => closeResult?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(document.body.textContent).not.toContain('opaque-result');
+  });
+
+  it('uses the explicit object read source for a no-Detail edit drawer and keeps its submit button separate', async () => {
+    const position = 'ui-fixture:list.rowActions:edit';
+    const edit = { ...formalDataAccessFor('organization.person.list', 'rowActions', 'edit'), featurePositions: [position] };
+    const source: ActionDataAccessRequirement = { ...formalDataAccessFor('organization.person.detail', 'read'),
+      id: 'Organization/view:organization.person.read/read', viewKey: 'organization.person.read', featurePositions: [position] };
+    const list = { ...personListViewDocument, view: { ...personListViewDocument.view, rowActions: [{
+      key: 'edit', labelKey: 'Action_Edit', standardAction: 'edit', buttonId: edit.id, dataAccess: edit, inputReadSourceKey: source.viewKey,
+    }] } };
+    mockStandardCrudModule({ detailViewKey: undefined });
+    const requests: Array<{ method: string; path: string; headers: Headers }> = [];
+    const fields = { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null, EmploymentStatus: 'FullTime', IsEnabled: true };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+      requests.push({ method, path, headers: new Headers(init?.headers) });
+      return new Response(JSON.stringify(method === 'GET' && !path.endsWith('/Person_1')
+        ? { items: [{ id: 'Person_1', ...fields }], total: 1 } : { fields, summaries: {} }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    await renderHost({}, list, '/organization/persons', { inputDeclarations: [source] });
+    await flushProTableRequest();
+    const open = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.replace(/\s+/g, '') === '编辑');
+    expect(open).toBeDefined();
+    await act(async () => open?.click());
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('张三'));
+    const read = requests.find(request => request.method === 'GET' && request.path.endsWith('/Person_1'));
+    expect(read?.headers.get('X-NewP-Data-Declaration')).toBe(source.id);
+    expect(read?.headers.get('X-NewP-Button')).toBeNull();
+    expect(read?.headers.get('X-NewP-Feature')).toBe(position);
+    const save = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.replace(/\s+/g, '') === '保存修改');
+    expect(save).toBeDefined();
+    await act(async () => save?.click());
+    await vi.waitFor(() => expect(requests.some(request => request.method === 'PUT')).toBe(true));
+    const write = requests.find(request => request.method === 'PUT')!;
+    expect(write.headers.get('X-NewP-Button')).toBe(edit.id);
+    expect(write.headers.get('X-NewP-Data-Declaration')).toBeNull();
+    expect(write.headers.get('X-NewP-Feature')).toBe(position);
   });
 
   it.each([

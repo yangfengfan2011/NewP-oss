@@ -18,15 +18,18 @@ public sealed class DataExecutionContractTests
         // 旧执行条目不重复provider下限；导出按钮的read由唯一按钮声明拥有。
         Assert.All(candidates.Single(candidate => candidate.ModuleId == "Example").Features.SelectMany(feature => feature.DataAccess)
             .Where(declaration => declaration.BusinessBinding is null), declaration => Assert.Empty(declaration.Actions));
-        var create = Assert.Single(declarations, item => item.Execution == "example.record.create");
-        var candidate = Assert.Single(create.Requirements!);
-        Assert.Equal("candidate", candidate.Shape);
-        Assert.Equal("submit", candidate.Stage);
-        Assert.Equal(new[] { "create" }, Assert.Single(candidate.AnyOf));
-        Assert.All(declarations.Where(item => item.Execution == "example.record.update"), item =>
+        var create = Assert.Single(declarations, item => item.BusinessBinding == "example.record.create");
+        Assert.Equal("ExampleRecord", Assert.Single(create.GetObjectRequirements()).Object);
+        Assert.Equal(new[] { "create" }, Assert.Single(create.GetObjectRequirements()).Actions);
+        var updates = declarations.Where(item => item.BusinessBinding == "example.record.update").ToArray();
+        Assert.NotEmpty(updates);
+        Assert.All(updates, item => Assert.Equal(new[] { "edit" }, Assert.Single(item.GetObjectRequirements()).Actions));
+        Assert.DoesNotContain(declarations, item => item.Execution is "example.record.create" or "example.record.update" or "example.record.delete");
+        Assert.All(declarations.Where(item => item.Execution == "example.record.read"), item =>
         {
-            Assert.Equal(new[] { "read" }, Assert.Single(Assert.Single(item.Requirements!, requirement => requirement.Stage == "prepare").AnyOf));
-            Assert.Equal(new[] { "read", "edit" }, Assert.Single(Assert.Single(item.Requirements!, requirement => requirement.Stage == "submit").AnyOf));
+            var requirement = Assert.Single(item.Requirements!);
+            Assert.Equal("read", requirement.Stage);
+            Assert.Equal(new[] { "read" }, Assert.Single(requirement.AnyOf));
         });
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
@@ -69,14 +72,14 @@ public sealed class DataExecutionContractTests
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
         var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Example");
         var contracts = candidates[owner].DataExecutions.ToArray();
-        var index = Array.FindIndex(contracts, contract => contract.Provider == "standardCrud.update");
+        var index = Array.FindIndex(contracts, contract => contract.Provider == "standardCrud.read");
         var contract = contracts[index];
         contracts[index] = problem switch
         {
             "provider" => contract with { Provider = "unregistered.provider" },
             "owner" => contract with { ModuleId = "Workspace" },
-            "lower-floor" => contract with { Requirements = [contract.Requirements[0], contract.Requirements[1] with { AnyOf = [["read"]] }] },
-            "shape" => contract with { Requirements = [contract.Requirements[0], contract.Requirements[1] with { Shape = "candidate" }] },
+            "lower-floor" => contract with { Requirements = [contract.Requirements[0] with { AnyOf = [["edit"]] }] },
+            "shape" => contract with { Requirements = [contract.Requirements[0] with { Shape = "candidate" }] },
             _ => contract
         };
         var features = candidates[owner].Features.Select(feature => feature with { DataAccess = feature.DataAccess.Select(declaration =>

@@ -5,51 +5,18 @@
     "viewKey": "example.record.detail",
     "surface": "pageActions",
     "actionKey": "edit",
-    "execution": "example.record.update",
+    "execution": "",
     "resources": [
       "example.record"
     ],
     "actions": [
-      "read",
       "edit"
     ],
     "featurePositions": [
       "Example/navigation:example.group/navigation:example.records/surface:detail.pageActions/action:edit"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.update"
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.update"
   },
   {
     "id": "Example/view:example.record.detail/read",
@@ -131,7 +98,7 @@
     "viewKey": "example.record.list",
     "surface": "pageActions",
     "actionKey": "create",
-    "execution": "example.record.create",
+    "execution": "",
     "resources": [
       "example.record"
     ],
@@ -141,24 +108,8 @@
     "featurePositions": [
       "Example/navigation:example.group/navigation:example.records/surface:list.pageActions/action:create"
     ],
-    "requirements": [
-      {
-        "role": "candidate",
-        "stage": "submit",
-        "shape": "candidate",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "create"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.create"
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.create"
   },
   {
     "id": "Example/view:example.record.list/read",
@@ -220,36 +171,18 @@
     "viewKey": "example.record.list",
     "surface": "rowActions",
     "actionKey": "delete",
-    "execution": "example.record.delete",
+    "execution": "",
     "resources": [
       "example.record"
     ],
     "actions": [
-      "read",
       "delete"
     ],
     "featurePositions": [
       "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:delete"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "delete"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.delete"
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.delete"
   },
   {
     "id": "Example/view:example.record.list/rowActions/action:edit",
@@ -257,51 +190,18 @@
     "viewKey": "example.record.list",
     "surface": "rowActions",
     "actionKey": "edit",
-    "execution": "example.record.update",
+    "execution": "",
     "resources": [
       "example.record"
     ],
     "actions": [
-      "read",
       "edit"
     ],
     "featurePositions": [
       "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:edit"
     ],
-    "requirements": [
-      {
-        "role": "target",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      },
-      {
-        "role": "target",
-        "stage": "submit",
-        "shape": "object",
-        "resources": [
-          "example.record"
-        ],
-        "anyOf": [
-          [
-            "read",
-            "edit"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "standardCrud.update"
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.update"
   },
   {
     "id": "Example/view:example.record.list/rowActions/action:viewAuthorization",

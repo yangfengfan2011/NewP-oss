@@ -214,6 +214,7 @@ public sealed class AcceptanceGateTests
         var package = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_STANDARD_DATA_PACKAGE")
             ?? throw new InvalidOperationException("设置 NEWP_ACCEPTANCE_STANDARD_DATA_PACKAGE 为已verify的正式无详情标准包。");
         string pagePath;
+        string displayField;
         using (var archive = System.IO.Compression.ZipFile.OpenRead(package))
         using (var projectionStream = archive.GetEntry("projections/standard-data.json")!.Open())
         using (var projection = System.Text.Json.JsonDocument.Parse(projectionStream))
@@ -223,6 +224,10 @@ public sealed class AcceptanceGateTests
             pagePath = resource.GetProperty("pageRoute").GetString()
                 ?? throw new InvalidOperationException("正式标准包缺少页面路径。");
             Assert.True(!resource.TryGetProperty("detailViewKey", out var detail) || detail.ValueKind == System.Text.Json.JsonValueKind.Null);
+            using var blueprintStream = archive.GetEntry("authoring/newp.plugin.json")!.Open();
+            using var blueprint = System.Text.Json.JsonDocument.Parse(blueprintStream);
+            displayField = Assert.Single(blueprint.RootElement.GetProperty("standardData").GetProperty("resources").EnumerateArray())
+                .GetProperty("displayField").GetString() ?? throw new InvalidOperationException("正式标准包缺少显示字段。");
         }
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
             preparation: PublishedWorkspacePreparation.CurrentRelease, standardDataPackagePath: Path.GetFullPath(package));
@@ -250,7 +255,7 @@ public sealed class AcceptanceGateTests
                 var prepared = await read;
                 if (!prepared.Ok) throw new InvalidOperationException($"标准包编辑准备失败：{prepared.Status}");
                 var drawer = await driver.WaitForVisibleDrawerAsync("标准包编辑");
-                await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "Name", name + " 已编辑");
+                await StandardCrudPageDriver.FillDrawerModelFieldAsync(drawer, displayField, name + " 已编辑");
                 await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "generated-edit.png"));
                 await driver.SaveChangesAsync(drawer, new("PUT", api + "/" + id, 200, "标准包编辑"));
                 await driver.WaitForRowAsync(name + " 已编辑");

@@ -137,6 +137,13 @@ internal sealed class StandardCrudPageDriver
     internal static Task FillDrawerFieldAsync(ILocator drawer, string label, string value) =>
         drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true }).FillAsync(value);
 
+    // 标准Model文本字段的DOM id沿用正式key；显示标签可本地化或回退，不能充当字段身份。
+    internal static Task FillDrawerModelFieldAsync(ILocator drawer, string fieldKey, string value)
+    {
+        var id = fieldKey.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+        return drawer.Locator($"input[id=\"{id}\"], textarea[id=\"{id}\"]").FillAsync(value);
+    }
+
     // 根据控件的可访问状态设置Switch输入，不对保存后的业务语义作浏览器断言。
     internal static async Task SetDrawerSwitchAsync(ILocator drawer, string label, bool enabled)
     {

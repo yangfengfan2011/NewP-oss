@@ -7,6 +7,72 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实Chromium以正式Model字段id填值、同一保存helper仅一次PUT、关闭及结果，不依赖显示标签，无Host或SQL")]
+    public async Task StandardDataEdit_UsesItsFormalFieldIdentityAndSavesOnceBeforeClosingAndShowingTheResult()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "ICP-Platform.sln"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        using var runtime = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(repository.FullName,
+            "tests", "Kernel.Tests", "Fixtures", "PublishedStandardDataRuntime.contract.json")));
+        var resource = Assert.Single(runtime.RootElement.GetProperty("blueprint").GetProperty("standardData").GetProperty("resources").EnumerateArray());
+        var fieldKey = resource.GetProperty("displayField").GetString()!;
+        var modelKey = resource.GetProperty("key").GetString()!;
+        var model = runtime.RootElement.GetProperty("documents").GetProperty($"models/{modelKey}.model.json").GetProperty(modelKey);
+        Assert.Single(model.GetProperty("fields").EnumerateArray(), field => field.GetProperty("name").GetString() == fieldKey);
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        const string api = "/api/plugins/partner-asset-catalog/assets/asset";
+        const string changed = "正式字段编辑结果";
+        var writes = new List<string>();
+        await page.RouteAsync("http://standard-data.test/**", async route =>
+        {
+            if (route.Request.Method == "PUT" && new Uri(route.Request.Url).AbsolutePath == api)
+            {
+                writes.Add(route.Request.PostData!);
+                await route.FulfillAsync(new() { ContentType = "application/json", Body = "{\"succeeded\":true}" });
+                return;
+            }
+            await route.FulfillAsync(new()
+            {
+                ContentType = "text/html",
+                Body = $$"""
+                    <meta charset="utf-8"><table><tbody class="ant-table-tbody"><tr class="ant-table-row"><td id="result">原值</td></tr></tbody></table>
+                    <div class="ant-drawer-content" role="dialog" aria-label="Action_Edit">
+                      <label for="decoy">{{System.Net.WebUtility.HtmlEncode(fieldKey)}}</label><input id="decoy" value="不应修改">
+                      <label for="{{System.Net.WebUtility.HtmlEncode(fieldKey)}}">* 任意显示标签</label><input id="{{System.Net.WebUtility.HtmlEncode(fieldKey)}}" value="原值">
+                      <button id="save">保存修改</button>
+                    </div>
+                    <script>
+                      document.querySelector('#save').onclick=async()=>{
+                        const key={{System.Text.Json.JsonSerializer.Serialize(fieldKey)}};
+                        const value=document.getElementById(key).value;
+                        await fetch({{System.Text.Json.JsonSerializer.Serialize(api)}}, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({[key]:value})});
+                        document.querySelector('.ant-drawer-content').remove();
+                        document.querySelector('#result').textContent=value;
+                      };
+                    </script>
+                    """
+            });
+        });
+        await page.GotoAsync("http://standard-data.test/");
+        var driver = new StandardCrudPageDriver(page);
+        var drawer = await driver.WaitForVisibleDrawerAsync("正式标准包编辑");
+        await StandardCrudPageDriver.FillDrawerModelFieldAsync(drawer, fieldKey, changed);
+        Assert.Equal("不应修改", await page.Locator("#decoy").InputValueAsync());
+        await driver.SaveChangesAsync(drawer, new("PUT", api, 200, "正式标准包编辑"));
+        await driver.WaitForRowAsync(changed);
+        using var payload = System.Text.Json.JsonDocument.Parse(Assert.Single(writes));
+        Assert.Equal(changed, payload.RootElement.GetProperty(fieldKey).GetString());
+        await Assertions.Expect(page.GetByRole(AriaRole.Dialog)).ToHaveCountAsync(0);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实Chromium按正式href点击可见侧栏链接，保留元数据键fallback，不直接导航，无Host或SQL")]
     public async Task StandardDataSidebar_ClicksItsFormalPathWhenTheAccessibleNameFallsBackToTheMetadataKey()
     {

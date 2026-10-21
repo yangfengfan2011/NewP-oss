@@ -16,7 +16,7 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed partial class DataScopePermissionCostSqlServerTests
 {
-    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "真实多资源隔离、停用子节点、跨资源父/根关联及不可归属整体故障")]
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "真实多资源隔离、停用子节点、跨资源父/根关联、卸载遗留规则局部隔离及不可归属整体故障")]
     public async Task RuleCache_ResourceErrorsRespectCompleteAssociationsAndSupportedMaintenance()
     {
         await using var scenario = await RuleScenario.CreateAsync(services =>
@@ -51,7 +51,8 @@ public sealed partial class DataScopePermissionCostSqlServerTests
                     .SetProperty(row => EF.Property<string>(row, "ActionsJson"), damage == "disabledSubjectJson" ? "{" : damage == "subjectOpinion" ? "{\"read\":\"broken\"}" : actions));
             });
             await ReconnectRuleScenarioAsync(scenario);
-            var global = damage is "orphanSubject" or "unknownResource";
+            // 未登记子节点与已登记根属于跨资源损坏，只封闭两端资源；仅孤立主体无法建立归属。
+            var global = damage is "orphanSubject";
             using (var ready = await scenario.Admin.GetAsync("/api/health/ready"))
                 Assert.Equal(global ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK, ready.StatusCode);
             using (var position = await scenario.ListPositionsAsync()) await AssertRuleProblemAsync(position, "Persistence.CacheUnavailable");
@@ -102,6 +103,25 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         using (var position = await scenario.ListPositionsAsync()) Assert.Equal(HttpStatusCode.OK, position.StatusCode);
         await AssertPartEditAsync(scenario.ExplanationAsync(), false, part.Id);
         Assert.Equal(audit, await scenario.AuditCountAsync());
+
+        // 离线卸载只移除模块而保留数据库：整棵树的资源不再登记时，Host就绪及其他资源不受影响，且可在线删除该遗留规则。
+        await scenario.Fixture.RestartAfterMaintenanceAsync(async provider =>
+        {
+            await using var scope = provider.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("DataScopeRuleNode")
+                .Where(row => EF.Property<string>(row, "RootId") == original.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(row => EF.Property<string>(row, "ResourceKey"), "uninstalled.resource340"));
+        });
+        await ReconnectRuleScenarioAsync(scenario);
+        using (var ready = await scenario.Admin.GetAsync("/api/health/ready")) Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+        using (var position = await scenario.ListPositionsAsync()) Assert.Equal(HttpStatusCode.OK, position.StatusCode);
+        await AssertPartEditAsync(scenario.ExplanationAsync(), false, part.Id);
+        Assert.Equal(6L, scenario.Cache.RecordCount);
+        await DeleteRuleAsync(scenario, original.Id);
+        Assert.Equal(++audit, await scenario.AuditCountAsync());
+        Assert.Equal(2L, scenario.Cache.RecordCount);
+        using (var ready = await scenario.Admin.GetAsync("/api/health/ready")) Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+        await AssertPartEditAsync(scenario.ExplanationAsync(), false, part.Id);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "读取跨整树资源迁移和删除时旧操作保留快照，新操作无旧资源残留")]

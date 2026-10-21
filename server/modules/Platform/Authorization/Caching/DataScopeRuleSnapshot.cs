@@ -122,11 +122,18 @@ public sealed class DataScopeRuleSnapshot
         foreach (var resource in affectedResources)
         {
             token.ThrowIfCancellationRequested();
-            // 未登记资源不能建立可信归属；目录/装配故障也仍由整体缓存恢复，不局部吞掉。
-            catalog.Resolve(resource);
             var ids = resourceNodes.GetValueOrDefault(resource, EmptyIds);
+            // 资源已无节点时不再解析目录，删除已卸载模块的最后一条规则也能清除其错误。
+            if (ids.IsEmpty)
+            {
+                trees.Remove(resource);
+                errors.Remove(resource);
+                continue;
+            }
             try
             {
+                // 未登记资源（如模块卸载后保留的规则）只封闭自身，规则留待重装后生效；目录装配故障仍由整体缓存恢复。
+                catalog.Resolve(resource);
                 if (ids.Any(id => references.GetValueOrDefault(id, EmptyIds).Any(source =>
                     !Equals(nodes[source]["ResourceKey"], resource))
                     || new[] { (string?)nodes[id]["RootId"], (string?)nodes[id]["ParentId"] }.OfType<string>().Any(target =>

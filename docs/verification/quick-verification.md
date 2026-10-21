@@ -34,7 +34,7 @@ dotnet test .\tests\<Module>.Tests\<Module>.Tests.csproj --filter <Filter>
 - 字段与规则变更验证值和边界；权限、查询与事务变更使用对应真实 API／SQL 集成测试；组件交互变更使用真实组件行为测试。低层无法证明的页面接线只做最短受影响路径的真实页面冒烟。冷启动、首次建库、迁移、恢复、管理员初始化及权限边界保留所需真实验收，分别按变化选择，不捆绑到 WorkspaceSmoke 或其他页面冒烟。
 - 共享组件、公共服务、SDK、元数据、公共注册或生命周期变化，先定位受影响的既有消费者及其 fixture、注册断言和静态门禁，选择对应的定向检查。跨模块引用或被某个 Gate 消费，本身不触发全包、其他验收场景或全仓验证；新增测试通过不能替代既有消费者回归。
 - **模块元数据远端消费者测试**：读取真实模块的 authoring 元数据、动作目录、注册或本地化贡献的测试散落在其他包，模块自己的定向测试覆盖不到，完整 verify 又首败即停，只能一次暴露一个。改动模块的动作（`dataActions`）、`metadata/` 下的 model／view／dic、`plugin.json`／`newp.plugin.json`、依赖或组合成员、迁移 manifest 声明，或前端的页面动作、行动作与本地化键后，各运行一次以下命令，再决定是否需要全仓 verify：
-  - 后端：`dotnet test .\ICP-Platform.sln --filter "Category=ModuleMetadataConsumer"`，约 25 秒（含增量构建），覆盖 Kernel、Persistence、HostApi、Authorization 中读取真实模块的测试类。新增这类测试类时标 `[Trait("Category", "ModuleMetadataConsumer")]`。
+  - 后端：`dotnet test .\ICP-Platform.sln --filter "Category=ModuleMetadataConsumer"`，约 25 秒（含增量构建），覆盖 Kernel、Persistence、HostApi、Authorization 中读取真实模块的测试类，包含 `DataScopeDecisionBoundaryTests` 的实际裁决调用边界。仅改变权限调用代码时，定向执行 `dotnet test .\tests\HostApi.Tests\HostApi.Tests.csproj --filter FullyQualifiedName~DataScopeDecisionBoundaryTests`。新增这类测试类时标 `[Trait("Category", "ModuleMetadataConsumer")]`。
   - 前端：`pnpm --dir frontend --filter @icp-platform/shell test:module-consumers`，约 30 秒。入口自动选取 `packages/shell/src` 下 import 了 `test-support/componentTestInputs` 的测试，新增消费者无需登记。
   - 前端根脚本 `pnpm --dir frontend test` 还会运行 `test:effect-network-lifecycle` 与 `check:effect-network-lifecycle`，按包定向测试不执行这两项。改动涉及前端网络请求、effect 或订阅生命周期时，另行运行 `pnpm --dir frontend run test:effect-network-lifecycle` 与 `pnpm --dir frontend run check:effect-network-lifecycle`。
   - 新增这类测试时，对模块贡献的集合（动作、键、数量）从真实计划或 authoring 文件推导期望，不写死精确列表；确需锁定的顺序或互补语义，用合成模块验证。
@@ -215,6 +215,11 @@ finally {
 Workspace 场景使用 `accept.ps1 -Scenario <精确方法名>`；需要同时执行仓库检查时才使用 `verify.ps1 -AcceptanceScenario <精确方法名>`。按[固定发行物准备与登记](../developer/componentized-development.md#workspace-固定发行物验收输入)准备所选场景需要的产物，设置 `NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT`。允许 dirty 候选，运行期间候选和目标保持不变；按输入与产物依赖复用未变资产，仅重建受影响资产并重新登记当前候选。父级收尾本身不触发全部产物重建或场景重跑。
 
 新增或修改 fixture 时，每类先用一个符合正式策略的输入贯通准备、消费与清理，再扩展权限、并发或容量场景；输入对照正式成功用例的实际序列化，区分可写／必填／服务端字段，并用定向 API 核对返回契约。已有有效证据直接复用。当前迁移期望从正式计划派生，历史 fixture 仍冻结历史输入。阶段性等待从实际被测阶段开始计时，端到端超时仍覆盖启动与清理；观察器保持一致读取且避免干扰被测写入，涉及并发时用低成本真实并发测试证明。以上只覆盖本次改动影响的资产，不新增统一预检 Gate。
+
+标准数据生成页面已有以下短测试，按受影响层复用：
+
+- **运行时装配与生成页面**：`published-standard-data-route.test.tsx` 消费正式 Stage 导出的 `tests/Kernel.Tests/Fixtures/PublishedStandardDataRuntime.contract.json`，贯通实际模块组合、App 路由投影和 PageEntry 编辑准备／保存。定向入口为 `pnpm --dir frontend --filter @icp-platform/shell test src/__tests__/published-standard-data-route.test.tsx`；该文件已由 `test:module-consumers` 自动选取，已有有效结果直接复用。更新标准数据 fixture 时沿用 `StandardDataCompositionSqlServerTests.PublicPackage_CompilesCanonicalProviderTarget` 的正式导出，保留运行时字段投影。
+- **菜单与编辑 driver**：临时启用 `NEWP_RUN_ACCEPTANCE=1`，通过 `dotnet test .\tests\acceptance\Acceptance.Tests\Acceptance.Tests.csproj --filter FullyQualifiedName~WorkspacePageDriverTests.StandardData` 运行既有 Chromium 片段，结束后恢复开关。它们覆盖真实链接点击、正式字段 ID 填值、单次保存、弹层关闭和结果展示，无 Host 或 SQL；用于在恢复所选 Native 前收敛 driver，不能替代正式页面验收。
 
 闸门 runner 一律继承 `AcceptanceRunner`。收尾由它统一持有：无论场景成败都先归还一次性资源（用 `CancellationToken.None`，取消时更需要归还）、再反向扫描产物里的凭据。**这两步各自兜住异常**——扫描要读遍本轮全部产物，撞上被占用或已消失的文件就会抛，裸 `await` 会让这种基础设施异常顶掉更具体的场景失败。最后按「场景失败 → 查到凭据泄漏 → 扫描失败 → 清理抛异常 → 清理报未完成」由具体到泛报出去。子类只写两件事：场景序列和自己的资源归还方式；凭据一律经 `RegisterSecret` / `AddConnectionSecrets` 登记，`RunScenarioAsync` 负责场景归属，两者都不留绕过的口子。
 

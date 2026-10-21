@@ -13,6 +13,7 @@ using Xunit;
 namespace ICP.Platform.HostApi.Tests;
 
 /// <summary>按实际调用指令审计底层裁决消费者；动作改成变量或常量不会逃过调用边界。</summary>
+[Trait("Category", "ModuleMetadataConsumer")]
 public sealed class DataScopeDecisionBoundaryTests
 {
     private static readonly IReadOnlyDictionary<short, OpCode> OpCodesByValue = typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static)

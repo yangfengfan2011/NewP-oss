@@ -33,7 +33,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         Func<WorkspaceFolderCreationState, CancellationToken, Task<string>> execute, CancellationToken token) =>
         CreateFolderCoreAsync(input.ActorId, input.Position, input.Values, input.CopyParentAuthorization,
             new FolderCreationSource.Button(execute), token).AsTask();
-    // 正式创建与明确旧复制共享原事务；来源由实际调用分支选择，缺声明不能触发旧路径。
+    // 正式创建与两种复制共享原事务；来源由实际调用分支选择，缺HTTP身份不能选择内部复制路径。
     private ValueTask<string> CreateFolderCoreAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values,
         bool copyParentAuthorization, FolderCreationSource source, CancellationToken token)
     {
@@ -43,7 +43,6 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         var description = values.GetValueOrDefault("Description");
         if (description.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null or JsonValueKind.String) || description.ValueKind == JsonValueKind.String && description.GetString()!.Length > 500)
             throw new LinkQueryException(400, "Workspace.DescriptionTooLong", "Description");
-        if (source is FolderCreationSource.Declared declared) executionAccess.Validate([declared.Binding], "workspace.folder");
         return transactions.ExecuteAsync<string>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
@@ -110,12 +109,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             ["Description"] = description, ["OriginSpaceId"] = spaceId };
         audit.ForCreate().ApplyTo(candidate);
         await ownership.ApplyCreateAsync(candidate, ["OwnerId", "OwnerDepartmentId"], token);
-        if (source is FolderCreationSource.Declared declared)
-        {
-            if (await executionAccess.EvaluateCandidateAsync(declared.Binding, "workspace.folder", "candidate", candidate, token) != DataExecutionDecision.Allowed)
-                throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
-        }
-        else if (source is FolderCreationSource.Copy)
+        if (source is FolderCreationSource.Copy)
         {
             if (await objectActions.CheckCandidateAsync("WorkspaceFolder", candidate, ["create"], token) != DataExecutionDecision.Allowed)
                 throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
@@ -126,17 +120,15 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
 
     private abstract record FolderCreationSource
     {
-        public sealed record Declared(DataExecutionBindingReference Binding, DataExecutionInternalBinding Caller) : FolderCreationSource;
         public sealed record Button(Func<WorkspaceFolderCreationState, CancellationToken, Task<string>> Execute) : FolderCreationSource;
         public sealed record Copy : FolderCreationSource;
     }
 
-    // 正式parent角色复用原位置解析事实；普通创建和两种复制各自携带实际entry来源。
+    // 普通创建和两种复制都重验同一正式位置；私有来源不能由HTTP输入构造或替换。
     private Task<WorkspacePositionPath> ResolveFolderCreationPositionAsync(FolderCreationSource source, string actor,
         WorkspacePosition position, CancellationToken token) => source switch
     {
         FolderCreationSource.Button or FolderCreationSource.Copy => ResolveWritableButtonPositionAsync(actor, position, token),
-        FolderCreationSource.Declared declared => ResolveClipboardPositionAsync(declared.Binding, "parent", position, token),
         _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
     };
 
@@ -148,7 +140,6 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         return source switch
         {
             FolderCreationSource.Button or FolderCreationSource.Copy => new DataScopeObjectInitializationSource.Created(parents, target with { Values = candidate.ToFrozenDictionary(StringComparer.Ordinal) }),
-            FolderCreationSource.Declared declared => new DataScopeObjectInitializationSource.Declared(declared.Caller, declared.Binding, parents, target),
             _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
         };
     }

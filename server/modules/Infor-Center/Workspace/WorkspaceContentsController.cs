@@ -126,10 +126,12 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>名称输入只读准备返回本次已核证源和目标，不形成随后提交的授权凭证。</summary>
     [HttpPost("content/folders/copy-structure/prepare"), RequireFeature("workspace.folder.pasteFolderStructure")]
+    [ButtonBusinessHandler(typeof(WorkspaceFolderCopyPreparationHandler))]
     public async Task<IResult> PrepareFolderStructure(JsonElement input, CancellationToken token)
     {
         try
         {
+            copyAccess.BindHandler(typeof(WorkspaceFolderCopyPreparationHandler));
             var request = ReadClipboardInput(input, true);
             return Results.Ok(await contents.PrepareFolderStructureAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token));
         }
@@ -143,10 +145,12 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>单源结构复制仅接受确切来源、目标位置及新根名称；提交后不附加新对象读取要求。</summary>
     [HttpPost("content/folders/copy-structure"), RequireFeature("workspace.folder.pasteFolderStructure")]
+    [ButtonBusinessHandler(typeof(WorkspaceFolderCopyHandler))]
     public async Task<IResult> CopyFolderStructure(JsonElement input, CancellationToken token)
     {
         try
         {
+            copyAccess.BindHandler(typeof(WorkspaceFolderCopyHandler));
             if (input.ValueKind != JsonValueKind.Object) throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
             var members = input.EnumerateObject().ToArray();
             if (members.Length is not (5 or 6) || members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != members.Length

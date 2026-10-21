@@ -10,6 +10,10 @@ public sealed class DataScopeObjectInitializer(DataScopeObjectGrants grants,
     IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, DataScopeObjectInitializationSources sources) : IDataScopeObjectInitializer
 {
     /// <inheritdoc/>
+    public DataScopeObjectCreationProof CaptureCreatedObjects(string resourceKey, IReadOnlyList<DataExecutionWriteFacts> objects) =>
+        sources.CaptureCreatedObjects(resourceKey, objects);
+
+    /// <inheritdoc/>
     public async Task<bool> InitializeFromParentAsync(string resourceKey, string parentObjectId, string newObjectId,
         DataScopeObjectInitializationSource source, CancellationToken token = default) =>
         (await InitializeFromParentsAsync(resourceKey, [parentObjectId], newObjectId, source, token)).Initialized;

@@ -165,7 +165,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
                 ["linkIds"] = new[] { source.LinkId }, ["targetPosition"] = targetPosition, ["name"] = name };
             if (copyParent.HasValue) body["copyParentAuthorization"] = copyParent.Value;
             using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteFolderCopy"), HttpMethod.Post,
-                "/api/workspace/content/folders/copy", body, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.shallowCopy", Point(fixture, "workspace.folder.pasteFolderCopy")));
+                "/api/workspace/content/folders/copy", body, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteFolderCopy", Point(fixture, "workspace.folder.pasteFolderCopy")));
             var receipt = await ReadOkAsync(response);
             Assert.True(receipt.GetProperty("succeeded").GetBoolean());
             Assert.False(receipt.TryGetProperty("id", out _));
@@ -232,7 +232,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
                 { Content = JsonContent.Create(body, options: new JsonSerializerOptions()) };
                 var feature = Point(fixture, "workspace.folder." + (shallow ? "pasteFolderCopy" : "create"));
                 request.Headers.Add("X-NewP-Feature", feature.Position);
-                var declaration = new FeatureHttpTestRequests(fixture).Declaration(shallow ? "workspace.folder.shallowCopy" : "workspace.folder.create", feature);
+                var declaration = new FeatureHttpTestRequests(fixture).Declaration(shallow ? "workspace.folder.pasteFolderCopy" : "workspace.folder.create", feature);
                 request.Headers.Add("X-NewP-Data-Declaration", declaration.Id);
                 if (cancel)
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>

@@ -68,7 +68,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
         var originalActions = Snapshot(await RowsAsync(fixture, "DataScopeObjectAction"));
         // 真实旧五成员输入仍保持不复制；不能把所有旧消费者静默切到新语义。
         using (var legacy = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteFolderStructure"), HttpMethod.Post,
-            "/api/workspace/content/folders/copy-structure", new { mode = "copy", sourcePosition = position, linkIds = new[] { source.LinkId }, targetPosition, name = "LegacyStructure298" }, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure"))))
+            "/api/workspace/content/folders/copy-structure", new { mode = "copy", sourcePosition = position, linkIds = new[] { source.LinkId }, targetPosition, name = "LegacyStructure298" }, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteFolderStructure", Point(fixture, "workspace.folder.pasteFolderStructure"))))
             await ReadOkAsync(legacy);
         var afterLegacy = await RowsAsync(fixture, "WorkspaceFolder");
         var legacyIds = afterLegacy.Where(row => !originalIds.Contains((string)row["EID"]!)).Select(row => (string)row["EID"]!).ToArray();
@@ -80,7 +80,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
         try
         {
             using var response = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.folder.pasteFolderStructure"), HttpMethod.Post,
-                "/api/workspace/content/folders/copy-structure", new { mode = "copy", sourcePosition = position, linkIds = new[] { source.LinkId }, targetPosition, name = "InitializedStructure298", copyParentAuthorization = true }, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure")));
+                "/api/workspace/content/folders/copy-structure", new { mode = "copy", sourcePosition = position, linkIds = new[] { source.LinkId }, targetPosition, name = "InitializedStructure298", copyParentAuthorization = true }, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteFolderStructure", Point(fixture, "workspace.folder.pasteFolderStructure")));
             var receipt = await ReadOkAsync(response);
             Assert.True(receipt.GetProperty("succeeded").GetBoolean()); Assert.False(receipt.TryGetProperty("id", out _));
         }
@@ -196,8 +196,8 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
                 using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/folders/copy-structure")
                 { Content = JsonContent.Create(body, options: new JsonSerializerOptions()) };
                 request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.pasteFolderStructure").Position);
-                request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture)
-                    .Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure")).Id);
+                request.Headers.Add("X-NewP-Button", new FeatureHttpTestRequests(fixture)
+                    .Declaration("workspace.folder.pasteFolderStructure", Point(fixture, "workspace.folder.pasteFolderStructure")).Id);
                 if (stage == "cancel-last-structure")
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
                     {
@@ -242,7 +242,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
         try
         {
             creating = FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.folder.pasteFolderStructure"), HttpMethod.Post,
-                "/api/workspace/content/folders/copy-structure", body, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure")));
+                "/api/workspace/content/folders/copy-structure", body, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteFolderStructure", Point(fixture, "workspace.folder.pasteFolderStructure")));
             await paused.Task.WaitAsync(TimeSpan.FromSeconds(30));
             using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
                 "/api/authorization/data-scope/objects/workspace.folder/" + target.Id, new DataScopeObjectDto("workspace.folder", target.Id,
@@ -272,7 +272,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var beforeDeniedCreate = await TransactionSnapshotAsync(fixture);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.folder.pasteFolderStructure"), HttpMethod.Post,
-            "/api/workspace/content/folders/copy-structure", body, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure"))))
+            "/api/workspace/content/folders/copy-structure", body, new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteFolderStructure", Point(fixture, "workspace.folder.pasteFolderStructure"))))
         {
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
             Assert.Equal("Workspace.FolderCreateDenied", JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync()).GetProperty("code").GetString());

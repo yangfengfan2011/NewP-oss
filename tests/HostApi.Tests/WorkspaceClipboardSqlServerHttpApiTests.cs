@@ -773,13 +773,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
     // 正常copy准备/提交按真实behavior选声明，裸请求反例仍自行构造，不按URL或缺头回退。
     internal static ActionDataAccessRequirement? ClipboardDeclaration(BusinessAuditHostFixture fixture, FeaturePoint feature)
     {
-        var folderExecution = feature.BehaviorKey switch
-        {
-            "workspace.folder.pasteFolderStructure" => "workspace.folder.structureCopy",
-            _ => null
-        };
         return fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.SingleOrDefault(item =>
-            (folderExecution is null ? item.BusinessBinding == feature.BehaviorKey && item.Surface is "pageActions" or "rowActions" : item.Execution == folderExecution)
+            item.BusinessBinding == feature.BehaviorKey && item.Surface is "pageActions" or "rowActions"
             && item.FeaturePositions.Contains(feature.Position));
     }
     private static async Task Rule(BusinessAuditHostFixture fixture, HttpClient admin, string key, string resource, string id, string action, string opinion)

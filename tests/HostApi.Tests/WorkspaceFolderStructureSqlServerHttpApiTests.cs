@@ -181,7 +181,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         control.Pause = true; using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/folders/copy-structure") { Content = JsonContent.Create(input) };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.pasteFolderStructure").Position);
-        request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", Point(fixture, "workspace.folder.pasteFolderStructure")).Id);
+        request.Headers.Add("X-NewP-Button", new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteFolderStructure", Point(fixture, "workspace.folder.pasteFolderStructure")).Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try { await control.Reached.Task.WaitAsync(TimeSpan.FromSeconds(20)); cancellation.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending); await control.RolledBack.Task.WaitAsync(TimeSpan.FromSeconds(20)); }
         finally { cancellation.Cancel(); control.Resume.TrySetResult(); try { (await pending).Dispose(); } catch (OperationCanceledException) { } }

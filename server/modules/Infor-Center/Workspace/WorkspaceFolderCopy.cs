@@ -17,33 +17,7 @@ public sealed partial class WorkspaceContents
     /// <summary>结构名称准备使用自己的真实声明，不与浅副本来源串用。</summary>
     public Task<WorkspaceFolderCopyPreparation> PrepareFolderStructureAsync(string actor, string mode, WorkspacePosition sourcePosition,
         string[] linkIds, WorkspacePosition targetPosition, CancellationToken token) =>
-        PrepareFolderCopyCoreAsync(actor, mode, sourcePosition, linkIds, targetPosition, FolderPreparationExecution.Structure, token);
-
-    private enum FolderPreparationExecution { Shallow, Structure }
-
-    // 两个真实服务器入口显式选择来源；名称与路径读取保持原顺序及一次连接范围。
-    private async Task<WorkspaceFolderCopyPreparation> PrepareFolderCopyCoreAsync(string actor, string mode, WorkspacePosition sourcePosition,
-        string[] linkIds, WorkspacePosition targetPosition, FolderPreparationExecution execution, CancellationToken token)
-    {
-        if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0]))
-            throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
-        var binding = execution == FolderPreparationExecution.Shallow ? WorkspaceFolderCopyExecutions.Binding("prepare")
-            : WorkspaceFolderCopyExecutions.StructureBinding("prepare");
-        executionAccess.Validate([binding], "workspace.folder");
-        var openedHere = db.Database.GetDbConnection().State != System.Data.ConnectionState.Open;
-        try
-        {
-            if (openedHere) await db.Database.OpenConnectionAsync(token);
-            var parent = await ResolveClipboardPositionAsync(binding, "sourceParent", sourcePosition, token);
-            var source = (await ResolveDeclaredClipboardTargetsAsync(parent.FolderId, linkIds, binding, token))[0];
-            if (source.ModelKey != WorkspacePositions.FolderModel) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
-            var target = await ResolveClipboardPositionAsync(binding, "parent", targetPosition, token);
-            var name = await Folders.AsNoTracking().Where(row => EF.Property<string>(row, "EID") == source.Id)
-                .Select(row => EF.Property<string>(row, "ENAME")).SingleAsync(token);
-            return new(name, [.. parent.Names, name], target.Names);
-        }
-        finally { if (openedHere) await db.Database.CloseConnectionAsync(); }
-    }
+        PrepareFolderCopyButtonAsync(actor, mode, sourcePosition, linkIds, targetPosition, token);
 
     /// <summary>浅副本在唯一图锁事务内核证全部直接内容，再创建独立根和共享引用；结果读取不属于提交。</summary>
     public ValueTask<WorkspacePasteResult> CopyFolderAsync(string actor, string mode, WorkspacePosition sourcePosition,

@@ -83,7 +83,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         {
             var feature = Point(fixture, "workspace.folder." + (structure ? "pasteFolderStructure" : "pasteFolderCopy"));
             var other = Point(fixture, "workspace.folder." + (structure ? "pasteFolderCopy" : "pasteFolderStructure"));
-            var declaration = new FeatureHttpTestRequests(fixture).Declaration(structure ? "workspace.folder.shallowCopy" : "workspace.folder.structureCopy", other);
+            var declaration = new FeatureHttpTestRequests(fixture).Declaration(structure ? "workspace.folder.pasteFolderCopy" : "workspace.folder.pasteFolderStructure", other);
             var route = "/api/workspace/content/folders/" + (structure ? "copy-structure" : "copy");
             var input = new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = root, name = "320交叉拒绝" };
             foreach (var path in new[] { route + "/prepare", route })

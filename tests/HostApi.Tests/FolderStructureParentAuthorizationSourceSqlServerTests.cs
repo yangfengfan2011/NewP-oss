@@ -36,9 +36,9 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
             [new("ParentSource320", "creator", null, 3, new Dictionary<string, string> { ["delete"] = "allow" }, ExpiresAt: "2099-05-01T00:00:00Z")]);
         var (source, _) = await BuildCapacityGraphAsync(fixture, admin, position, 1);
         var feature = Point(fixture, "workspace.folder.pasteFolderStructure");
-        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.structureCopy", feature);
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteFolderStructure", feature);
         var before = await TransactionSnapshotAsync(fixture);
-        foreach (var mismatch in new[] { "missing", "parent-id", "parent-values", "parent-resource", "target", "ordinary-caller", "binding", "ordinary-shape", "different-opinion", "different-expiry" })
+        foreach (var mismatch in new[] { "missing", "parent-id", "parent-values", "parent-resource", "target", "foreign-caller", "unknown-proof", "ordinary-shape", "different-opinion", "different-expiry" })
         {
             state.Mode = mismatch; state.Reached = false; state.ConfigurationCommands = 0;
             using var response = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post,
@@ -86,12 +86,14 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
     // 在真实factory形成来源后只破坏一个事实，权限和克隆仍由实际初始化器执行。
     private sealed class CreatedParentInitializer(DataScopeObjectInitializer inner, EfPlatformDbContext db, CreatedSourceProbe state) : IDataScopeObjectInitializer
     {
+        public DataScopeObjectCreationProof CaptureCreatedObjects(string resource, IReadOnlyList<DataExecutionWriteFacts> objects) =>
+            inner.CaptureCreatedObjects(resource, objects);
         public Task<bool> InitializeFromParentAsync(string resource, string parent, string target, DataScopeObjectInitializationSource source, CancellationToken token = default) =>
             inner.InitializeFromParentAsync(resource, parent, target, source, token);
         public async Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resource, IReadOnlyList<string> parents, string target,
             DataScopeObjectInitializationSource source, CancellationToken token = default)
         {
-            if (source is not DataScopeObjectInitializationSource.DeclaredFromCreatedParents graph || parents.Count < 2)
+            if (source is not DataScopeObjectInitializationSource.CreatedFromCreatedParents graph || parents.Count < 2)
                 return await inner.InitializeFromParentsAsync(resource, parents, target, source, token);
             state.Reached = true;
             if (state.Mode.StartsWith("different-", StringComparison.Ordinal))
@@ -122,9 +124,9 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
                     "parent-values" => graph with { Parents = [first with { Values = new Dictionary<string, object?> { ["LID"] = first.ObjectId } }, .. graph.Parents.Skip(1)] },
                     "parent-resource" => graph with { Parents = [first with { ResourceKey = "part.part" }, .. graph.Parents.Skip(1)] },
                     "target" => graph with { Target = graph.Target with { ObjectId = "foreign-child" } },
-                    "ordinary-caller" => graph with { Caller = new("workspace.folder.create", "workspace.backend", typeof(WorkspaceFolderCreationHandler), nameof(WorkspaceFolderCreationHandler.ExecuteAsync)), Binding = new("workspace.folder.create", "workspace.backend", "submit") },
-                    "binding" => graph with { Binding = WorkspaceFolderCopyExecutions.Binding("submit") },
-                    "ordinary-shape" => new DataScopeObjectInitializationSource.Declared(graph.Caller, graph.Binding, graph.ParentObjectIds, graph.Target),
+                    "foreign-caller" => graph with { Caller = new("workspace.folder.create", "workspace.backend", typeof(WorkspaceFolderCreationHandler), nameof(WorkspaceFolderCreationHandler.ExecuteAsync)) },
+                    "unknown-proof" => graph with { Proof = new UnknownCreationProof() },
+                    "ordinary-shape" => new DataScopeObjectInitializationSource.Created(graph.ParentObjectIds, graph.Target),
                     _ => source
                 };
                 return await inner.InitializeFromParentsAsync(resource, parents, target, source, token);

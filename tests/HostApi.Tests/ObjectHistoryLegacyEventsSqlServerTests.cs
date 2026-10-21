@@ -178,8 +178,8 @@ public sealed class ObjectHistoryLegacyEventsSqlServerTests
     private static async Task<JsonElement> CommandAsync(BusinessAuditHostFixture fixture, HttpClient client, string action, string suffix, object body)
     {
         var point = Point(fixture, "workspace.folder." + action);
-        var execution = action switch { "pasteFolderCopy" => "workspace.folder.shallowCopy", "pasteFolderStructure" => "workspace.folder.structureCopy", _ => null };
-        var declaration = execution is null ? null : new FeatureHttpTestRequests(fixture).Declaration(execution, point);
+        var binding = action is "pasteFolderCopy" or "pasteFolderStructure" ? point.BehaviorKey : null;
+        var declaration = binding is null ? null : new FeatureHttpTestRequests(fixture).Declaration(binding, point);
         using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, "/api/workspace/content/" + suffix, body, declaration);
         return await ReadOkAsync(response);
     }

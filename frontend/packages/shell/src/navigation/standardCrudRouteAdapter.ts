@@ -103,13 +103,13 @@ export function compileStandardCrudRouteProjection(
       // 仅内嵌详情仍使用同一资源的装载关联，但不因此虚构列表导航或新建/详情地址。
       const nav = navigationMatches.length === 0 && (composedList || composedDetail) ? undefined : requireUniqueListNav(navDocuments, listBinding.targetKey);
       if (!detailViewKey) {
-        if (readNonEmptyString(listView.view.model)) {
+        if (hasObjectViewAction(listView)) {
           fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING', listBinding.targetKey);
         }
         if (nav) owners.push({
           path: nav.path,
           featurePosition: nav.featurePosition,
-          projectsDrawer: false,
+          projectsDrawer: hasCreateAction(listView),
         });
         continue;
       }
@@ -213,7 +213,7 @@ function compileLegacyResourceOwner(
 
   const listView = requireUniqueView(viewDocuments, resource.listViewKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
   const metadataDetailViewKey = readNonEmptyString(listView.view.detailViewKey);
-  if (!metadataDetailViewKey && readNonEmptyString(listView.view.model)) {
+  if (!metadataDetailViewKey && (hasObjectViewAction(listView) || resource.detailRoutePath)) {
     fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING', resource.listViewKey);
   }
   if (resource.detailViewKey !== metadataDetailViewKey) {
@@ -229,19 +229,28 @@ function compileLegacyResourceOwner(
     projectsFullDetail: Boolean(resource.detailRoutePath),
     path: nav.path,
     featurePosition: nav.featurePosition,
-    projectsDrawer: true,
+    projectsDrawer: Boolean(metadataDetailViewKey) || hasCreateAction(listView),
   };
 }
 
-// 有 Model 的对象必须能从列表进入详情；纯统计视图没有对象操作要求。
+// 真实查看入口必须能消费已声明详情；没有详情消费者的对象列表不虚构详情能力。
 function requireObjectViewAction(document: RuntimeViewDocument): void {
   if (!readNonEmptyString(document.view.model)) return;
-  const actions = [document.view.rowActions, document.view.columns]
-    .flatMap((value) => Array.isArray(value) ? value : []);
-  if (!actions.some((value: unknown) => typeof value === 'object' && value !== null
-    && 'standardAction' in value && value.standardAction === 'view')) {
+  if (!hasObjectViewAction(document)) {
     fail('STANDARD_CRUD_DETAIL_ACTION_MISSING', String(document.view.key));
   }
+}
+
+function hasObjectViewAction(document: RuntimeViewDocument): boolean {
+  const actions = [document.view.rowActions, document.view.columns]
+    .flatMap((value) => Array.isArray(value) ? value : []);
+  return actions.some((value: unknown) => typeof value === 'object' && value !== null
+    && 'standardAction' in value && value.standardAction === 'view');
+}
+
+function hasCreateAction(document: RuntimeViewDocument): boolean {
+  return Array.isArray(document.view.pageActions) && document.view.pageActions.some((value: unknown) =>
+    typeof value === 'object' && value !== null && 'standardAction' in value && value.standardAction === 'create');
 }
 
 /** 完整页入口只消费显式 capability；Detail View 本身仅保证查看抽屉可用。 */

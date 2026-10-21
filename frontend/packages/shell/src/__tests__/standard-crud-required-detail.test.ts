@@ -35,10 +35,23 @@ describe('required object detail', () => {
     expect(load).not.toHaveBeenCalled();
   });
 
-  it('rejects a Model-backed object list without detail', () => {
+  it('rejects an actual view action without its Detail View', () => {
     expect(() => compileStandardCrudRouteProjection([module], nav, [{
       ...listView, view: { ...listView.view, detailViewKey: undefined },
     }], [])).toThrow('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING');
+  });
+
+  it.each([false, true])('keeps a model list without a detail consumer or invented detail/create routes (legacy: %s)', legacy => {
+    const withoutDetail: RuntimeViewDocument = { ...listView, view: {
+      ...listView.view, detailViewKey: undefined, rowActions: [], pageActions: [],
+    } };
+    const registration = { ...companyStandardCrudResource, detailViewKey: undefined, detailRoutePath: undefined };
+    const owner: FrontendModule = { ...module, standardCrudCapabilities: legacy ? [] : module.standardCrudCapabilities,
+      standardCrudResources: legacy ? [registration] : [] };
+    expect(compileStandardCrudRouteProjection([owner], nav, [withoutDetail], [])).toEqual({
+      detailEntries: [], drawerRedirects: [], fallbackRoutes: [],
+    });
+    expect(load).not.toHaveBeenCalled();
   });
 
   it('rejects an object list that hides every detail entry', () => {

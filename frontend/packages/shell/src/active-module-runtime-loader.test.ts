@@ -4,6 +4,7 @@ import {
   ACTIVE_MODULE_RUNTIME_URL,
   loadActiveModuleRuntimeWith,
 } from './active-module-runtime-loader';
+import { compileStandardCrudRouteProjection } from './navigation/standardCrudRouteAdapter';
 
 describe('active-module-runtime-loader', () => {
   afterEach(() => {
@@ -619,5 +620,22 @@ describe('active-module-runtime-loader', () => {
       { method: 'POST', headers: { 'X-NewP-Feature': 'enable-position', 'X-NewP-Button': 'actual-enable-button' } },
     );
     expect(module.permissions).toBeUndefined();
+    // App在发布路由前消费同一真实loader结果；无详情资源不能使整个Shell投影崩溃。
+    const projection = compileStandardCrudRouteProjection(result.modules, [{ type: 'nav', navigation: { items: [
+      { key: 'assets', path: '/assets', entryType: 'standard-list', targetKey: 'partner-asset-catalog.asset.list' },
+      { key: 'audits', path: '/audits', entryType: 'standard-list', targetKey: 'partner-asset-catalog.audit.list' },
+    ] } }], [
+      { type: 'view', view: { key: 'partner-asset-catalog.asset.list', model: 'Asset', detailViewKey: 'partner.asset.detail',
+        rowActions: [{ key: 'view', standardAction: 'view' }] } },
+      { type: 'view', view: { key: 'partner.asset.detail', mode: 'detail', model: 'Asset' } },
+      { type: 'view', view: { key: 'partner-asset-catalog.audit.list', model: 'Audit',
+        pageActions: [{ key: 'create', standardAction: 'create' }],
+        rowActions: [{ key: 'edit', standardAction: 'edit', inputReadSourceKey: 'Partner.AssetCatalog.Audit.read' }] } },
+    ], []);
+    expect(projection.detailEntries).toEqual([{ path: '/assets/:id', viewKey: 'partner.asset.detail', featurePosition: undefined }]);
+    expect(projection.drawerRedirects).toEqual([
+      { from: '/assets/new', to: '/assets?drawer=create' },
+      { from: '/audits/new', to: '/audits?drawer=create' },
+    ]);
   });
 });

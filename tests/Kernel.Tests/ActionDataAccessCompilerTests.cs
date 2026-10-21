@@ -103,6 +103,34 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         Assert.NotEmpty(command.FeaturePositions);
     }
 
+    [Theory]
+    [InlineData("", true)]
+    [InlineData(",\"resourceKey\":\"test.position\"", true)]
+    [InlineData(",\"resourceKey\":\"other.position\"", false)]
+    [InlineData(",\"resourceKey\":null", false)]
+    [InlineData(",\"resourceKey\":\"\"", false)]
+    [InlineData(",\"resourceKey\":12", false)]
+    [InlineData(",\"resourceKey\":{}", false)]
+    [InlineData(",\"resourceKey\":[]", false)]
+    public void ObjectResourceBinding_IgnoresOnlyAnUnboundViewAndRejectsMalformedOrConflictingBindings(string extraBinding, bool valid)
+    {
+        using var navigation = JsonDocument.Parse("""{"navigation":{"items":[{"key":"entry","featureAuthorization":true,"targetKey":"items"}]}}""");
+        using var model = JsonDocument.Parse("""{"Position":{"kind":"Entity"}}""");
+        using var active = JsonDocument.Parse("""
+            {"view":{"key":"items","mode":"list","model":"Position","resourceKey":"test.position","rowActions":[
+              {"key":"change","standardAction":"edit","dataAccess":{"object":"Position","actions":["edit"]}}]}}
+            """);
+        using var inactive = JsonDocument.Parse("""{"view":{"key":"unused.detail","mode":"detail","model":"Position"BINDING}}"""
+            .Replace("BINDING", extraBinding, StringComparison.Ordinal));
+        IReadOnlyList<ActionDataAccessRequirement> Compile() => ActionDataAccessCompiler.Compile(StandardFeatureMetadataCompiler.Read("Test",
+            [navigation.RootElement, model.RootElement, active.RootElement, inactive.RootElement]), [new("Authorization", "edit", "Edit", "data.edit")]);
+        if (!valid) { Assert.Throws<InvalidOperationException>(() => Compile()); return; }
+        var button = Assert.Single(Compile());
+        Assert.Equal(new[] { "test.position" }, button.Resources);
+        Assert.Equal("test.position.update", button.BusinessBinding);
+        Assert.DoesNotContain(button.FeaturePositions, position => position.Contains("unused.detail", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void WorkspaceHistoryButtons_UseTheirActualObjectRequirementsAndKeepTheListSource()
     {

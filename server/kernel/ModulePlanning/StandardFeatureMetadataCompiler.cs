@@ -337,10 +337,11 @@ public static class StandardFeatureMetadataCompiler
             if (!node.DataAccess.Any(item => item.Id == declaration.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, declaration] };
         }
 
-        // 对象资源只从既有直接Entity视图或正式Link端点派生；呈现资源和客户端字段不能另定义映射。
+        // 对象资源只从已绑定的直接Entity视图或正式Link端点派生；无绑定的闲置视图不参与，显式坏值仍拒绝。
         string ButtonObjectResource(string objectName)
         {
-            var direct = views.Values.Where(candidate => Optional(candidate, "model") == objectName && !candidate.TryGetProperty("querySource", out _))
+            var direct = views.Values.Where(candidate => Optional(candidate, "model") == objectName && !candidate.TryGetProperty("querySource", out _)
+                && candidate.TryGetProperty("resourceKey", out _))
                 .Select(candidate => Text(candidate, "resourceKey"));
             var endpoints = all.SelectMany(document => document.EnumerateObject()).Where(property => property.Value.ValueKind == JsonValueKind.Object
                 && Optional(property.Value, "kind") == "Link" && property.Value.TryGetProperty("linkQuery", out _))

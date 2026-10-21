@@ -53,16 +53,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         {
             services.AddSingleton<RulePublicationGate>(provider => new(provider.GetRequiredService<ICP.Platform.Modules.Authorization.Caching.DataScopeRuleCache>()));
             // 保留其他模型的正式参与者，仅将两规则模型的现有参与者包上可控发布窗口。
-            foreach (var registration in services.Where(descriptor => descriptor.ServiceType == typeof(PlatformCommitRegistration)).ToArray())
-            {
-                services.Remove(registration);
-                services.AddScoped(provider =>
-                {
-                    var original = (PlatformCommitRegistration)registration.ImplementationFactory!(provider);
-                    return original.ModelKey is "DataScopeRuleNode" or "DataScopeRuleSubject"
-                        ? new(original.ModelKey, provider.GetRequiredService<RulePublicationGate>()) : original;
-                });
-            }
+            DecorateRuleCommitRegistrations(services, provider => provider.GetRequiredService<RulePublicationGate>());
             services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(commit));
         });
         publication = scenario.Fixture.Services.GetRequiredService<RulePublicationGate>();

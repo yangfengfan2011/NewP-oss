@@ -19,6 +19,15 @@ public sealed partial class DataScopePermissionCostSqlServerTests
     {
         services.AddSingleton<RuleNaturalPublicationCosts>();
         services.AddScoped<RuleNaturalPublicationParticipant>();
+        DecorateRuleCommitRegistrations(services, provider => provider.GetRequiredService<RuleNaturalPublicationParticipant>());
+        services.AddDbContext<EfPlatformDbContext>((provider, options) =>
+            options.AddInterceptors(commands, provider.GetRequiredService<RuleNaturalPublicationCosts>()));
+    }
+
+    // 保留其他模型及原 Scoped 工厂；仅替换两规则模型，包装参与者的生命周期由调用方注册决定。
+    private static void DecorateRuleCommitRegistrations(IServiceCollection services,
+        Func<IServiceProvider, IPlatformCommitParticipant> participantFactory)
+    {
         foreach (var registration in services.Where(descriptor => descriptor.ServiceType == typeof(PlatformCommitRegistration)).ToArray())
         {
             services.Remove(registration);
@@ -26,11 +35,9 @@ public sealed partial class DataScopePermissionCostSqlServerTests
             {
                 var original = (PlatformCommitRegistration)registration.ImplementationFactory!(provider);
                 return original.ModelKey is "DataScopeRuleNode" or "DataScopeRuleSubject"
-                    ? new(original.ModelKey, provider.GetRequiredService<RuleNaturalPublicationParticipant>()) : original;
+                    ? new(original.ModelKey, participantFactory(provider)) : original;
             });
         }
-        services.AddDbContext<EfPlatformDbContext>((provider, options) =>
-            options.AddInterceptors(commands, provider.GetRequiredService<RuleNaturalPublicationCosts>()));
     }
 
     private sealed record RuleNaturalPublicationSample(double ParticipantBeginMilliseconds, double PrepareMilliseconds,

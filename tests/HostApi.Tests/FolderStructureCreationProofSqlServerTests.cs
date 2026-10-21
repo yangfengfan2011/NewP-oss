@@ -117,6 +117,12 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
         internal bool Active;
         internal int Count;
         private void Observe() { if (Active) Count++; }
+        public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData data, InterceptionResult<DbDataReader> result)
+        { Observe(); return result; }
+        public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData data, InterceptionResult<int> result)
+        { Observe(); return result; }
+        public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData data, InterceptionResult<object> result)
+        { Observe(); return result; }
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<DbDataReader> result, CancellationToken token = default)
         { Observe(); return ValueTask.FromResult(result); }
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<int> result, CancellationToken token = default)

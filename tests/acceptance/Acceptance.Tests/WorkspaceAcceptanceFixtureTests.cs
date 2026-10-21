@@ -395,6 +395,66 @@ public sealed class WorkspaceAcceptanceFixtureTests
     }
 
     // 准备协议控制消费当前正式编译目录，不能手填同一位置的两个读取 View 声明。
+    [Fact]
+    [Trait("Category", "ModuleMetadataConsumer")]
+    public async Task FolderCopyDiamondPreparation_UsesActualFolderButtonsAndPureReferenceApiWithCompletePositions()
+    {
+        var features = CurrentWorkspaceFeatures();
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var create = features.Action(entry, "create", "list.pageActions", "folder");
+        var add = features.Action(entry, "add", "list.custom", "folder");
+        var items = new Dictionary<string, List<object>> { ["root-EID"] = [new { linkId = "source-LID",
+            associatedObject = new { modelKey = "WorkspaceFolder", id = "source-EID" }, fields = new { Name = "原有来源" } }], ["source-EID"] = [] };
+        var created = 0; var references = 0;
+        using var client = new HttpClient(new AsyncHandler(async (request, token) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/auth/antiforgery-token") return Json(HttpStatusCode.OK, "{\"requestToken\":\"fixture-token\"}");
+            if (path == "/api/workspace/spaces") return Json(HttpStatusCode.OK, "[{\"spaceKind\":\"Public\",\"spaceId\":\"public-space\",\"rootFolderId\":\"root-EID\"}]");
+            if (request.Method == HttpMethod.Get)
+            {
+                Assert.Equal("/api/links/workspace.content", path);
+                Assert.Equal(features.ReadDeclaration("Workspace", "workspace.folder.list", entry.Position), Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
+                Assert.False(request.Headers.Contains("X-NewP-Button"));
+                var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
+                var contents = items[query["anchorId"]!];
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { items = contents, total = contents.Count }));
+            }
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("fixture-token", Assert.Single(request.Headers.GetValues("X-CSRF-TOKEN")));
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
+            var position = body.RootElement.GetProperty("position");
+            Assert.Equal("public-space", position.GetProperty("spaceId").GetString());
+            Assert.Equal("root-EID", position.GetProperty("rootFolderId").GetString());
+            if (path == "/api/workspace/content/folders")
+            {
+                created++;
+                Assert.Equal(create.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+                Assert.Equal(features.Button(create), Assert.Single(request.Headers.GetValues("X-NewP-Button")));
+                Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+                Assert.Equal(created < 3 ? ["source-LID"] : new[] { "source-LID", "new1-LID" },
+                    position.GetProperty("linkIds").EnumerateArray().Select(value => value.GetString()!).ToArray());
+                var parent = created < 3 ? "source-EID" : "new1-EID";
+                items[parent].Add(new { linkId = $"new{created}-LID", associatedObject = new { modelKey = "WorkspaceFolder", id = $"new{created}-EID" } });
+                items.Add($"new{created}-EID", []);
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { id = $"new{created}-EID" }));
+            }
+            Assert.Equal("/api/workspace/content/references", path);
+            Assert.Equal(add.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+            Assert.False(request.Headers.Contains("X-NewP-Button"));
+            Assert.Equal(new[] { "source-LID", "new2-LID" }, position.GetProperty("linkIds").EnumerateArray().Select(value => value.GetString()!).ToArray());
+            Assert.Equal("WorkspaceFolder", body.RootElement.GetProperty("target").GetProperty("modelKey").GetString());
+            Assert.Equal("new3-EID", body.RootElement.GetProperty("target").GetProperty("id").GetString());
+            references++;
+            return Json(HttpStatusCode.OK, "{}");
+        })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
+
+        await WorkspaceAcceptanceFixture.PrepareFolderCopyDiamondAsync(client, features, "原有来源", "12345678-run", CancellationToken.None);
+        Assert.Equal(3, created);
+        Assert.Equal(1, references);
+    }
+
     private static AcceptanceFeatureCatalog CurrentWorkspaceFeatures()
     {
         var compiled = new CanonicalModulePlanCompiler().Compile("workspace-acceptance-preparation",

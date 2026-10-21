@@ -923,6 +923,8 @@ public sealed class AcceptanceGateTests
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
             exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            prepareJourney: (client, features, _, _, token) => WorkspaceAcceptanceFixture.PrepareFolderCopyDiamondAsync(
+                client, features, fixture.ExistingFolderName, runId, token),
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);

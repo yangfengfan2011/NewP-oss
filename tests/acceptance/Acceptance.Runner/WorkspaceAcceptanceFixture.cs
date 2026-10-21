@@ -165,6 +165,30 @@ internal static class WorkspaceAcceptanceFixture
         return created.FolderId;
     }
 
+    // 仅为原Folder复制旅程补最小菱形；创建用实际按钮，增加共享入边仍用原纯API，不触及业务对象或文件。
+    internal static async Task PrepareFolderCopyDiamondAsync(HttpClient client, AcceptanceFeatureCatalog features,
+        string sourceName, string runId, CancellationToken token)
+    {
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var roots = await SendAsync(client, HttpMethod.Get, "/api/workspace/spaces", null, entry.Position, token);
+        var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
+        var rootId = root.GetProperty("rootFolderId").GetString()!;
+        var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, rootId, rootId, []);
+        var contents = await ReadContentsAtPositionAsync(client, position, entry.Position, token, features);
+        var source = contents.GetProperty("items").EnumerateArray().Single(item =>
+            item.GetProperty("associatedObject").GetProperty("modelKey").GetString() == "WorkspaceFolder"
+            && item.GetProperty("fields").GetProperty("Name").GetString() == sourceName);
+        position = position with { FolderId = source.GetProperty("associatedObject").GetProperty("id").GetString()!,
+            LinkIds = [source.GetProperty("linkId").GetString()!] };
+        var suffix = runId[..8];
+        var a = await CreateFolderAtPositionAsync(client, features, position, "复制分支A " + suffix, token);
+        var b = await CreateFolderAtPositionAsync(client, features, position, "复制分支B " + suffix, token);
+        var shared = await CreateFolderAtPositionAsync(client, features, a, "复制共享节点 " + suffix, token);
+        await SendAsync(client, HttpMethod.Post, "/api/workspace/content/references",
+            new { position = b.CommandPosition, target = new { modelKey = "WorkspaceFolder", id = shared.FolderId } },
+            features.Action(entry, "add", "list.custom", "folder").Position, token);
+    }
+
     // 多父恢复样本全部走当前普通主体正式命令；仅记录关系链，不在测试侧编码 Provider nodeKey。
     internal static async Task<WorkspaceOccurrenceFixture> PrepareOccurrenceGraphAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
         string runId, CancellationToken token)

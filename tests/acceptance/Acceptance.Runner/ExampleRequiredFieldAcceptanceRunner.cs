@@ -437,8 +437,9 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
                 || _declarationExportOnly && path.StartsWith("/api/organization/persons", StringComparison.Ordinal)
                 || _declarationAuthorizationOnly && path.StartsWith("/api/authorization/data-scope/objects/example.record/", StringComparison.Ordinal))) return;
             request.Headers.TryGetValue("x-newp-data-declaration", out var declaration);
+            request.Headers.TryGetValue("x-newp-button", out var button);
             request.Headers.TryGetValue("x-newp-feature", out var feature);
-            declarationRequests.Enqueue(new { request.Method, path, declaration, feature });
+            declarationRequests.Enqueue(new { request.Method, path, declaration, button, feature });
             while (declarationRequests.Count > (_declarationAuthorizationOnly ? 20 : 10)) declarationRequests.TryDequeue(out _);
         };
         page.PageError += (_, error) => errors.Enqueue(error);

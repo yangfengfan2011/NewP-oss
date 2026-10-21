@@ -206,6 +206,55 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    /// <summary>同一正式标准包先准备数据，再从实际生成菜单完成无详情编辑器的读取与保存。</summary>
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式标准数据包的生成页面、独立编辑准备读取和一次按钮写入")]
+    public async Task NativeStandardDataGeneratedEdit_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-standard-data-generated-edit");
+        var package = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_STANDARD_DATA_PACKAGE")
+            ?? throw new InvalidOperationException("设置 NEWP_ACCEPTANCE_STANDARD_DATA_PACKAGE 为已verify的正式无详情标准包。");
+        using (var archive = System.IO.Compression.ZipFile.OpenRead(package))
+        using (var projectionStream = archive.GetEntry("projections/standard-data.json")!.Open())
+        using (var projection = System.Text.Json.JsonDocument.Parse(projectionStream))
+        {
+            var resource = Assert.Single(projection.RootElement.GetProperty("resources").EnumerateArray());
+            Assert.Equal("Asset", resource.GetProperty("resourceKey").GetString());
+            Assert.True(!resource.TryGetProperty("detailViewKey", out var detail) || detail.ValueKind == System.Text.Json.JsonValueKind.Null);
+        }
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            preparation: PublishedWorkspacePreparation.CurrentRelease, standardDataPackagePath: Path.GetFullPath(package));
+        var name = "标准包页面 " + runId[..8];
+        string? id = null;
+        const string api = "/api/plugins/partner-asset-catalog/assets";
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            prepareJourney: async (client, features, _, _, token) =>
+            {
+                var entry = features.Behavior("Partner.AssetCatalog", "Partner.AssetCatalog.Asset.read");
+                var created = await WorkspaceAcceptanceFixture.SendButtonAsync(client, features,
+                    features.Action(entry, "create", "list.pageActions"), HttpMethod.Post, api,
+                    new { Code = "NATIVE330-" + runId[..8], Name = name }, token);
+                id = created.GetProperty("fields").GetProperty("EID").GetString()!;
+            },
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var driver = new StandardCrudPageDriver(page);
+                await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "资产", Exact = true }).ClickAsync();
+                await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/plugins/partner-asset-catalog/assets");
+                var row = await driver.WaitForRowAsync(name);
+                var read = page.WaitForResponseAsync(response => response.Request.Method == "GET" && new Uri(response.Url).AbsolutePath == api + "/" + id);
+                await row.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
+                var prepared = await read;
+                if (!prepared.Ok) throw new InvalidOperationException($"标准包编辑准备失败：{prepared.Status}");
+                var drawer = await driver.WaitForVisibleDrawerAsync("标准包编辑");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "Name", name + " 已编辑");
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "generated-edit.png"));
+                await driver.SaveChangesAsync(drawer, new("PUT", api + "/" + id, 200, "标准包编辑"));
+                await driver.WaitForRowAsync(name + " 已编辑");
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "generated-saved.png"));
+            }).RunAsync(CancellationToken.None);
+    }
+
     private const string RunEnvironmentVariable = "NEWP_RUN_ACCEPTANCE";
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "固定发行物的角色输入读取与功能授权PageRef最短接线")]
@@ -417,10 +466,9 @@ public sealed class AcceptanceGateTests
             {
                 var entry = features.Behavior("Example", "example.record.read");
                 var create = features.Action(entry, "create", "list.pageActions");
-                // 当前Example创建仍由#330迁移；这里只消费实际目录中的正式创建声明，保留字段大小写。
-                await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/example/records",
-                    new { ECODE = code, ENAME = name, RecordSource = "Manual" }, create.Position, token,
-                    dataDeclaration: features.DeclarationAtView(create, "example.record.list", "pageActions", "create"));
+                // 准备沿实际Example创建按钮取得身份，序列化仍保留字段大小写。
+                await WorkspaceAcceptanceFixture.SendButtonAsync(client, features, create, HttpMethod.Post, "/api/example/records",
+                    new { ECODE = code, ENAME = name, RecordSource = "Manual" }, token);
             },
             browserJourney: async (page, token) =>
             {

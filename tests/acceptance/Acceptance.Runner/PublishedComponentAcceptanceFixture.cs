@@ -27,13 +27,14 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = false,
     bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
     bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
-    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false, bool prepareTransferActors = false)
+    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false, bool prepareTransferActors = false, string? standardDataPackagePath = null)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
     private OwnedProcess? _host;
     private OwnedProcess? _shell;
     private string? _ownership;
+    private string? _standardDataPackageHash;
     private Func<string?, string> _sanitize = value => value ?? string.Empty;
     private int _hostPort;
     private string Resources => Path.Combine(runDirectory, "resources");
@@ -63,7 +64,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
         bool exerciseCompositionLifecycle = false, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
         bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
-        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false, bool prepareTransferActors = false)
+        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false, bool prepareTransferActors = false, string? standardDataPackagePath = null)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
@@ -73,7 +74,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
             exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms,
             exerciseDocumentCopyRecovery: exerciseDocumentCopyRecovery, exerciseDocumentCopyInterruptions: exerciseDocumentCopyInterruptions,
-            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation, preparePermissionActors: preparePermissionActors, prepareHistoryActor: prepareHistoryActor, prepareBatchActor: prepareBatchActor, prepareTransferActors: prepareTransferActors);
+            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation, preparePermissionActors: preparePermissionActors, prepareHistoryActor: prepareHistoryActor, prepareBatchActor: prepareBatchActor, prepareTransferActors: prepareTransferActors, standardDataPackagePath: standardDataPackagePath);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -112,6 +113,9 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             throw new InvalidOperationException("当前发行物准备不启用卸载恢复或组合生命周期演练，它们依赖历史升级留下的旧业务；请选择历史升级准备。");
         if (historicalUpgrade && string.IsNullOrWhiteSpace(baselineHostRoot))
             throw new InvalidOperationException("历史升级准备需要已有完整正式部署 Host；请用 --baseline-host-root 重新登记，或改用当前发行物场景。");
+        if (standardDataPackagePath is not null && (historicalUpgrade || !workspaceDelivery))
+            throw new InvalidOperationException("标准数据页面使用当前固定发行物和正式外部包。");
+        _standardDataPackageHash = standardDataPackagePath is null ? null : FileHash(standardDataPackagePath);
         _sanitize = sanitize;
         var before = ReadTargetIdentity();
         if (deliveryInput is not null)
@@ -133,7 +137,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         Directory.CreateDirectory(Resources);
         _environment["ConnectionStrings__SqlServer"] = _database.ConnectionString;
         _environment["Platform__PluginInstallRoot"] = InstallRoot;
-        _environment["Platform__ExternalPluginsEnabled"] = "false";
+        _environment["Platform__ExternalPluginsEnabled"] = standardDataPackagePath is null ? "false" : "true";
         _environment["Platform__FrontendPluginBaseUrl"] = "/plugins/runtime/assets";
         _environment["Authentication__Host__KeyRingPath"] = Path.Combine(Resources, "key-ring");
         _environment["Files__StorageRoot"] = StorageRoot;
@@ -145,6 +149,17 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         {
             await RunOfflineAsync("install-native", ["--package", packagePath], token);
             await RunOfflineAsync("enable-bundle", ["--package", packagePath], token);
+        }
+        if (standardDataPackagePath is not null)
+        {
+            var packageRoot = Path.Combine(Resources, "standard-data-package");
+            System.IO.Compression.ZipFile.ExtractToDirectory(standardDataPackagePath, packageRoot);
+            using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(packageRoot, "plugin.json")));
+            var moduleId = manifest.RootElement.GetProperty("moduleId").GetString()!;
+            var version = manifest.RootElement.GetProperty("version").GetString()!;
+            await WriteAsync("standard-data-package-before.json", new { moduleId, version, packageSha256 = _standardDataPackageHash }, token);
+            await RunOfflineAsync("install", ["--package", packageRoot], token);
+            await RunOfflineAsync("enable", ["--module-id", moduleId, "--version", version], token);
         }
         var initialHostRoot = historicalUpgrade ? baselineHostRoot! : hostRoot;
         var bootstrap = await FormalIdentityBootstrap.RunPublishedAsync(repositoryRoot,
@@ -1073,6 +1088,12 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
                 ownedProcessesStopped = true, resourcesRemoved = true }, token);
             if (deliveryInput is not null && (deliveryInput.HostIdentity != targetAfter.Host || deliveryInput.ShellIdentity != targetAfter.Shell))
                 throw new InvalidOperationException("Workspace 验收运行期间固定 Host/Shell 发生变化。");
+            if (_standardDataPackageHash is not null)
+            {
+                var actual = FileHash(standardDataPackagePath!);
+                await WriteAsync("standard-data-package-after.json", new { packageSha256 = actual }, token);
+                if (actual != _standardDataPackageHash) throw new InvalidOperationException("标准数据页面验收期间正式包发生变化。");
+            }
             return new("completed", null);
         }
         finally

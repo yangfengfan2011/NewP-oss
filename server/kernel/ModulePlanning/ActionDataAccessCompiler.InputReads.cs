@@ -2,7 +2,7 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 
 public static partial class ActionDataAccessCompiler
 {
-    // 输入只能引用真实PageRef读取或原纯query合同；声明本身不产生第二份数据要求。
+    // 输入只引用真实PageRef、原纯query或标准对象读取来源；声明不复制权限要求。
     private static IReadOnlyList<FeatureDeclaration> BindInputReadSources(IReadOnlyList<FeatureDeclaration> features,
         IReadOnlyDictionary<string, DataExecutionContract> contracts)
     {
@@ -18,7 +18,7 @@ public static partial class ActionDataAccessCompiler
                     throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID");
                 var pages = reads.GetValueOrDefault((button.ModuleId, key)) ?? [];
                 var querySource = contracts.GetValueOrDefault(key);
-                if (querySource is not null && !DataExecutionContracts.IsReadQuery(querySource.Requirements)) querySource = null;
+                if (querySource is not null && !DataExecutionContracts.IsReadQuery(querySource.Requirements) && !IsStandardObjectInputRead(querySource)) querySource = null;
                 if (pages.Length == 0 ? querySource is null
                     : querySource is not null && pages[0].Execution != querySource.Key || pages.Any(page => !SameReadSource(page, pages[0])))
                     throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID");
@@ -40,6 +40,16 @@ public static partial class ActionDataAccessCompiler
             }
             return additions.Count == 0 ? feature : feature with { DataAccess = [.. feature.DataAccess, .. additions] };
         }).ToArray();
+    }
+
+    // 无Detail编辑引用真实标准read合同；不接受任意对象provider或混合submit职责作为输入来源。
+    private static bool IsStandardObjectInputRead(DataExecutionContract source)
+    {
+        if (source.Provider != "standardCrud.read" || source.Requirements.Count != 1) return false;
+        var target = source.Requirements[0];
+        return target.Role == "target" && target.Stage == "read" && target.Shape == "object" && target.Resources.Count == 1
+            && target.MinimumCount == 1 && target.MaximumCount == 1 && target.AnyOf.Count == 1 && target.AnyOf[0].SequenceEqual(["read"])
+            && target.Branch is null && target.ReadResolverKey is null && target.ResourceAnyOf is null;
     }
 
     // 同一来源可出现于多个原功能位置，但身份及要求必须完全相同。

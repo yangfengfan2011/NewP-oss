@@ -27,9 +27,35 @@ public sealed class InputReadSourceCompilerTests
         Assert.DoesNotContain(Assert.Single(button.FeaturePositions), list.FeaturePositions);
     }
 
+    [Fact]
+    public void StandardObjectInputRead_UsesItsRealSourceKeyAtOnlyTheExplicitInputPosition()
+    {
+        var candidates = Candidates();
+        var index = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Part");
+        candidates[index] = WithInput(candidates[index], "authorize", "part.part.read", ["read", "authorize"]);
+        var plan = Compile(candidates);
+        var button = Assert.Single(plan, item => item.ViewKey == "part.part.list" && item.Surface == "rowActions" && item.ActionKey == "authorize");
+        var source = Assert.Single(plan, item => item.ViewKey == "part.part.read" && item.Surface == "read");
+        Assert.Equal("part.part.read", source.Execution);
+        Assert.Equal("standardCrud.read", source.Provider);
+        Assert.Null(source.BusinessBinding);
+        Assert.Equal(new[] { "read" }, source.Actions);
+        var target = Assert.Single(source.Requirements!);
+        Assert.Equal("target", target.Role);
+        Assert.Equal("read", target.Stage);
+        Assert.Equal("object", target.Shape);
+        Assert.Equal(new[] { "part.part" }, target.Resources);
+        Assert.Equal(button.FeaturePositions, source.FeaturePositions);
+        var list = Assert.Single(plan, item => item.ViewKey == "part.part.list" && item.Surface == "read");
+        Assert.DoesNotContain(Assert.Single(button.FeaturePositions), list.FeaturePositions);
+        Assert.Equal(new[] { "read", "authorize" }, button.Actions);
+    }
+
     [Theory]
     [InlineData("unknown.source")]
     [InlineData("part.part.authorization.manage")]
+    [InlineData("part.part.authorization.view")]
+    [InlineData("part.part.internal.create")]
     [InlineData("document.document.permissions")]
     [InlineData("part.part.initializeOwnership")]
     public void InputReference_RejectsUnknownForeignOrMixedWriteSources(string source)

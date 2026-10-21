@@ -35,7 +35,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 var key = "prepare-" + phase + "-" + after;
                 fault.Arm(phase, after);
                 await AsCopyActor(fixture, async provider => {
-                    await Assert.ThrowsAnyAsync<Exception>(() => provider.GetRequiredService<IFileCopyService>().PrepareCopyAsync(key, reference, DocumentFileOwnerPolicy.Key, CopyFileSource(documentId)));
+                    var identity = await provider.GetRequiredService<DocumentInitialIdentity>().ReadCurrentAsync(documentId);
+                    using var origin = provider.GetRequiredService<DocumentFileCopyScope>().Begin(identity, DocumentFileCopyPhase.Prepare, out var sourceContext);
+                    await Assert.ThrowsAnyAsync<Exception>(() => provider.GetRequiredService<IFileCopyService>().PrepareCopyAsync(key, reference, DocumentFileOwnerPolicy.Key, sourceContext));
                     return true;
                 });
                 Assert.Equal(1, fault.Injected);
@@ -46,7 +48,13 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 {
                     await AsCopyActor(fixture, async provider => {
                         var exception = await Assert.ThrowsAsync<FileLifecycleException>(async () => await provider.GetRequiredService<IPlatformTransactionExecutor>()
-                            .ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(provider.GetRequiredService<IFileCopyService>().ConfirmCopyAsync(key, reference.Owner, CopyFileSource(documentId, confirming: true), CopyFileTarget(documentId), token))));
+                            .ExecuteAsync(async token =>
+                            {
+                                var identity = await provider.GetRequiredService<DocumentInitialIdentity>().ReadCurrentAsync(documentId, token);
+                                using var origin = provider.GetRequiredService<DocumentFileCopyScope>().Begin(identity, DocumentFileCopyPhase.Confirm, out var sourceContext);
+                                using var targetProof = provider.GetRequiredService<DocumentFileCreationScope>().BeginCopied(identity, out var creation);
+                                return await provider.GetRequiredService<IFileCopyService>().ConfirmCopyAsync(key, reference.Owner, sourceContext, creation, token);
+                            }));
                         Assert.Equal("Document.CreationProofRequired", exception.Code);
                         return true;
                     });

@@ -108,34 +108,13 @@ public sealed class DocumentFileExecutionScopeTests
         else Assert.Empty(checks.Calls);
     }
 
-    [Theory]
-    [InlineData("valid")]
-    [InlineData("caller")]
-    [InlineData("member")]
-    [InlineData("resource")]
-    [InlineData("eid")]
-    [InlineData("source")]
-    [InlineData("ended-phase")]
-    [InlineData("other-phase")]
-    [InlineData("http")]
-    [InlineData("actor")]
-    public async Task InternalCopyMetadata_AcceptsOnlyItsFixedCallerAndCurrentReadFacts(string problem)
+    [Fact]
+    public async Task RetiredCopyMetadataContract_CannotBeRestoredByItsFormerFixedCaller()
     {
-        var (access, http, scope, _, reads) = Create();
+        var (access, _, scope, _, reads) = Create();
         using var phase = scope.Begin("document-one", DocumentFileReadPhase.PolicyCopyMetadata, Identity());
-        var target = scope.Target("document-one");
         var binding = new DataExecutionInternalBinding("document.files.copyMetadata", "document.backend", typeof(DocumentFiles), nameof(DocumentFiles.ReadCopySourceAsync));
-        if (problem == "caller") binding = binding with { Caller = typeof(DocumentFileOwnerPolicy) };
-        if (problem == "member") binding = binding with { Member = nameof(DocumentFiles.OpenAsync) };
-        if (problem == "resource") target = target with { ResourceKey = "example.record" };
-        if (problem == "eid") target = target with { ObjectId = "another-document" };
-        if (problem == "source") target = target with { Source = new object() };
-        if (problem == "ended-phase") phase.Dispose();
-        using var other = problem == "other-phase" ? scope.Begin("document-one", DocumentFileReadPhase.PolicyDownload, Identity()) : null;
-        if (problem == "http") http.HttpContext = Context();
-        if (problem == "actor") http.HttpContext!.User = new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "another-actor")], "test"));
-        if (problem == "valid") Assert.Equal(DataExecutionDecision.Allowed, (await access.EvaluateInternalObjectAsync(binding, "target", target)).Decision);
-        else await Assert.ThrowsAsync<ActionDataAccessException>(() => access.EvaluateInternalObjectAsync(binding, "target", target));
+        await Assert.ThrowsAsync<ActionDataAccessException>(() => access.EvaluateInternalObjectAsync(binding, "target", scope.Target("document-one")));
         Assert.Equal(0, reads.Calls);
     }
 
@@ -179,20 +158,14 @@ public sealed class DocumentFileExecutionScopeTests
     }
 
     [Theory]
-    [InlineData("PrepareCopyFilesAsync", true)]
-    [InlineData("CopyAsync", true)]
-    [InlineData("CancelCopyAsync", false)]
-    [InlineData("ReadCopyAsync", false)]
-    public async Task InternalCopySource_AcceptsOnlyItsTwoActualSourceReadingMembers(string member, bool allowed)
+    [InlineData(nameof(DocumentFiles.PrepareCopyFilesAsync))]
+    [InlineData(nameof(DocumentFiles.CopyAsync))]
+    public async Task RetiredCopySource_RejectsItsFormerRegisteredOwnerMembers(string member)
     {
         var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!, null!, new DocumentFileCopyScope(null!, new HttpContextAccessor()));
         var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), member), "document.document", "document-one");
-        if (allowed) await policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, source, default);
-        else
-        {
-            var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, source, default));
-            Assert.Equal("Document.FileReadContextInvalid", failure.Code);
-        }
+        var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, source, default));
+        Assert.Equal("Document.FileReadContextInvalid", failure.Code);
     }
 
     [Theory]
@@ -205,7 +178,7 @@ public sealed class DocumentFileExecutionScopeTests
     [InlineData("member")]
     public async Task CopySource_RejectsCrossedContextsBeforeTheEmptyBatchCanReturn(string problem)
     {
-        var source = DocumentCopyExecutions.Files("document-one", nameof(DocumentFiles.CopyAsync));
+        var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), nameof(DocumentFiles.CopyAsync)), "document.document", "document-one");
         FileOwnerOperationContext? crossed = problem switch
         {
             "missing" => null,

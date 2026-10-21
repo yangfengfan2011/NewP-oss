@@ -44,19 +44,29 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         };
         foreach (var forged in forgeries)
             await AsCopyActor(fixture, async provider => {
-                await Assert.ThrowsAnyAsync<Exception>(() => provider.GetRequiredService<IFileCopyService>().PrepareCopyAsync("forged-" + Guid.NewGuid().ToString("N"), forged, DocumentFileOwnerPolicy.Key, CopyFileSource(documentId)));
+                var identity = await provider.GetRequiredService<DocumentInitialIdentity>().ReadCurrentAsync(documentId);
+                using var origin = provider.GetRequiredService<DocumentFileCopyScope>().Begin(identity, DocumentFileCopyPhase.Prepare, out var context);
+                await Assert.ThrowsAnyAsync<Exception>(() => provider.GetRequiredService<IFileCopyService>().PrepareCopyAsync("forged-" + Guid.NewGuid().ToString("N"), forged, DocumentFileOwnerPolicy.Key, context));
                 return true;
             });
         Assert.Empty(await Rows(fixture, "FileCopyLease"));
         var upload = (string)(await Rows(fixture, "FileUploadLease"))[0]["EID"]!;
         await AsCopyActor(fixture, async provider => {
             var copies = provider.GetRequiredService<IFileCopyService>();
+            var identity = await provider.GetRequiredService<DocumentInitialIdentity>().ReadCurrentAsync(documentId);
+            var owner = provider.GetRequiredService<DocumentFileCopyScope>();
+            using var origin = owner.Begin(identity, DocumentFileCopyPhase.Prepare, out var context);
             Assert.Null(await copies.ReadCopyAsync(upload, DocumentFileOwnerPolicy.Key));
             await Assert.ThrowsAsync<FileLifecycleException>(async () => await provider.GetRequiredService<IPlatformTransactionExecutor>()
-                .ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(copies.ConfirmCopyAsync(upload, reference.Owner, CopyFileSource(documentId, confirming: true), CopyFileTarget(documentId), token))));
-            var prepared = await copies.PrepareCopyAsync("real-copy-credential", reference, DocumentFileOwnerPolicy.Key, CopyFileSource(documentId));
+                .ExecuteAsync(async token =>
+                {
+                    using var confirming = owner.Begin(identity, DocumentFileCopyPhase.Confirm, out var sourceContext);
+                    using var targetProof = provider.GetRequiredService<DocumentFileCreationScope>().BeginCopied(identity, out var creation);
+                    return await copies.ConfirmCopyAsync(upload, reference.Owner, sourceContext, creation, token);
+                }));
+            var prepared = await copies.PrepareCopyAsync("real-copy-credential", reference, DocumentFileOwnerPolicy.Key, context);
             Assert.Equal("prepared", prepared.State); Assert.NotEqual(reference.FileId, prepared.FileId);
-            var forged = await Assert.ThrowsAsync<InvalidOperationException>(() => copies.PrepareCopyAsync("real-copy-credential", reference with { FileId = (string)second["CEID"]! }, DocumentFileOwnerPolicy.Key, CopyFileSource(documentId)));
+            var forged = await Assert.ThrowsAsync<InvalidOperationException>(() => copies.PrepareCopyAsync("real-copy-credential", reference with { FileId = (string)second["CEID"]! }, DocumentFileOwnerPolicy.Key, context));
             Assert.Equal("Document.FileAssociationCorrupted", forged.Message);
             return true;
         });

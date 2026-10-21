@@ -7,6 +7,9 @@ using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Document;
 using ICP.Platform.Modules.Files.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using ICP.Platform.Persistence.EfCore;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
@@ -140,8 +143,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var documentId = (string)Assert.Single(await Rows(fixture, "Document"))["EID"]!;
         var link = (await Rows(fixture, "DocumentFileLink")).OrderBy(item => (long)item["Ordinal"]!).First();
         var reference = new FileUsageReference((string)link["FileUsageId"]!, (string)link["CEID"]!, new(DocumentFileOwnerPolicy.Key, (string)link["LID"]!));
-        FileOwnerInternalExecutionContext?[] crossed = [null, CopyFileSource(documentId) with { ObjectId = "another-document" },
-            CopyFileSource(documentId) with { ResourceKey = "part.part" }, DocumentCopyExecutions.Metadata(documentId)];
+        FileOwnerInternalExecutionContext?[] crossed = [null, RetiredCopyFileSource(documentId) with { ObjectId = "another-document" },
+            RetiredCopyFileSource(documentId) with { ResourceKey = "part.part" }, new(new("document.files.copyMetadata", "document.backend", typeof(DocumentFiles), nameof(DocumentFiles.ReadCopySourceAsync)), "document.document", documentId)];
         for (var index = 0; index < crossed.Length; index++)
             await AsCopyActor(fixture, async provider =>
             {
@@ -155,7 +158,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await AsCopyActor(fixture, async provider =>
         {
             var error = await Assert.ThrowsAsync<FileLifecycleException>(() => provider.GetRequiredService<IFileCopyService>()
-                .PrepareCopyAsync("registered-record-without-origin", reference, DocumentFileOwnerPolicy.Key, CopyFileSource(documentId)));
+                .PrepareCopyAsync("registered-record-without-origin", reference, DocumentFileOwnerPolicy.Key, RetiredCopyFileSource(documentId)));
             Assert.Equal(400, error.StatusCode);
             Assert.Equal("Document.FileReadContextInvalid", error.Code);
             return true;
@@ -165,13 +168,87 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         Assert.Equal(2, Directory.EnumerateFiles(fixture.StorageRoot).Count());
     }
 
-    // 直接owner消费者仍精确选择真实Document成员；不会按URL或缺声明补来源。
-    private static FileOwnerInternalExecutionContext CopyFileSource(string documentId, bool confirming = false) => new(
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "私有文件副本来源绑定真实owner/阶段/事务，错属Document和缺Added创建证明不能产生租约或使用")]
+    public async Task DocumentObjectCopy_PrivateOriginsRequireTheirCurrentOwnerPhaseAndCreationProof()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var folder = await Folder(fixture, admin, await Root(fixture, admin), "副本来源生命周期");
+        await CreateBatchDocument(fixture, admin, folder, 1);
+        await CreateBatchDocument(fixture, admin, folder, 2);
+        var documents = await Rows(fixture, "Document");
+        var firstId = (string)Assert.Single(documents, row => Equals(row["ECODE"], "BATCH-SOURCE-1"))["EID"]!;
+        var secondId = (string)Assert.Single(documents, row => Equals(row["ECODE"], "BATCH-SOURCE-2"))["EID"]!;
+        await AsCopyActor(fixture, async provider =>
+        {
+            var identityReader = provider.GetRequiredService<DocumentInitialIdentity>();
+            var first = await identityReader.ReadCurrentAsync(firstId);
+            var second = await identityReader.ReadCurrentAsync(secondId);
+            var db = provider.GetRequiredService<EfPlatformDbContext>();
+            var actualLink = await db.Set<Dictionary<string, object?>>("DocumentFileLink").AsNoTracking()
+                .FirstAsync(row => EF.Property<string>(row, "PEID") == (string)first.Iteration["EID"]!);
+            var reference = new FileUsageReference((string)actualLink["FileUsageId"]!, (string)actualLink["CEID"]!,
+                new(DocumentFileOwnerPolicy.Key, (string)actualLink["LID"]!));
+            var owner = provider.GetRequiredService<DocumentFileCopyScope>();
+            var files = provider.GetRequiredService<IFileCopyService>();
+            var policy = Assert.Single(provider.GetServices<IFileOwnerPolicy>(), item => item.OwnerKey == DocumentFileOwnerPolicy.Key);
+            var anotherOwner = new DocumentFileCopyScope(db, provider.GetRequiredService<IHttpContextAccessor>());
+            using (anotherOwner.Begin(first, DocumentFileCopyPhase.Prepare, out var wrongOwner))
+                await RejectPrepare("another-owner", wrongOwner, 400);
+            var expired = owner.Begin(first, DocumentFileCopyPhase.Prepare, out var ended);
+            expired.Dispose();
+            await RejectPrepare("ended-origin", ended, 400);
+            using (owner.Begin(first, DocumentFileCopyPhase.Metadata, out var metadata))
+                await RejectPrepare("metadata-is-not-copy-source", metadata, 400);
+            using (owner.Begin(second, DocumentFileCopyPhase.Prepare, out var otherDocument))
+                await RejectPrepare("another-real-document", otherDocument, 404);
+
+            // 有效来源一旦换事务即失效；用真实非空批次核policy而非Files的独立事务前置检查。
+            using (owner.Begin(first, DocumentFileCopyPhase.Prepare, out var outside))
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync();
+                var changed = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyBatchAsync([reference],
+                    FileOwnerOperation.CopySource, outside, default));
+                Assert.Equal("Document.FileReadContextInvalid", changed.Code);
+                await transaction.RollbackAsync();
+            }
+
+            var creation = provider.GetRequiredService<DocumentFileCreationScope>();
+            await using (var transaction = await db.Database.BeginTransactionAsync())
+            {
+                using var copied = creation.BeginCopied(first, out var target);
+                // 私有来源也不能把已持久Link冒充首次Added关联。
+                var notAdded = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(reference.Owner,
+                    reference.FileId, null, FileOwnerOperation.ConfirmCopy, target, default));
+                Assert.Equal("Document.CreationProofRequired", notAdded.Code);
+                var added = new Dictionary<string, object?>(actualLink) { ["LID"] = "DocumentFileLink_copy-origin-proof",
+                    ["PEID"] = second.Iteration["EID"], ["FileUsageId"] = null };
+                db.Set<Dictionary<string, object?>>("DocumentFileLink").Add(added);
+                var wrongIteration = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(
+                    new(DocumentFileOwnerPolicy.Key, (string)added["LID"]!), reference.FileId, null,
+                    FileOwnerOperation.ConfirmCopy, target, default));
+                Assert.Equal("Document.CreationProofRequired", wrongIteration.Code);
+                await transaction.RollbackAsync();
+            }
+            return true;
+
+            async Task RejectPrepare(string key, FileOwnerOperationContext context, int status)
+            {
+                var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => files.PrepareCopyAsync(key, reference,
+                    DocumentFileOwnerPolicy.Key, context));
+                Assert.Equal(status, failure.StatusCode);
+                Assert.Equal(status == 400 ? "Document.FileReadContextInvalid" : "Files.UsageUnavailable", failure.Code);
+            }
+        });
+        Assert.Empty(await Rows(fixture, "FileCopyLease"));
+        Assert.Equal(4, (await Rows(fixture, "FileRecord")).Length);
+        Assert.Equal(4, (await Rows(fixture, "FileUsage")).Length);
+        Assert.Equal(4, Directory.EnumerateFiles(fixture.StorageRoot).Count());
+    }
+
+    // 仅保留旧ABI负面资产，迁移后已登记的固定record也不能替代私有origin。
+    private static FileOwnerInternalExecutionContext RetiredCopyFileSource(string documentId, bool confirming = false) => new(
         new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), confirming
             ? nameof(DocumentFiles.CopyAsync) : nameof(DocumentFiles.PrepareCopyFilesAsync)), "document.document", documentId);
 
-    // 故障消费者的目标来源只表达真实创建执行，尚未Added/TX证明仍应被原owner拒绝。
-    private static FileOwnerCreationContext CopyFileTarget(string documentId) => new(new(
-        new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
-        { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CopyAsync)) }, documentId);
 }

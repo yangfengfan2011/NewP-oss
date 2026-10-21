@@ -42,9 +42,14 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             connections.Begin(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => copies.ReadCopySourceAsync(id, cancelled.Token)); connections.Active = false;
             Assert.Equal(ConnectionState.Closed, db.Database.GetDbConnection().State);
             var lifecycle = provider.GetRequiredService<IFileLifecycleService>();
-            connections.Begin(); await lifecycle.ReadUsageMetadataAsync([reference], DocumentCopyExecutions.Metadata(id)); connections.Active = false;
+            var identity = await provider.GetRequiredService<DocumentInitialIdentity>().ReadCurrentAsync(id);
+            var owner = provider.GetRequiredService<DocumentFileCopyScope>();
+            using (owner.Begin(identity, DocumentFileCopyPhase.Metadata, out var metadata))
+            { connections.Begin(); await lifecycle.ReadUsageMetadataAsync([reference], metadata); connections.Active = false; }
             Assert.Equal(1, connections.Opens); Assert.Equal(1, connections.Closes); Assert.Equal(ConnectionState.Closed, db.Database.GetDbConnection().State);
-            var files = provider.GetRequiredService<IFileCopyService>(); await files.PrepareCopyAsync("owned-read-unit", reference, DocumentFileOwnerPolicy.Key, CopyFileSource(id));
+            var files = provider.GetRequiredService<IFileCopyService>();
+            using var origin = owner.Begin(identity, DocumentFileCopyPhase.Prepare, out var source);
+            await files.PrepareCopyAsync("owned-read-unit", reference, DocumentFileOwnerPolicy.Key, source);
             connections.Begin(); var ready = await files.ReadCopyAsync("owned-read-unit", DocumentFileOwnerPolicy.Key); connections.Active = false;
             Assert.Equal("prepared", ready!.State); Assert.Equal(1, connections.Opens); Assert.Equal(1, connections.Closes);
             await files.CancelCopyAsync("owned-read-unit", DocumentFileOwnerPolicy.Key); return true;

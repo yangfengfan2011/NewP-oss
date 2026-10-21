@@ -35,9 +35,9 @@ public sealed class FilePersistentLifecycleTests
         calls.Clear();
         using var scope = fixture.Services.CreateScope();
         var copy = scope.ServiceProvider.GetRequiredService<IFileCopyService>();
-        var source = new FileOwnerInternalExecutionContext(new("test.copy.source", "test.owner", typeof(FilePersistentLifecycleTests),
-            nameof(Copy_PropagatesTheExplicitSourceAndCreationByReference)), "test.owner", "source-object");
-        var creation = new FileOwnerCreationContext(new(new("test.create", "standardCrud.create", "submit"), "test.owner", null), "target-object");
+        // Files只转交owner私有类型，不要求旧DataExecution record，也不复制或推断许可。
+        var source = new CopySourceProof("source-object");
+        var creation = new CopyCreationProof("target-object");
         await copy.PrepareCopyAsync("caller-proof", new(usage.UsageId, staged.FileId, owner), OwnerPolicy.Key, source);
         await scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>().ExecuteAsync(token =>
             new ValueTask<ConfirmedFileUsage>(copy.ConfirmCopyAsync("caller-proof", new(OwnerPolicy.Key, "target-link"), source, creation, token)));
@@ -54,6 +54,9 @@ public sealed class FilePersistentLifecycleTests
         Assert.Same(source, Assert.Single(calls, item => item.Operation == FileOwnerOperation.CopySource).Context);
         Assert.Same(creation, Assert.Single(calls, item => item.Operation == FileOwnerOperation.ConfirmCopy).Context);
     }
+
+    private sealed record CopySourceProof(string ObjectId) : FileOwnerOperationContext;
+    private sealed record CopyCreationProof(string ObjectId) : FileOwnerOperationContext;
 
     [Fact]
     public async Task StagedSetReadsBeyondBatchSizeInInputOrderWithBoundedQueriesAndNoWrites()

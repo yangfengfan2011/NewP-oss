@@ -59,10 +59,7 @@ public sealed class DocumentFileExecutionContractTests
         Assert.Equal(new[] { "create" }, create.Actions);
         Assert.Null(create.Requirements);
         Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "document.document.create");
-        var internalCreate = Assert.Single(owner.DataExecutions, item => item.Key == "document.document.internal.create");
-        Assert.Equal("internal", internalCreate.Boundary);
-        Assert.Equal(new[] { "ICP.Platform.Modules.Document.DocumentFiles.ValidateCopyCandidateAsync", "ICP.Platform.Modules.Document.DocumentFiles.CopyAsync" },
-            internalCreate.FixedBindings.Select(item => item.Caller));
+        Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "document.document.internal.create");
         var release = Assert.Single(owner.DataExecutions, item => item.Key == "document.files.release");
         Assert.Equal("internal", release.Boundary);
         Assert.Equal("ICP.Platform.Modules.Document.DocumentFileOwnerPolicy.VerifyBatchAsync", Assert.Single(release.FixedBindings).Caller);

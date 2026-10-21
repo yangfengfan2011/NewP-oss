@@ -85,6 +85,7 @@ public sealed class OrganizationWriteExecutionSqlServerTests
                 _ => new { PersonNo = "WRITE310-P", ENAME = "正式创建人员", EmploymentStatus = "FullTime", IsEnabled = true }
             };
             var endpoint = "/api/organization/" + tab;
+            var before = await SnapshotAsync(fixture);
             using (var missing = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, endpoint, body))
                 Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
             var borrowed = plan.ActionDataAccessCatalog.Single(item => item.Execution == resource + ".list"
@@ -92,6 +93,16 @@ public sealed class OrganizationWriteExecutionSqlServerTests
             using (var swapped = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, endpoint, body, borrowed))
                 Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
             var binding = http.Declaration(resource + ".create", feature);
+            using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            { Content = JsonContent.Create(body, options: new JsonSerializerOptions()) })
+            {
+                request.Headers.Add("X-NewP-Feature", feature.Position);
+                request.Headers.Add("X-NewP-Button", binding.Id);
+                request.Headers.Add("X-NewP-Data-Declaration", borrowed.Id);
+                using var mixed = await admin.SendAsync(request);
+                Assert.Equal(HttpStatusCode.BadRequest, mixed.StatusCode);
+            }
+            Assert.Equal(before, await SnapshotAsync(fixture));
             using var created = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, endpoint, body, binding);
             Assert.Equal(HttpStatusCode.Created, created.StatusCode);
             if (tab == "companies") company = BusinessAuditSqlServerHttpApiTests.Id(await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>());

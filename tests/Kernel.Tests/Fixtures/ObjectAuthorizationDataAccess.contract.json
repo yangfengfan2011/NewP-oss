@@ -38,42 +38,6 @@
     "businessBinding": "document.document.authorize"
   },
   {
-    "id": "Document/view:document.document.list/rowActions/action:viewAuthorization",
-    "moduleId": "Document",
-    "viewKey": "document.document.list",
-    "surface": "rowActions",
-    "actionKey": "viewAuthorization",
-    "execution": "document.document.authorization.view",
-    "resources": [
-      "document.document"
-    ],
-    "actions": [
-      "read"
-    ],
-    "featurePositions": [
-      "Workspace/navigation:workspace/module:Document/navigation:document.documents"
-    ],
-    "requirements": [
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.view",
-    "providerModuleId": "Authorization"
-  },
-  {
     "id": "Document/view:document.document.permissions/read",
     "moduleId": "Document",
     "viewKey": "document.document.permissions",
@@ -147,42 +111,6 @@
     ],
     "object": "Part",
     "businessBinding": "part.part.authorize"
-  },
-  {
-    "id": "Part/view:part.part.list/rowActions/action:viewAuthorization",
-    "moduleId": "Part",
-    "viewKey": "part.part.list",
-    "surface": "rowActions",
-    "actionKey": "viewAuthorization",
-    "execution": "part.part.authorization.view",
-    "resources": [
-      "part.part"
-    ],
-    "actions": [
-      "read"
-    ],
-    "featurePositions": [
-      "Workspace/navigation:workspace/module:Part/navigation:part.parts"
-    ],
-    "requirements": [
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "part.part"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.object.view",
-    "providerModuleId": "Authorization"
   },
   {
     "id": "Part/view:part.part.permissions/read",
@@ -385,45 +313,5 @@
         "resourceKey": "document.document"
       }
     ]
-  },
-  {
-    "id": "Workspace/view:workspace.folder.list/rowActions/action:viewAuthorization",
-    "moduleId": "Workspace",
-    "viewKey": "workspace.folder.list",
-    "surface": "rowActions",
-    "actionKey": "viewAuthorization",
-    "execution": "workspace.content.authorization.view",
-    "resources": [
-      "workspace.folder",
-      "part.part",
-      "document.document"
-    ],
-    "actions": [
-      "read"
-    ],
-    "featurePositions": [
-      "Workspace/navigation:workspace"
-    ],
-    "requirements": [
-      {
-        "role": "view",
-        "stage": "prepare",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
-        ],
-        "anyOf": [
-          [
-            "read"
-          ]
-        ],
-        "minimumCount": 1,
-        "maximumCount": 1
-      }
-    ],
-    "provider": "authorization.collection.view",
-    "providerModuleId": "Authorization"
   }
 ]

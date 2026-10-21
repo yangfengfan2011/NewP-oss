@@ -234,7 +234,7 @@ it.each([
     expect(request.headers.get('X-NewP-Feature')).toBe(positions.readPosition);
     if (new URL(request.url).pathname.includes('/permissions/')) {
       const viewer = formalDataAccessFor('workspace.content.permissions', 'read');
-      const row = formalDataAccessFor('workspace.folder.list', 'rowActions', 'viewAuthorization');
+      const row = formalDataAccessFor('workspace.content.permissions', 'read');
       expect([row.id, viewer.id]).toContain(request.headers.get('X-NewP-Data-Declaration'));
       if (new URL(request.url).pathname.endsWith('/permissions/explanation'))
         expect(request.headers.get('X-NewP-Data-Declaration')).toBe(viewer.id);

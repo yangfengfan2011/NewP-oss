@@ -274,7 +274,7 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
             """);
         using var view = JsonDocument.Parse("""
             {"view":{"key":"items","mode":"list","resourceKey":"test.item","rowActions":[
-              {"key":"change","handlerKey":"change","dataAccess":{"execution":"test.change","resources":["test.item"]}}
+              {"key":"change","handlerKey":"change"}
             ]}}
             """);
         var features = StandardFeatureMetadataCompiler.Read("Test", [navigation.RootElement, view.RootElement]);
@@ -291,8 +291,8 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
             {"navigation":{"items":[{"key":"entry","featureAuthorization":true,"targetKey":"history"}]}}
             """);
         using var view = JsonDocument.Parse("""
-            {"view":{"key":"history","mode":"list","resourceKey":"test.history","detailContributions":[
-              {"key":"history.entry","navigationKey":"entry","dataAccess":{"execution":"test.history.enter","resources":["test.item"]}}
+            {"Item":{"kind":"Entity"},"view":{"key":"history","mode":"list","model":"Item","resourceKey":"test.history","detailContributions":[
+              {"key":"history.entry","navigationKey":"entry","dataAccess":{"object":"Item","actions":["read"]}}
             ]}}
             """);
         var feature = Assert.Single(StandardFeatureMetadataCompiler.Read("Test", [navigation.RootElement, view.RootElement]));

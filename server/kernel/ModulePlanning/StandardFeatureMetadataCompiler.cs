@@ -130,9 +130,9 @@ public static class StandardFeatureMetadataCompiler
                 if (mode == "list")
                 {
                     BindDetailRead(view, owner);
-                    // 新协议详情按钮沿真实List→Detail关系拥有独立位置；旧详情来源逐片迁移，不能凭呈现复用行按钮身份。
+                    // 详情按钮沿真实List→Detail关系拥有独立位置，不能凭呈现复用行按钮身份。
                     if (Optional(view, "detailViewKey") is { } detailKey && views.TryGetValue(detailKey, out var detail))
-                        Actions(detail, "pageActions", owner, scope, resource, newButtonsOnly: true);
+                        Actions(detail, "pageActions", owner, scope, resource);
                 }
                 if (view.TryGetProperty("outputActions", out var outputs))
                 {
@@ -198,16 +198,13 @@ public static class StandardFeatureMetadataCompiler
         }
 
         // 查看、排序等纯交互随入口；真实业务动作仍使用稳定动作键。
-        void Actions(JsonElement view, string property, string owner, string? scope, string resource, bool newButtonsOnly = false)
+        void Actions(JsonElement view, string property, string owner, string? scope, string resource)
         {
             if (!view.TryGetProperty(property, out var actions)) return;
             if (actions.EnumerateArray().GroupBy(action => Text(action, "key"), StringComparer.Ordinal).Any(group => group.Count() > 1))
                 throw new InvalidOperationException("按钮声明身份冲突。");
             foreach (var action in actions.EnumerateArray())
             {
-                if (newButtonsOnly && (action.TryGetProperty("dataAccess", out var buttonAccess)
-                    ? buttonAccess.ValueKind != JsonValueKind.Array && !buttonAccess.TryGetProperty("object", out _)
-                    : Optional(action, "handlerKey") is null or "view" or "refresh")) continue;
                 // 同一不可变动作源可经List→Detail及显式routeOnly重复到达；只复用完全相同的正式引用。
                 if (!expandedActions.Add((Text(view, "key"), property, owner, scope, Text(action, "key")))) continue;
                 // 普通快捷跳转复用目标资格；标准行查看可沿当前读取资格进入无独立授权的呈现页。
@@ -229,7 +226,15 @@ public static class StandardFeatureMetadataCompiler
                         throw new InvalidOperationException("动作快捷跳转缺少有效功能导航目标。");
                     var targetOwner = Optional(targetEntry, "featureKey") ?? "navigation:" + target;
                     DataAccess(view, action, property, Text(action, "key"), readPresentation ? owner : targetOwner);
-                    if (readPresentation) BindReadPresentation(targetEntry.GetProperty("page"), owner, new HashSet<string>(StringComparer.Ordinal));
+                    if (readPresentation)
+                    {
+                        var sources = new HashSet<string>(StringComparer.Ordinal);
+                        BindReadPresentation(targetEntry.GetProperty("page"), owner, new HashSet<string>(StringComparer.Ordinal), sources);
+                        if (action.TryGetProperty("inputReadSourceKey", out _)
+                            && (Optional(action, "inputReadSourceKey") is not { } inputSource || !sources.Contains(inputSource)))
+                            throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID");
+                    }
+                    else if (action.TryGetProperty("inputReadSourceKey", out _)) throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID");
                     continue;
                 }
                 var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey");
@@ -269,13 +274,14 @@ public static class StandardFeatureMetadataCompiler
                 ? sourceKey : Text(page, "pageKey");
 
         // 只读导航沿已有PageRef组合投影显式read，不调用View生成新tab功能或改变原读取身份。
-        void BindReadPresentation(JsonElement page, string owner, HashSet<string> visited)
+        void BindReadPresentation(JsonElement page, string owner, HashSet<string> visited, HashSet<string>? sources = null)
         {
             DataAccess(page, page, "read", "", owner, PageReadSourceKey(page));
+            if (page.TryGetProperty("dataAccess", out _)) sources?.Add(PageReadSourceKey(page));
             if (!page.TryGetProperty("parameters", out var parameters) || Optional(parameters, "viewKey") is not { } key
                 || !visited.Add(key) || !views.TryGetValue(key, out var target) || Optional(target, "mode") != "tab"
                 || !target.TryGetProperty("tabs", out var tabs)) return;
-            foreach (var tab in tabs.EnumerateArray()) BindReadPresentation(tab.GetProperty("pageRef"), owner, visited);
+            foreach (var tab in tabs.EnumerateArray()) BindReadPresentation(tab.GetProperty("pageRef"), owner, visited, sources);
         }
 
         // 编辑预取使用真实详情读取声明；位置仍是原编辑资格，不借列表导航或新造入口。
@@ -300,8 +306,7 @@ public static class StandardFeatureMetadataCompiler
             var node = result[index];
             var inputReadSource = action.TryGetProperty("inputReadSourceKey", out _)
                 ? Optional(action, "inputReadSourceKey") ?? throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID") : null;
-            if (isButton && (!hasDataAccess || declared.ValueKind == JsonValueKind.Array
-                || declared.ValueKind == JsonValueKind.Object && declared.TryGetProperty("object", out _)))
+            if (isButton)
             {
                 // 非呈现feature动作沿既有behavior绑定调用；不能为生成身份而增加UI handler。
                 if (operation is null && !(surface == "featureActions" && Optional(action, "behaviorKey") == node.BehaviorKey))

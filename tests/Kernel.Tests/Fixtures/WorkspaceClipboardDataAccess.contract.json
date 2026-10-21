@@ -1076,46 +1076,6 @@
       ]
     },
     {
-      "id": "Workspace/view:workspace.folder.list/rowActions/action:viewAuthorization",
-      "moduleId": "Workspace",
-      "viewKey": "workspace.folder.list",
-      "surface": "rowActions",
-      "actionKey": "viewAuthorization",
-      "execution": "workspace.content.authorization.view",
-      "resources": [
-        "workspace.folder",
-        "part.part",
-        "document.document"
-      ],
-      "actions": [
-        "read"
-      ],
-      "featurePositions": [
-        "Workspace/navigation:workspace"
-      ],
-      "requirements": [
-        {
-          "role": "view",
-          "stage": "prepare",
-          "shape": "object",
-          "resources": [
-            "workspace.folder",
-            "part.part",
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "authorization.collection.view",
-      "providerModuleId": "Authorization"
-    },
-    {
       "id": "Workspace/view:workspace.history.list/outputActions/action:exportAll",
       "moduleId": "Workspace",
       "viewKey": "workspace.history.list",

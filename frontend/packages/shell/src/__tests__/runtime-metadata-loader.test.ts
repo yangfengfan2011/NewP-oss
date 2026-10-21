@@ -1,10 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadRuntimeMetadata } from '../metadata/runtimeMetadataLoader';
+import { bindActionDataAccess, loadRuntimeMetadata } from '../metadata/runtimeMetadataLoader';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readComponentJson } from '../../test-support/componentTestInputs';
 
 describe('runtime metadata loader', () => {
+  it.each(['old', 'mixed', 'old-projection'] as const)('rejects retired button %s without removing the independent list read', mode => {
+    const declarations = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json'), 'utf8'));
+    const definition = readComponentJson('Workspace', 'metadata/views/WorkspaceObjectHistoryList.view.json');
+    const action = definition.view.pageActions.find((item: { key: string }) => item.key === 'output');
+    const declaration = declarations.find((item: { actionKey: string }) => item.actionKey === 'output');
+    if (mode === 'old-projection') { delete declaration.businessBinding; declaration.execution = 'workspace.history.list'; }
+    else action.dataAccess = mode === 'old' ? { execution: 'workspace.history.list', resources: ['workspace.folder'] }
+      : { object: 'WorkspaceFolder', actions: ['read'], execution: 'workspace.history.list' };
+    expect(() => bindActionDataAccess(definition, declarations)).toThrow('按钮数据声明');
+    const readOnly = { ...definition, view: { key: definition.view.key, dataAccess: definition.view.dataAccess } };
+    const read = bindActionDataAccess(readOnly, declarations).view.dataAccess;
+    expect(read).toMatchObject({ execution: 'workspace.history.list' });
+    expect(read).not.toHaveProperty('businessBinding');
+  });
   it.each(['valid', 'missing-projection', 'missing-authoring', 'identity-conflict'] as const)('binds the formal action projection and fails closed for %s', async mode => {
     const declarations = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json'), 'utf8'));
     const definition = readComponentJson('Workspace', 'metadata/views/WorkspaceObjectHistoryList.view.json');

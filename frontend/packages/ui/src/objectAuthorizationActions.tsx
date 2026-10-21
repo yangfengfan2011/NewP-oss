@@ -2,7 +2,7 @@ import { fetchObjectAuthorization, objectAuthorizationError, objectAuthorization
 import { lazy, Suspense } from 'react';
 import { platformFetch } from '@icp-platform/core';
 import type { ObjectAuthorizationTarget } from './ObjectAuthorizationInput';
-import { StandardCrudRequestError, type StandardCrudActionContext, StandardCrudActionEligibilityResolver, StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
+import { standardCrudInputReadSource, StandardCrudRequestError, type StandardCrudActionContext, StandardCrudActionEligibilityResolver, StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
 
 const Input = lazy(() => import('./ObjectAuthorizationInput'));
 const inspectionRequestsOwner = Symbol('object-authorization-inspection-requests');
@@ -26,7 +26,9 @@ export function createObjectAuthorizationActions(
   };
   const eligibility = (inspect: boolean): StandardCrudActionEligibilityResolver => async context => {
     const { id, featurePosition, signal } = context;
-    const dataAccess = context.action.dataAccess ?? context.dataAccess;
+    const dataAccess = inspect && context.action.navigationTargetKey
+      ? standardCrudInputReadSource(context) : context.action.dataAccess ?? context.dataAccess;
+    if (inspect && context.action.navigationTargetKey && !dataAccess) throw new Error('INPUT_READ_SOURCE_INVALID');
     if (!id) return { visible: false, available: false };
     const target = targetFor(context, inspect);
     const response = await fetchObjectAuthorization(fetcher, objectAuthorizationPath(target, inspect && target.basePath ? '/catalog' : '/eligibility'),

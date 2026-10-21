@@ -89,7 +89,7 @@ public static partial class ActionDataAccessCompiler
                 continue;
             }
             if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
-                || declaration.ObjectRequirements is not null || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "export" or "lookupBindings" or "featureActions" or "pageActions" or "rowActions" or "outputActions" or "detailContributions")
+                || declaration.ObjectRequirements is not null || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "lookupBindings")
                 || declaration.Surface != "read" && string.IsNullOrWhiteSpace(declaration.ActionKey)
                 || declaration.Actions.Distinct(StringComparer.Ordinal).Count() != declaration.Actions.Count
                 || declaration.Actions.Any(key => !actions.Any(action => action.Key == key))

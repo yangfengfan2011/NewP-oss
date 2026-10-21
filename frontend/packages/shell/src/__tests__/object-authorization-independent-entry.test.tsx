@@ -81,7 +81,7 @@ async function mount(settings: { save?: () => Response | Promise<Response>; read
     if (url.pathname === endpoint + '/part-object') return json({ fields: { EID: 'part-object', ECODE: 'P-1', ENAME: '独立零组件' }, summaries: {} });
     if (settings.readOnly && url.pathname.includes('/permissions')) {
       const expected = router.state.location.pathname === route
-        ? formalDataAccessFor(resource + '.list', 'rowActions', 'viewAuthorization') : formalDataAccessFor(resource + '.permissions', 'read');
+        ? formalDataAccessFor(resource + '.permissions', 'read') : formalDataAccessFor(resource + '.permissions', 'read');
       if (request.headers.get('X-NewP-Data-Declaration') !== expected.id)
         return new Response(JSON.stringify({ code: 'ActionDataAccess.DeclarationInvalid', actualDeclaration: request.headers.get('X-NewP-Data-Declaration') }),
           { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -174,7 +174,7 @@ it.each(['Part', 'Document'] as const)('passes the actual readonly %s tab source
   await act(async () => permissions()!.click());
   const resource = owner === 'Part' ? 'part.part' : 'document.document';
   const expected = formalDataAccessFor(resource + '.permissions', 'read');
-  const actionSource = formalDataAccessFor(resource + '.list', 'rowActions', 'viewAuthorization');
+  const actionSource = formalDataAccessFor(resource + '.permissions', 'read');
   const earlyReads = requests.filter(request => new URL(request.url).pathname.includes('/permissions/'));
   for (const request of earlyReads) expect(request.headers.get('X-NewP-Data-Declaration'), new URL(request.url).pathname).toBe(actionSource.id);
   await vi.waitFor(() => expect(router.state.location.pathname).toBe(owner === 'Part' ? '/parts/permissions' : '/documents/permissions'));
@@ -217,10 +217,11 @@ it('saves owner authorization through the real standalone Part route without an 
   expect(payload.subjects).toEqual([{ id: expect.stringMatching(/^DataScopeSubject_/), type: 'all', subjectId: null, priority: 0, actions: { read: 'allow' }, expiresAt: null }]);
   await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   const source = formalDataAccessFor('part.part.list', 'rowActions', 'authorize');
-  const rowView = formalDataAccessFor('part.part.list', 'rowActions', 'viewAuthorization');
+  const rowView = formalDataAccessFor('part.part.permissions', 'read');
   for (const request of requests.filter(request => new URL(request.url).pathname.includes('/permissions'))) {
     // 当前行还会独立检查既有查看入口；它保留自己的read来源，不冒充打开的管理输入。
-    if (request.headers.get('X-NewP-Data-Declaration') === rowView.id) {
+    if (request.headers.get('X-NewP-Data-Declaration') === rowView.id
+      && request.headers.get('X-NewP-Feature') === fixture('PartPermissionFeatures').readPosition) {
       expect(new URL(request.url).pathname).toBe('/api/part/parts/part-object/permissions/catalog');
       expect(request.method).toBe('GET');
       expect(request.headers.get('X-NewP-Feature')).toBe(fixture('PartPermissionFeatures').readPosition);

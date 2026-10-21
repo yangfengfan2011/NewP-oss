@@ -66,12 +66,7 @@
         "labelKey": "Action_Create",
         "standardAction": "create",
         "variant": "primary",
-        "dataAccess": {
-          "execution": "example.record.create",
-          "resources": [
-            "example.record"
-          ]
-        }
+        "dataAccess": { "object": "ExampleRecord", "actions": ["create"] }
       }
     ],
     "featureActions": [
@@ -103,12 +98,7 @@
         "key": "edit",
         "labelKey": "Action_Edit",
         "standardAction": "edit",
-        "dataAccess": {
-          "execution": "example.record.update",
-          "resources": [
-            "example.record"
-          ]
-        }
+        "dataAccess": { "object": "ExampleRecord", "actions": ["edit"] }
       },
       {
         "key": "delete",
@@ -116,12 +106,7 @@
         "standardAction": "delete",
         "variant": "danger",
         "confirmMessageKey": "Action_Delete_Confirm",
-        "dataAccess": {
-          "execution": "example.record.delete",
-          "resources": [
-            "example.record"
-          ]
-        }
+        "dataAccess": { "object": "ExampleRecord", "actions": ["delete"] }
       }
     ],
     "export": {

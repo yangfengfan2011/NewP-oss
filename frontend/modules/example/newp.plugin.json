@@ -28,36 +28,6 @@
         "example.record.read"
       ],
       "resourceKey": "example.record"
-    },
-    {
-      "key": "example.record.create",
-      "moduleId": "Example",
-      "provider": "standardCrud.create",
-      "boundary": "entry",
-      "featureBehaviors": [
-        "example.record.create"
-      ],
-      "resourceKey": "example.record"
-    },
-    {
-      "key": "example.record.update",
-      "moduleId": "Example",
-      "provider": "standardCrud.update",
-      "boundary": "entry",
-      "featureBehaviors": [
-        "example.record.update"
-      ],
-      "resourceKey": "example.record"
-    },
-    {
-      "key": "example.record.delete",
-      "moduleId": "Example",
-      "provider": "standardCrud.delete",
-      "boundary": "entry",
-      "featureBehaviors": [
-        "example.record.delete"
-      ],
-      "resourceKey": "example.record"
     }
   ],
   "frontend": {

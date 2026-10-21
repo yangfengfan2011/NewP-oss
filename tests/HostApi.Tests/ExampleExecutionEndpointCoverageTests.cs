@@ -30,8 +30,15 @@ public sealed class ExampleExecutionEndpointCoverageTests : IDisposable
         app.MapStandardCrudResources();
         var bindings = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
             .Select(endpoint => endpoint.Metadata.GetMetadata<StandardCrudDataExecutionEndpoint>()).Where(item => item?.ResourceKey == "example.record").ToArray();
-        Assert.Equal(new[] { "create", "delete", "export", "list", "read", "update" }, bindings.Select(item => item!.Operation).Order(StringComparer.Ordinal));
-        Assert.Contains(bindings.Single(item => item!.Operation == "read")!.Bindings, binding => binding.Execution == "example.record.update" && binding.Stage == "prepare");
+        Assert.Equal(new[] { "export", "list", "read" }, bindings.Select(item => item!.Operation).Order(StringComparer.Ordinal));
+        var read = Assert.Single(bindings.Single(item => item!.Operation == "read")!.Bindings);
+        Assert.Equal("example.record.read", read.Execution);
+        Assert.Equal("read", read.Stage);
+        var buttons = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
+            .Select(endpoint => endpoint.Metadata.GetMetadata<ICP.Platform.Authorization.Contracts.ButtonExecutionEndpoint>())
+            .Where(item => item?.ResourceKey == "example.record").ToArray();
+        Assert.Equal(new[] { "example.record.create", "example.record.delete", "example.record.update" },
+            buttons.Select(item => item!.BusinessBinding).Order(StringComparer.Ordinal));
         foreach (var resource in new[] { "example.record", "organization.person" })
         {
             var export = Assert.Single(((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints),
@@ -44,7 +51,6 @@ public sealed class ExampleExecutionEndpointCoverageTests : IDisposable
     }
 
     [Theory]
-    [InlineData("missing")]
     [InlineData("unknown")]
     [InlineData("missing-list")]
     [InlineData("missing-read")]
@@ -53,8 +59,8 @@ public sealed class ExampleExecutionEndpointCoverageTests : IDisposable
     {
         var descriptor = ExampleRecordCrudDescriptorFactory.Create();
         var bindings = descriptor.DataExecutions.ToDictionary(item => item.Key, item => item.Value);
-        if (problem == "unknown") bindings["update"] = "unregistered.execution";
-        else bindings.Remove(problem.StartsWith("missing-", StringComparison.Ordinal) ? problem[8..] : "update");
+        if (problem == "unknown") bindings["read"] = "unregistered.execution";
+        else bindings.Remove(problem[8..]);
         descriptor = descriptor with { DataExecutions = bindings };
         using var app = Build(descriptor);
         Assert.Throws<InvalidOperationException>(() => app.MapStandardCrudResources());

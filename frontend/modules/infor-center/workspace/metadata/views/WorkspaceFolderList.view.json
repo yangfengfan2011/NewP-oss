@@ -22,7 +22,7 @@
       {"key": "cutSelected", "labelKey": "Cut", "handlerKey": "cut", "requiresSelection": true, "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
       {"key": "paste", "labelKey": "PasteReferences", "handlerKey": "paste", "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
       {"key": "pasteObjectCopy", "labelKey": "PasteObjectCopy", "handlerKey": "pasteObjectCopy", "inputKey": "copyObject", "dataAccess":[{"object":"Part","actions":["partObjectCopy"]},{"object":"Document","actions":["documentObjectCopy"]}]},
-      {"key": "pasteFolderCopy", "labelKey": "PasteFolderCopy", "handlerKey": "pasteFolderCopy", "inputKey": "copyFolder", "dataAccess": {"execution": "workspace.folder.shallowCopy", "resources": ["workspace.folder", "part.part", "document.document"]}},
+      {"key": "pasteFolderCopy", "labelKey": "PasteFolderCopy", "handlerKey": "pasteFolderCopy", "inputKey": "copyFolder", "dataAccess": {"object": "WorkspaceFolder", "actions": ["workspaceCopy"]}},
       {"key": "pasteFolderStructure", "labelKey": "PasteFolderStructure", "handlerKey": "pasteFolderStructure", "inputKey": "copyFolder", "dataAccess": {"execution": "workspace.folder.structureCopy", "resources": ["workspace.folder", "part.part", "document.document"]}},
       {"key": "resolveObjectCopy", "labelKey": "CopyResolve", "handlerKey": "resolveObjectCopy", "inputKey": "recoverObjectCopy", "confirmLabelKey": "CopyCloseAndRefresh"},
       {"key": "clearClipboard", "labelKey": "ClearClipboard", "handlerKey": "copy"},

@@ -25,7 +25,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor,
     IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization, IDataExecutionAccess executionAccess,
     IObjectActionAccess objectActions, IStandardCrudRepository mutationRepository, IDataScopeObjectDecisionProvider objectDecisions,
-    IButtonBusinessExecutor copyButtons, WorkspaceObjectCopyPreparationHandler copyPreparationHandler, WorkspaceObjectCopyHandler copyHandler)
+    IButtonBusinessExecutor copyButtons, WorkspaceObjectCopyPreparationHandler copyPreparationHandler, WorkspaceObjectCopyHandler copyHandler,
+    WorkspaceFolderCopyPreparationHandler folderCopyPreparationHandler, WorkspaceFolderCopyHandler folderCopyHandler)
 {
     // 正式处理器只交当前业务输入；候选与persist在原事务内部形成，不从缺HTTP身份选择旧来源。
     internal Task<string> WithinFolderCreationAsync(WorkspaceFolderCreationInput input,
@@ -114,6 +115,11 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             if (await executionAccess.EvaluateCandidateAsync(declared.Binding, "workspace.folder", "candidate", candidate, token) != DataExecutionDecision.Allowed)
                 throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
         }
+        else if (source is FolderCreationSource.Copy)
+        {
+            if (await objectActions.CheckCandidateAsync("WorkspaceFolder", candidate, ["create"], token) != DataExecutionDecision.Allowed)
+                throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
+        }
         else if (source is not FolderCreationSource.Button) throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid");
         return candidate;
     }
@@ -122,13 +128,14 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     {
         public sealed record Declared(DataExecutionBindingReference Binding, DataExecutionInternalBinding Caller) : FolderCreationSource;
         public sealed record Button(Func<WorkspaceFolderCreationState, CancellationToken, Task<string>> Execute) : FolderCreationSource;
+        public sealed record Copy : FolderCreationSource;
     }
 
     // 正式parent角色复用原位置解析事实；普通创建和两种复制各自携带实际entry来源。
     private Task<WorkspacePositionPath> ResolveFolderCreationPositionAsync(FolderCreationSource source, string actor,
         WorkspacePosition position, CancellationToken token) => source switch
     {
-        FolderCreationSource.Button => ResolveWritableButtonPositionAsync(actor, position, token),
+        FolderCreationSource.Button or FolderCreationSource.Copy => ResolveWritableButtonPositionAsync(actor, position, token),
         FolderCreationSource.Declared declared => ResolveClipboardPositionAsync(declared.Binding, "parent", position, token),
         _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
     };
@@ -140,7 +147,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         var target = new DataExecutionWriteFacts("workspace.folder", (string)candidate["EID"]!, candidate);
         return source switch
         {
-            FolderCreationSource.Button => new DataScopeObjectInitializationSource.Created(parents, target with { Values = candidate.ToFrozenDictionary(StringComparer.Ordinal) }),
+            FolderCreationSource.Button or FolderCreationSource.Copy => new DataScopeObjectInitializationSource.Created(parents, target with { Values = candidate.ToFrozenDictionary(StringComparer.Ordinal) }),
             FolderCreationSource.Declared declared => new DataScopeObjectInitializationSource.Declared(declared.Caller, declared.Binding, parents, target),
             _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
         };

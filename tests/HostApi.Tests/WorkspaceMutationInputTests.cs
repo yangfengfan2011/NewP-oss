@@ -53,7 +53,7 @@ public sealed class WorkspaceMutationInputTests
         documentFiles: null!, documentCopies: null!, treeOrder: null!, referenceAudit: null!,
         logger: NullLogger<WorkspaceContents>.Instance, ownership: null!, ownershipAudit: null!, folderDescriptor: null!,
         parentAuthorizations: null!, spaceInitialization: null!, executionAccess: null!, objectActions: null!, mutationRepository: null!, objectDecisions: null!,
-        copyButtons: null!, copyPreparationHandler: null!, copyHandler: null!);
+        copyButtons: null!, copyPreparationHandler: null!, copyHandler: null!, folderCopyPreparationHandler: null!, folderCopyHandler: null!);
 
     private sealed class TestModule(string id, IReadOnlyList<string> dependencies) : ModuleBase
     {

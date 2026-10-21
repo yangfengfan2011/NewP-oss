@@ -12,7 +12,7 @@ public sealed partial class WorkspaceContents
     /// <summary>弹层只读核证完整位置及当前源名；不预取子内容，不缓存资格，也不替代图锁内提交重验。</summary>
     public Task<WorkspaceFolderCopyPreparation> PrepareFolderCopyAsync(string actor, string mode, WorkspacePosition sourcePosition,
         string[] linkIds, WorkspacePosition targetPosition, CancellationToken token) =>
-        PrepareFolderCopyCoreAsync(actor, mode, sourcePosition, linkIds, targetPosition, FolderPreparationExecution.Shallow, token);
+        PrepareFolderCopyButtonAsync(actor, mode, sourcePosition, linkIds, targetPosition, token);
 
     /// <summary>结构名称准备使用自己的真实声明，不与浅副本来源串用。</summary>
     public Task<WorkspaceFolderCopyPreparation> PrepareFolderStructureAsync(string actor, string mode, WorkspacePosition sourcePosition,
@@ -57,53 +57,56 @@ public sealed partial class WorkspaceContents
         if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0]))
             throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
         if (string.IsNullOrWhiteSpace(name) || name.Length > 256) throw new LinkQueryException(400, "Workspace.InvalidName", "ENAME");
-        var binding = WorkspaceFolderCopyExecutions.Binding("submit");
-        executionAccess.Validate([binding], "workspace.folder");
+        sourcePosition = FreezeClipboardPosition(sourcePosition);
+        targetPosition = FreezeClipboardPosition(targetPosition);
+        linkIds = linkIds.ToArray();
         return transactions.ExecuteAsync<WorkspacePasteResult>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var sourceParent = await ResolveClipboardPositionAsync(binding, "sourceParent", sourcePosition, cancellation);
-            var source = (await ResolveDeclaredClipboardTargetsAsync(sourceParent.FolderId, linkIds, binding, cancellation))[0];
-            if (source.ModelKey != WorkspacePositions.FolderModel) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
-            var target = await ResolveClipboardPositionAsync(binding, "parent", targetPosition, cancellation);
-            var sourceFields = await Folders.AsNoTracking().Where(row => EF.Property<string>(row, "EID") == source.Id)
-                .Select(row => new { Description = EF.Property<string?>(row, "Description") }).SingleAsync(cancellation);
-            var children = await ReadCopyChildrenAsync(source.Id, cancellation);
-            // 来源名称和次序按真实 SQL collation 校验；不可见冲突同样使整次失败。
-            if (await Links.Where(row => EF.Property<string>(row, "PEID") == source.Id && EF.Property<string>(row, "ChildModelKey") == WorkspacePositions.FolderModel)
-                .Join(Folders, link => EF.Property<string>(link, "CEID"), folder => EF.Property<string>(folder, "EID"),
-                    (link, folder) => EF.Property<string>(folder, "ENAME")).GroupBy(value => value).AnyAsync(group => group.Count() > 1, cancellation))
-                throw new LinkQueryException(409, "Workspace.FolderCopyUnavailable");
-            foreach (var child in children)
+            var sourceParent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
+            var source = await ReadFolderCopyButtonSourceAsync(sourceParent.FolderId, linkIds, cancellation);
+            var transaction = db.Database.CurrentTransaction;
+            return await ExecuteFolderCopyButtonAsync(folderCopyHandler, source,
+                () => transactions.IsActive && transaction is not null && ReferenceEquals(transaction, db.Database.CurrentTransaction), async checkedToken =>
             {
-                var endpoint = new LinkObjectReference(child.Model, child.Id);
-                var decision = await executionAccess.EvaluateInternalObjectAsync(WorkspaceFolderCopyExecutions.DirectTargetCaller(),
-                    "target", new(Resource(child.Model), child.Id, endpoint), cancellation);
-                if (decision.Decision != DataExecutionDecision.Allowed)
-                    throw new LinkQueryException(403, "Workspace.FolderCopyUnavailable");
-                if (decision.Target?.ResourceKey != Resource(child.Model) || decision.Target.ObjectId != child.Id)
-                    throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
-                if (child.Model == WorkspacePositions.FolderModel && (await WouldCycleAsync(source.Id, child.Id, cancellation)
-                    || await WouldCycleAsync(target.FolderId, child.Id, cancellation)
-                    || await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AnyAsync(row => EF.Property<string>(row, "RootFolderId") == child.Id, cancellation)))
+                await RequireNonRootClipboardTargetAsync(source, checkedToken);
+                var target = await ResolveWritableButtonPositionAsync(actor, targetPosition, checkedToken);
+                var sourceFields = await Folders.AsNoTracking().Where(row => EF.Property<string>(row, "EID") == source.Id)
+                    .Select(row => new { Description = EF.Property<string?>(row, "Description") }).SingleAsync(checkedToken);
+                var children = await ReadCopyChildrenAsync(source.Id, checkedToken);
+                // 来源名称和次序按真实 SQL collation 校验；不可见冲突同样使整次失败。
+                if (await Links.Where(row => EF.Property<string>(row, "PEID") == source.Id && EF.Property<string>(row, "ChildModelKey") == WorkspacePositions.FolderModel)
+                    .Join(Folders, link => EF.Property<string>(link, "CEID"), folder => EF.Property<string>(folder, "EID"),
+                        (link, folder) => EF.Property<string>(folder, "ENAME")).GroupBy(value => value).AnyAsync(group => group.Count() > 1, checkedToken))
                     throw new LinkQueryException(409, "Workspace.FolderCopyUnavailable");
-            }
-            // 普通创建拥有名称、Description、目标归属和候选create规则；嵌套执行共享当前事务及图锁。
-            var createdId = await CreateFolderCoreAsync(actor, targetPosition, new Dictionary<string, JsonElement> {
-                ["ENAME"] = JsonSerializer.SerializeToElement(name), ["Description"] = JsonSerializer.SerializeToElement(sourceFields.Description) },
-                copyParentAuthorization, new FolderCreationSource.Declared(binding, WorkspaceFolderCopyExecutions.Caller()), cancellation);
-            var rootLinkId = (string)db.ChangeTracker.Entries<Dictionary<string, object?>>()
-                .Single(entry => entry.Metadata.Name == WorkspacePositions.ContentModel
-                    && Equals(entry.Entity["PEID"], target.FolderId) && Equals(entry.Entity["CEID"], createdId)).Entity["LID"]!;
-            long ordinal = 0;
-            foreach (var child in children.OrderBy(child => child.Ordinal).ThenBy(child => child.LinkId, StringComparer.Ordinal))
-            {
-                var createdLink = RegisterCopiedReference(createdId, child, child.Model == WorkspacePositions.FolderModel ? ++ordinal : null, isScopeNeutral: true);
-                await referenceAudit.CopiedAsync(child.LinkId, source.Id, createdLink, createdId, new(child.Model, child.Id), cancellation);
-            }
-            await referenceAudit.FolderCopiedAsync(linkIds[0], source.Id, createdId, target.FolderId, rootLinkId, cancellation);
-            return new(true, false);
+                foreach (var child in children)
+                {
+                    var endpoint = new LinkObjectReference(child.Model, child.Id);
+                    if (!await reader.IsEndpointReadableAsync("workspace.content", endpoint, checkedToken)
+                        || !await FolderCopyPurposeAllowedAsync(endpoint, checkedToken))
+                        throw new LinkQueryException(403, "Workspace.FolderCopyUnavailable");
+                    if (child.Model == WorkspacePositions.FolderModel && (await WouldCycleAsync(source.Id, child.Id, checkedToken)
+                        || await WouldCycleAsync(target.FolderId, child.Id, checkedToken)
+                        || await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AnyAsync(row => EF.Property<string>(row, "RootFolderId") == child.Id, checkedToken)))
+                        throw new LinkQueryException(409, "Workspace.FolderCopyUnavailable");
+                }
+                // 普通创建拥有名称、Description、目标归属和候选create规则；嵌套执行共享当前事务及图锁。
+                var createdId = await CreateFolderCoreAsync(actor, targetPosition, new Dictionary<string, JsonElement> {
+                    ["ENAME"] = JsonSerializer.SerializeToElement(name), ["Description"] = JsonSerializer.SerializeToElement(sourceFields.Description) },
+                    copyParentAuthorization, new FolderCreationSource.Copy(), checkedToken);
+                var rootLinkId = (string)db.ChangeTracker.Entries<Dictionary<string, object?>>()
+                    .Single(entry => entry.Metadata.Name == WorkspacePositions.ContentModel
+                        && Equals(entry.Entity["PEID"], target.FolderId) && Equals(entry.Entity["CEID"], createdId)).Entity["LID"]!;
+                long ordinal = 0;
+                foreach (var child in children.OrderBy(child => child.Ordinal).ThenBy(child => child.LinkId, StringComparer.Ordinal))
+                {
+                    var createdLink = RegisterCopiedReference(createdId, child, child.Model == WorkspacePositions.FolderModel ? ++ordinal : null, isScopeNeutral: true);
+                    await referenceAudit.CopiedAsync(child.LinkId, source.Id, createdLink, createdId, new(child.Model, child.Id), checkedToken);
+                }
+                await referenceAudit.FolderCopiedAsync(linkIds[0], source.Id, createdId, target.FolderId, rootLinkId, checkedToken);
+                return new(true, false);
+                }, cancellation);
         }, token);
     }
 

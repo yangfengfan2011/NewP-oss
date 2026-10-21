@@ -25,7 +25,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         using var ordinary = actor.Client;
         var feature = Point(fixture, "workspace.folder.pasteFolderCopy");
         var declarations = new FeatureHttpTestRequests(fixture);
-        var binding = declarations.Declaration("workspace.folder.shallowCopy", feature);
+        var binding = declarations.Declaration("workspace.folder.pasteFolderCopy", feature);
         var borrowed = declarations.Declaration("workspace.folder.create", Point(fixture, "workspace.folder.create"));
         var name = "320创建后不可读浅副本";
         DataScopeDirectSubjectDto[] subjects = [
@@ -46,8 +46,14 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 "/api/workspace/content/folders/copy/prepare", input, wrong);
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
         }
-        using (var prepared = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Post,
-            "/api/workspace/content/folders/copy/prepare", input, binding)) Assert.Equal(HttpStatusCode.OK, prepared.StatusCode);
+        // 实际动作身份只送新按钮头；旧entry不能用旧声明补救本次请求。
+        using (var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/folders/copy/prepare") { Content = JsonContent.Create(input) })
+        {
+            request.Headers.Add("X-NewP-Feature", feature.Position);
+            request.Headers.Add("X-NewP-Button", binding.Id);
+            using var prepared = await ordinary.SendAsync(request);
+            Assert.Equal(HttpStatusCode.OK, prepared.StatusCode);
+        }
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolder")));
         using (var copied = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Post,
             "/api/workspace/content/folders/copy", new { input.mode, input.sourcePosition, input.linkIds, input.targetPosition, name, copyParentAuthorization = true }, binding))

@@ -25,6 +25,8 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceReorderHandler>();
         services.AddScoped<WorkspaceObjectCopyPreparationHandler>();
         services.AddScoped<WorkspaceObjectCopyHandler>();
+        services.AddScoped<WorkspaceFolderCopyPreparationHandler>();
+        services.AddScoped<WorkspaceFolderCopyHandler>();
         services.AddScoped<WorkspaceObjectCopyResultHandler>();
         services.AddScoped<WorkspaceRemoveReferencesHandler>();
         services.AddScoped<WorkspaceClipboardSelectionHandler>();
@@ -42,8 +44,6 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceAuthorizationReadHandler>();
         services.AddScoped<WorkspaceAuthorizationBatchSaveHandler>();
         services.AddScoped<WorkspaceAuthorizationBatchReadHandler>();
-        services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
-            WorkspaceFolderCopyExecutions.Caller(), "submit", "parent", "candidate"));
         services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
             WorkspaceFolderCopyExecutions.StructureCaller(), "submit", "parent", "candidate"));
         services.AddSingleton(new DataScopeObjectInitializationCreatedParentsBinding(ModuleId, "workspace.folder",

@@ -5,7 +5,7 @@ namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>完整访问服务在静态目录就绪后解析本次scoped约束，底层read plan从不回调这里。</summary>
 public sealed class DataScopeObjectAccess(DataScopeCatalog catalog, IDataScopeObjectDecisionProvider decisions,
-    IServiceProvider services, IDataScopeEvaluationScope? evaluation = null) : IDataScopeObjectAccess
+    IServiceProvider services, IDataScopeEvaluationScope? evaluation = null, DataScopeRules? rules = null) : IDataScopeObjectAccess
 {
     /// <inheritdoc/>
     public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default) =>
@@ -19,6 +19,7 @@ public sealed class DataScopeObjectAccess(DataScopeCatalog catalog, IDataScopeOb
     private async Task<bool> ReadableAsync(string resourceKey, string objectId, object? readContext, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
+        using var configuration = rules?.BeginOperation();
         var resource = catalog.Resolve(resourceKey);
         if (!await decisions.IsAllowedAsync(resourceKey, objectId, "read", token)) return false;
         if (resource.ReadConstraintKey is null) return readContext is null;

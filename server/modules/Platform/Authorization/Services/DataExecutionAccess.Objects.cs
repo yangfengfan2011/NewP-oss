@@ -36,6 +36,7 @@ public sealed partial class DataExecutionAccess
         IReadOnlyList<string> resources, IReadOnlyList<DataExecutionRequirement> requirements, DataExecutionBindingReference binding,
         string role, IReadOnlyList<DataExecutionTargetInput> targets, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        using var configuration = rules?.BeginOperation();
         var matches = requirements.Where(item => item.Stage == binding.Stage && item.Role == role
             && (item.Branch is null || item.Branch == binding.Branch)).ToArray();
         if (matches.Length != 1 || matches[0].Shape is not ("object" or "objects"))
@@ -56,6 +57,7 @@ public sealed partial class DataExecutionAccess
         // 惰性逐项消费保留read/动作/业务拒绝的原顺序；不预先裁决后续对象并改变首个错误。
         foreach (var target in targets)
         {
+            using var activation = configuration?.Enter();
             cancellationToken.ThrowIfCancellationRequested();
             DataExecutionResolvedTarget? resolved = target.ObjectId is null ? null : new(target.ResourceKey, target.ObjectId);
             var readAttempted = false;

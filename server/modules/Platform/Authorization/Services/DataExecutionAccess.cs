@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Authorization.Services;
 public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpContextAccessor http,
     IDataScopeObjectAccess reads, IDataScopeObjectDecisionProvider decisions, IDataScopeResourceCatalog? resources = null,
     IEnumerable<IDataExecutionTargetResolver>? resolvers = null, IDataScopeReadPlanProvider? queryReads = null, IDataScopeReadableIds? targetReads = null,
-    IButtonQueryReadScope? buttonQueries = null, IButtonExecutionAccess? buttons = null) : IDataExecutionAccess
+    IButtonQueryReadScope? buttonQueries = null, IButtonExecutionAccess? buttons = null, DataScopeRules? rules = null) : IDataExecutionAccess
 {
     private readonly IReadOnlyList<IDataExecutionTargetResolver> _resolvers = (resolvers ?? []).ToArray();
     /// <inheritdoc/>

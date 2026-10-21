@@ -3,6 +3,8 @@ using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Authorization.Persistence.Ef;
 using ICP.Platform.Modules.Authorization.Repositories;
 using ICP.Platform.Modules.Authorization.Services;
+using ICP.Platform.Modules.Authorization.Caching;
+using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 namespace ICP.Platform.Modules.Authorization;
@@ -31,6 +33,11 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IDataScopeIdentityProvider, AllAuthenticatedDataScopeIdentities>();
         services.AddScoped<IDataScopeIdentityProvider, AuthorizationDataScopeIdentities>();
         services.AddScoped<DataScopeCatalog>();
+        services.AddSingleton<DataScopeRuleCache>();
+        services.AddSingleton<IPlatformCacheStatus>(provider => provider.GetRequiredService<DataScopeRuleCache>());
+        foreach (var model in new[] { "DataScopeRuleNode", "DataScopeRuleSubject" })
+            services.AddScoped(provider => new PlatformCommitRegistration(model, provider.GetRequiredService<DataScopeRuleCache>()));
+        services.AddHostedService<DataScopeRuleCacheInitializer>();
         services.AddScoped<DataScopeRules>();
         services.AddScoped<DataScopeObjectGrants>();
         services.AddScoped<IDataScopeObjectInitializer, DataScopeObjectInitializer>();

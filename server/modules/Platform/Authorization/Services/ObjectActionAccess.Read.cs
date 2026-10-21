@@ -12,6 +12,7 @@ public sealed partial class ObjectActionAccess
     public async Task<TResult> WithReadAsync<TRead, TResult>(Func<CancellationToken, Task<ObjectActionRead<TRead>>> read,
         Func<TRead, IObjectActionReadScope, CancellationToken, Task<TResult>> consume, CancellationToken cancellationToken = default)
     {
+        using var configuration = rules?.BeginOperation();
         var request = _http.HttpContext ?? throw new ActionDataAccessException(401, "ButtonExecution.SubjectRequired");
         var subject = ReadSubject(request);
         var previous = _readScope.Value;

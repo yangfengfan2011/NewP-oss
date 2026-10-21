@@ -9,5 +9,6 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\modules\Platform\Authorization\Contracts\Authorization.Contracts.csproj" />
+    <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
   </ItemGroup>
 </Project>

@@ -5,7 +5,8 @@ namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>业务主动检查与按钮自动检查共用完整读取约束、动作目录及原裁决引擎。</summary>
 public sealed partial class ObjectActionAccess(IDataScopeResourceCatalog resources, CanonicalModulePlan plan,
-    IDataScopeObjectAccess reads, IDataScopeObjectDecisionProvider decisions, Microsoft.AspNetCore.Http.IHttpContextAccessor http) : IObjectActionAccess
+    IDataScopeObjectAccess reads, IDataScopeObjectDecisionProvider decisions, Microsoft.AspNetCore.Http.IHttpContextAccessor http,
+    DataScopeRules? rules = null) : IObjectActionAccess
 {
     private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor _http = http;
 
@@ -21,6 +22,7 @@ public sealed partial class ObjectActionAccess(IDataScopeResourceCatalog resourc
     public async Task<DataExecutionDecision> CheckCandidateAsync(string objectName, IReadOnlyDictionary<string, object?> candidate,
         IReadOnlyList<string> actions, CancellationToken cancellationToken = default)
     {
+        using var configuration = rules?.BeginOperation();
         var resource = resources.Resources.SingleOrDefault(item => item.ModelName == objectName)
             ?? throw new ActionDataAccessException(400, "ButtonExecution.ObjectUnknown");
         if (!candidate.TryGetValue(resource.IdField, out var id) || id is not string objectId || !objectId.StartsWith(objectName + "_", StringComparison.Ordinal)
@@ -38,6 +40,7 @@ public sealed partial class ObjectActionAccess(IDataScopeResourceCatalog resourc
     private async Task<DataExecutionDecision> CheckAsyncCore(string objectName, string objectId, IReadOnlyList<string> actions,
         object? readContext, CancellationToken cancellationToken)
     {
+        using var configuration = rules?.BeginOperation();
         var resource = ObjectResource(objectName);
         ValidateObjectActions(resource, objectName, objectId, actions);
         foreach (var key in actions)

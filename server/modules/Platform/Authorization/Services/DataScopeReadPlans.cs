@@ -19,6 +19,7 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         CancellationToken cancellationToken = default)
     {
         using var operation = observation.BeginOperation();
+        using var configuration = rules.BeginOperation();
         ArgumentNullException.ThrowIfNull(objectIds);
         var ids = objectIds.Where(static id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToArray();
         if (ids.Length == 0) return new HashSet<string>(StringComparer.Ordinal);
@@ -61,6 +62,7 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         CancellationToken cancellationToken, DataScopeDecisionTrace? trace = null)
     {
         using var operation = observation.BeginOperation();
+        using var configuration = rules.BeginOperation();
         var observedAt = observation.ObservedAt.UtcDateTime;
         catalog.Resolve(resourceKey);
         var action = catalog.Actions.Single(action => action.Key == "read");
@@ -69,7 +71,6 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         if (await administrators.InspectAsync(id, cancellationToken) == LocalAdministratorAssignmentState.Assigned)
         { trace?.SetReason("administrator"); return new(null); }
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
-        foreach (var rule in applicable) catalog.Validate(rule);
         trace?.SetRules(applicable);
         var relevant = RelevantNodes(resourceKey, applicable, "read", true);
         var readable = applicable.SelectMany(ActiveNodes).Where(rule => relevant.Contains(rule.Id)).ToArray();
@@ -109,6 +110,7 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         CancellationToken cancellationToken = default)
     {
         using var operation = observation.BeginOperation();
+        using var configuration = rules.BeginOperation();
         return await DecideActionAsync(resourceKey, objectId, actionKey, null, cancellationToken);
     }
 
@@ -117,6 +119,7 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         string actionKey, CancellationToken cancellationToken = default)
     {
         using var operation = observation.BeginOperation();
+        using var configuration = rules.BeginOperation();
         var resource = catalog.Resolve(resourceKey);
         var objectId = candidate.TryGetValue(resource.IdField, out var value) ? value as string : null;
         if (string.IsNullOrWhiteSpace(objectId)) throw new InvalidOperationException("DATA_SCOPE_CANDIDATE_ID_REQUIRED");
@@ -142,7 +145,6 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         if (await administrators.InspectAsync(subject, cancellationToken) == LocalAdministratorAssignmentState.Assigned)
         { trace?.SetReason("administrator"); return true; }
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
-        foreach (var rule in applicable) catalog.Validate(rule);
         trace?.SetRules(applicable);
         // 对象明确意见覆盖规则；校验配置后先只解析当前对象的主体，避免无关规则事实阻断覆盖。
         var objectTypes = await objects.SubjectTypesAsync(resourceKey, actionKey, objectId, observation.ObservedAt.UtcDateTime, cancellationToken);

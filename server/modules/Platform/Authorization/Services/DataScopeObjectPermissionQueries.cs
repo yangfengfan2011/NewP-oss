@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Authorization.Services;
 /// <summary>仅从已经可浏览的真实对象进入查询，被分析用户显式传给同一裁决引擎。</summary>
 public sealed class DataScopeObjectPermissionQueries(IDataExecutionAccess executions, DataScopeIdentities identities,
     IDataScopeReadPlanProvider reads, IHttpContextAccessor context, DataScopeCatalog catalog, EfPlatformDbContext db,
-    IDataScopeEvaluationScope? evaluation = null) : IDataScopeObjectPermissionQueries
+    IDataScopeEvaluationScope? evaluation = null, DataScopeRules? rules = null) : IDataScopeObjectPermissionQueries
 {
     /// <inheritdoc/>
     public Task<DataScopePermissionCatalog?> CatalogAsync(string resourceKey, string objectId,
@@ -21,6 +21,7 @@ public sealed class DataScopeObjectPermissionQueries(IDataExecutionAccess execut
         IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
+        using var configuration = rules?.BeginOperation();
         if (!await IsReadableAsync(resourceKey, objectId, bindings, token)) return null;
         return new(catalog.ActionsFor(resourceKey).Select(action => new DataScopePermissionAction(action.Key, action.Title, action.Enabled, action.RequiresRead)).ToArray(), catalog.DirectSubjects.Types(resourceKey));
     }
@@ -35,6 +36,7 @@ public sealed class DataScopeObjectPermissionQueries(IDataExecutionAccess execut
         int page, IReadOnlyList<string> currentIds, IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
+        using var configuration = rules?.BeginOperation();
         if (!await IsReadableAsync(resourceKey, objectId, bindings, token)) return new(DataScopeAuthorizationStatus.NotFound);
         try { return new(DataScopeAuthorizationStatus.Succeeded, await identities.SearchAsync("user", query, page, currentIds, token)); }
         catch (RolePermissionValidationException error)
@@ -51,6 +53,7 @@ public sealed class DataScopeObjectPermissionQueries(IDataExecutionAccess execut
         IReadOnlyList<DataExecutionBindingReference> bindings, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
+        using var configuration = rules?.BeginOperation();
         // 整个解释是同一只读单元；只保留自有连接，不扩大事务或缓存授权事实。
         var openedHere = db.Database.GetDbConnection().State != System.Data.ConnectionState.Open;
         try

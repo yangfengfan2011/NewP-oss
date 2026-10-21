@@ -9,6 +9,7 @@ public sealed partial class DataScopeReadPlans
         string objectId, string accountId, CancellationToken token)
     {
         using var operation = observation.BeginOperation();
+        using var configuration = rules.BeginOperation();
         var results = new List<DataScopeActionExplanationDto>();
         // 新建必须用新候选，不能将既有记录的字段伪装为将来创建时的事实。
         foreach (var action in catalog.ActionsFor(resourceKey).Where(action => action.Key != "create"))

@@ -1400,6 +1400,16 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         await _app.DisposeAsync();
         await StartAsync(actionStates: actionStates);
     }
+
+    // 仅离线维护取证使用：先停止所有后台服务，再写精确测试行，释放旧Host后从数据库重新启动。
+    internal async Task RestartAfterMaintenanceAsync(Func<IServiceProvider, Task> maintenance)
+    {
+        var previous = _app;
+        await previous.StopAsync();
+        try { await maintenance(previous.Services); }
+        finally { await previous.DisposeAsync(); _app = null!; }
+        await StartAsync();
+    }
     private async Task StartAsync(bool readEnabled = true,
         IReadOnlyDictionary<string, bool>? actionStates = null)
     {

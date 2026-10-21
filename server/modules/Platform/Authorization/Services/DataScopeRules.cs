@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Modules.Authorization.Caching;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Audit.Contracts;
 using ICP.Platform.Persistence.Abstractions;
@@ -7,11 +8,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
-/// <summary>规则根拥有完整配置的保存和实际差异审计；读取不跨请求缓存。</summary>
+/// <summary>规则根拥有数据库管理和实际差异审计；判权读取已发布的完整缓存。</summary>
 public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionExecutor transactions,
-    DataScopeCatalog catalog, IBusinessAuditRecorder audit, DataScopeIdentities identities)
+    DataScopeCatalog catalog, IBusinessAuditRecorder audit, DataScopeIdentities identities, DataScopeRuleCache cache)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private readonly AsyncLocal<RuleReadFrame?> _reading = new();
     private DbSet<Dictionary<string, object?>> Nodes => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeRuleNode"));
     private DbSet<Dictionary<string, object?>> Subjects => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeRuleSubject"));
 
@@ -28,13 +30,48 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
         return ids.Select(id => trees.Single(tree => tree.Id == id)).ToArray();
     }
 
-    /// <summary>只取当前目标资源的规则；配置读取失败不会降级为未配置。</summary>
+    /// <summary>在当前逻辑判权内延迟取得同一完整快照；配置故障不会回源或降级为未配置。</summary>
     public async Task<IReadOnlyList<DataScopeRuleDto>> ForResourceAsync(string resourceKey, CancellationToken token)
     {
-        var rootIds = Nodes.AsNoTracking().Where(row => EF.Property<string>(row, "ResourceKey") == resourceKey)
-            .Select(row => EF.Property<string>(row, "RootId")).Distinct();
-        return await MaterializeAsync(await Nodes.AsNoTracking()
-            .Where(row => rootIds.Contains(EF.Property<string>(row, "RootId"))).ToListAsync(token), token);
+        var frame = _reading.Value;
+        if (frame is null) return (await cache.ReadAsync(token)).ForResource(resourceKey);
+        Task<DataScopeRuleSnapshot> snapshot;
+        lock (frame) snapshot = frame.Snapshot ??= cache.ReadAsync(token).AsTask();
+        return (await snapshot.WaitAsync(token)).ForResource(resourceKey);
+    }
+
+    // 只覆盖一次逻辑判权；HTTP 或业务写入完成后的独立新判权会开启新租约。
+    internal RuleReadOperation BeginOperation() => new(this, _reading.Value ?? new());
+
+    internal sealed class RuleReadFrame
+    {
+        internal Task<DataScopeRuleSnapshot>? Snapshot;
+    }
+
+    internal sealed class RuleReadOperation : IDisposable
+    {
+        private readonly DataScopeRules _owner;
+        private readonly RuleReadFrame _frame;
+        private readonly RuleReadFrame? _previous;
+        private bool _disposed;
+
+        // 同步激活上下文，后续异步调用只共享配置引用，不共享允许结果。
+        internal RuleReadOperation(DataScopeRules owner, RuleReadFrame frame)
+        {
+            _owner = owner; _frame = frame; _previous = owner._reading.Value;
+            owner._reading.Value = frame;
+        }
+
+        // 异步枚举每次推进都显式激活同一帧，不能依赖 yield 将 AsyncLocal 流回调用者。
+        internal RuleReadOperation Enter() => new(_owner, _frame);
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _owner._reading.Value = _previous;
+        }
     }
 
     /// <summary>校验后以根为目标取得数据库事务锁，实际前驱、配置和审计一起提交。</summary>
@@ -53,7 +90,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
                     throw new RolePermissionValidationException("所选授权主体不存在。", "DATA_SCOPE_SUBJECT_NOT_FOUND", field: "subjects");
             }
         }
-        await transactions.ExecuteAsync(async token =>
+        await transactions.ExecuteAsync(["DataScopeRuleNode", "DataScopeRuleSubject"], async token =>
         {
             // 所有根同属一层；跨根保存先串行核对名称，避免两个并发新建同时通过检查。
             await db.Database.ExecuteSqlInterpolatedAsync($"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource='Authorization.DataScopeRuleNames', @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope rule name lock failed.', 1;", token);
@@ -122,7 +159,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
     /// <summary>在根目标锁内删除完整子树及主体项，并以实际旧配置登记撤销审计。</summary>
     public async Task DeleteAsync(string rootId, CancellationToken cancellationToken)
     {
-        await transactions.ExecuteAsync(async token =>
+        await transactions.ExecuteAsync(["DataScopeRuleNode", "DataScopeRuleSubject"], async token =>
         {
             var target = "Authorization.DataScopeRule:" + rootId;
             await db.Database.ExecuteSqlInterpolatedAsync($"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource={target}, @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope rule lock failed.', 1;", token);
@@ -165,26 +202,6 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
         if (nodes.Count == 0) return [];
         var ids = nodes.Select(row => (string)row["EID"]!).ToArray();
         var subjects = await Subjects.AsNoTracking().Where(row => ids.Contains(EF.Property<string>(row, "NodeId"))).ToListAsync(token);
-        var grouped = subjects.ToLookup(row => (string)row["NodeId"]!);
-        var flat = nodes.Select(row => new DataScopeRuleDto((string)row["EID"]!, (string)row["RootId"]!, (string?)row["ParentId"],
-            (string)row["Name"]!, (bool)row["Enabled"]!, (string)row["ResourceKey"]!,
-            JsonSerializer.Deserialize<DataScopeConditionDto>((string)row["ConditionJson"]!, Json) ?? throw new InvalidOperationException("DATA_SCOPE_CONDITION_INVALID"),
-            grouped[(string)row["EID"]!].Select(subject => new DataScopeSubjectDto((string)subject["EID"]!, (string)subject["SubjectType"]!,
-                (string?)subject["SubjectId"], (long)subject["Priority"]!,
-                JsonSerializer.Deserialize<Dictionary<string, string>>((string)subject["ActionsJson"]!, Json) ?? throw new InvalidOperationException("DATA_SCOPE_SUBJECT_INVALID"),
-                subject["MatchOptionsJson"] is string options ? JsonSerializer.Deserialize<ICP.Platform.Authorization.Contracts.DataScopeMatchOptions>(options, Json) : null)).ToArray(), [])).ToArray();
-        var byId = flat.ToDictionary(node => node.Id, StringComparer.Ordinal);
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        DataScopeRuleDto Tree(DataScopeRuleDto node)
-        {
-            if (!visited.Add(node.Id)) throw new InvalidOperationException("DATA_SCOPE_TREE_INVALID");
-            var children = flat.Where(child => child.ParentId == node.Id && child.RootId == node.RootId)
-                .OrderBy(child => child.Id, StringComparer.Ordinal).Select(Tree).ToArray();
-            return node with { Children = children };
-        }
-        var roots = flat.Where(node => node.ParentId is null && node.RootId == node.Id).Select(Tree).ToArray();
-        if (visited.Count != flat.Length || roots.Any(root => !byId.ContainsKey(root.Id)))
-            throw new InvalidOperationException("DATA_SCOPE_TREE_INVALID");
-        return roots;
+        return DataScopeRuleMaterializer.Build(nodes, subjects);
     }
 }

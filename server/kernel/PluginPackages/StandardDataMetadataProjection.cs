@@ -75,7 +75,9 @@ public static class StandardDataMetadataProjection
                 ?? throw new JsonException($"Standard data resource '{moduleId}.{resourceKey}' has no projection.");
             var pageRoute = RequiredString(resourceProjection, "pageRoute", moduleId);
             var declaredDetailViewKey = OptionalString(resource, "detailViewKey", moduleId);
-            var projectedDetailViewKey = OptionalString(resourceProjection, "detailViewKey", moduleId);
+            // 公开投影DTO的可选string?经正式pack会写null；作者输入仍按原非空字符串合同核验。
+            var projectedDetailViewKey = resourceProjection["detailViewKey"] is null
+                ? null : OptionalString(resourceProjection, "detailViewKey", moduleId);
             if (!string.Equals(declaredDetailViewKey, projectedDetailViewKey, StringComparison.Ordinal))
             {
                 throw new JsonException(

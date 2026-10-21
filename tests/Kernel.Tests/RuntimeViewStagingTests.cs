@@ -188,11 +188,21 @@ public sealed class RuntimeViewStagingTests : IDisposable
         Assert.Empty(Directory.GetDirectories(_installRoot, ".materialize-commit-*"));
     }
 
-    [Fact]
-    public void Stage_StandardDataModuleWithoutDetailDeclaration_DoesNotPublishDetailCapability()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Stage_StandardDataModuleWithoutDetailDeclaration_DoesNotPublishDetailCapability(bool usePublicProjectionSerializer)
     {
         var packageRoot = Path.Combine(_installRoot, "packages", "Partner.AssetCatalog", "1.0.0");
         WriteStandardDataPackage(packageRoot, "undeclared");
+        if (usePublicProjectionSerializer)
+        {
+            // 与公开pack相同的DTO和默认Web序列化，显式null不能被手工省略fixture掩盖。
+            var projection = new ICP.Platform.Plugin.Contracts.StandardPluginProjection("partner-asset-catalog",
+                [new("Asset", "/api/standard/partner-asset-catalog/assets", "/assets", "np_partner_asset_catalog", "assets", [])]);
+            File.WriteAllText(Path.Combine(packageRoot, "projections", "standard-data.json"),
+                JsonSerializer.Serialize(projection, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        }
         var materializer = new RuntimeViewMaterializer(new InstalledPluginStateStore(_installRoot));
 
         using (var stage = materializer.Stage(_installRoot, CreateStandardDataPlan(packageRoot)))
@@ -215,6 +225,34 @@ public sealed class RuntimeViewStagingTests : IDisposable
         Assert.DoesNotContain(
             list.GetProperty("rowActions").EnumerateArray(),
             static action => action.GetProperty("key").GetString() == "view");
+    }
+
+    [Theory]
+    [InlineData("\"\"")]
+    [InlineData("\"   \"")]
+    [InlineData("42")]
+    [InlineData("false")]
+    public void Stage_InvalidProjectedDetailKey_RejectsWholeCandidate(string value)
+    {
+        var packageRoot = Path.Combine(_installRoot, "packages", "Partner.AssetCatalog", "1.0.0");
+        WriteStandardDataPackage(packageRoot, "undeclared");
+        var path = Path.Combine(packageRoot, "projections", "standard-data.json");
+        var projection = JsonNode.Parse(File.ReadAllText(path))!;
+        projection["resources"]![0]!["detailViewKey"] = JsonNode.Parse(value);
+        File.WriteAllText(path, projection.ToJsonString());
+        Assert.Throws<JsonException>(() => CreateStandardDataPlan(packageRoot));
+    }
+
+    [Fact]
+    public void Stage_ExplicitNullAuthoringDetailKey_StillRejectsWholeCandidate()
+    {
+        var packageRoot = Path.Combine(_installRoot, "packages", "Partner.AssetCatalog", "1.0.0");
+        WriteStandardDataPackage(packageRoot, "undeclared");
+        var path = Path.Combine(packageRoot, "authoring", "newp.plugin.json");
+        var blueprint = JsonNode.Parse(File.ReadAllText(path))!;
+        blueprint["standardData"]!["resources"]![0]!["detailViewKey"] = null;
+        File.WriteAllText(path, blueprint.ToJsonString());
+        Assert.Throws<JsonException>(() => CreateStandardDataPlan(packageRoot));
     }
 
     [Theory]

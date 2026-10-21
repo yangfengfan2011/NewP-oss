@@ -9,26 +9,26 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class DocumentFileExecutionContractTests
 {
     [Fact]
-    public void FormalDocumentDownload_UsesOwnerFloorAndExistingFeatureAction()
+    public void FormalDocumentDownload_UsesOwnButtonAndPreservesIndependentRead()
     {
         var result = new CanonicalModulePlanCompiler().Compile("document-files", Candidates());
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
         var plan = result.Plan!;
-        var download = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.files.download");
+        var owner = Assert.Single(plan.Modules, item => item.ModuleId == "Document");
+        var download = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "document.document.download");
         Assert.Equal("Document", download.ModuleId);
-        Assert.Equal("Document", download.ProviderModuleId);
-        Assert.Equal("document.files.download", download.Provider);
+        Assert.Equal("Document", download.Object);
+        Assert.Equal(new[] { "document.document" }, download.Resources);
+        Assert.Equal(new[] { "download" }, download.Actions);
+        Assert.Empty(download.Execution); Assert.Null(download.Provider); Assert.Null(download.Requirements);
         Assert.Equal(("document.document.detail", "featureActions", "download"), (download.ViewKey, download.Surface, download.ActionKey));
         var feature = Assert.Single(plan.FeatureCatalog, point => point.BehaviorKey == "document.document.download");
         Assert.Equal(new[] { feature.Position }, download.FeaturePositions);
-        var target = Assert.Single(download.Requirements!);
-        Assert.Equal(("target", "read", "object"), (target.Role, target.Stage, target.Shape));
-        Assert.Equal(new[] { "document.document" }, target.Resources);
-        Assert.Equal(new[] { "read", "download" }, Assert.Single(target.AnyOf));
-        Assert.Equal("document.files.currentRead", target.ReadResolverKey);
-        var feedback = DataExecutionProviders.Resolve(plan.Modules.SelectMany(module => module.DataExecutions).Where(item => item.Key == "document.files.download.feedback").ToArray(),
-            plan.Modules.SelectMany(module => module.DataExecutionProviders).ToArray()).Single();
-        Assert.Equal(JsonSerializer.Serialize(download.Requirements), JsonSerializer.Serialize(feedback.Requirements));
+        var read = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.document.read" && item.ViewKey == "document.document.detail");
+        Assert.Equal("standardCrud.read", read.Provider);
+        Assert.DoesNotContain(feature.Position, read.FeaturePositions);
+        Assert.DoesNotContain(owner.DataExecutions, item => item.Key is "document.files.download" or "document.files.download.feedback");
+        Assert.DoesNotContain(owner.DataExecutionProviders, item => item.Key == "document.files.download");
         var manifest = new MetadataRuntimeManifestBuilder().Build(AppContext.BaseDirectory, plan.Modules.Select(module => module.ModuleId).ToArray(),
             plan.Modules.Select(module => module.ModuleId).ToArray(), plan.FeatureCatalog, plan.ActionDataAccessCatalog);
         using var json = JsonDocument.Parse(manifest);
@@ -73,23 +73,26 @@ public sealed class DocumentFileExecutionContractTests
         Assert.Equal("document.files.currentRead", target.ReadResolverKey);
         Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.Execution is "document.document.internal.create" or "document.document.update" or "document.document.delete" or "document.files.release");
         var descriptor = ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create();
+        Assert.False(descriptor.DataExecutions.ContainsKey("create"));
+        Assert.Equal("document.document.list", descriptor.DataExecutions["list"]);
+        Assert.Equal("document.document.read", descriptor.DataExecutions["read"]);
     }
 
     [Theory]
-    [InlineData("requirements")]
-    [InlineData("provider")]
-    public void DownloadConsumer_CannotReplaceItsOwnerRequirements(string problem)
+    [InlineData("unknown-action")]
+    [InlineData("retired-execution")]
+    public void DownloadButton_RejectsUnknownActionsAndMixedRetiredExecution(string problem)
     {
         var candidates = Candidates();
         var index = Array.FindIndex(candidates, module => module.ModuleId == "Document");
         var owner = candidates[index];
         candidates[index] = owner with
         {
-            DataExecutionProviders = problem == "provider" ? [] : owner.DataExecutionProviders,
-            DataExecutions = owner.DataExecutions.Select(contract => contract.Key != "document.files.download" ? contract : problem switch
+            Features = owner.Features.Select(feature => feature with
             {
-                "requirements" => contract with { Requirements = [new("target", "read", "object", ["document.document"], [["read"]])] },
-                    _ => contract
+                DataAccess = feature.DataAccess.Select(declaration => declaration.BusinessBinding != "document.document.download" ? declaration
+                    : problem == "unknown-action" ? declaration with { Actions = ["unregistered-action"] }
+                    : declaration with { Execution = "document.files.download" }).ToArray()
             }).ToArray()
         };
         Assert.False(new CanonicalModulePlanCompiler().Compile("document-files-invalid", candidates).IsSuccess);

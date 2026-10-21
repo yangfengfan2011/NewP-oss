@@ -22,7 +22,7 @@
       "moduleId": "Document",
       "key": "document.documents",
       "kind": "navigation",
-      "title": "图文档",
+      "title": "\u56FE\u6587\u6863",
       "parentPosition": "Workspace/navigation:workspace",
       "behaviorKey": "document.document.read",
       "entryDependencies": [
@@ -45,7 +45,7 @@
       "moduleId": "Document",
       "key": "document.history",
       "kind": "navigation",
-      "title": "对象履历",
+      "title": "\u5BF9\u8C61\u5C65\u5386",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.history",
       "entryDependencies": [
@@ -69,7 +69,7 @@
       "moduleId": "Document",
       "key": "download",
       "kind": "action",
-      "title": "下载",
+      "title": "\u4E0B\u8F7D",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.download",
       "entryDependencies": [
@@ -91,7 +91,7 @@
       "moduleId": "Document",
       "key": "authorize",
       "kind": "action",
-      "title": "对象授权",
+      "title": "\u5BF9\u8C61\u6388\u6743",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.authorize",
       "entryDependencies": [
@@ -113,7 +113,7 @@
       "moduleId": "Document",
       "key": "initializeOwnership",
       "kind": "action",
-      "title": "补齐归属",
+      "title": "\u8865\u9F50\u5F52\u5C5E",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.initializeOwnership",
       "entryDependencies": [
@@ -135,7 +135,7 @@
       "moduleId": "Document",
       "key": "create",
       "kind": "action",
-      "title": "新建图文档",
+      "title": "\u65B0\u5EFA\u56FE\u6587\u6863",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.create",
       "entryDependencies": [
@@ -159,7 +159,7 @@
       "moduleId": "Document",
       "key": "initializeOwnershipPending",
       "kind": "action",
-      "title": "待补齐归属",
+      "title": "\u5F85\u8865\u9F50\u5F52\u5C5E",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.initializeOwnership",
       "entryDependencies": [
@@ -183,7 +183,7 @@
       "moduleId": "Document",
       "key": "authorize",
       "kind": "action",
-      "title": "对象授权",
+      "title": "\u5BF9\u8C61\u6388\u6743",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.authorize",
       "entryDependencies": [
@@ -207,7 +207,7 @@
       "moduleId": "Document",
       "key": "initializeOwnership",
       "kind": "action",
-      "title": "补齐归属",
+      "title": "\u8865\u9F50\u5F52\u5C5E",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.initializeOwnership",
       "entryDependencies": [
@@ -231,7 +231,7 @@
       "moduleId": "Document",
       "key": "transfer",
       "kind": "action",
-      "title": "转交",
+      "title": "\u8F6C\u4EA4",
       "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
       "behaviorKey": "document.document.transfer",
       "entryDependencies": [
@@ -258,38 +258,18 @@
       "viewKey": "document.document.detail",
       "surface": "featureActions",
       "actionKey": "download",
-      "execution": "document.files.download",
+      "execution": "",
       "resources": [
         "document.document"
       ],
       "actions": [
-        "read",
         "download"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:detail.custom/action:download"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "download"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "document.files.currentRead"
-        }
-      ],
-      "provider": "document.files.download",
-      "providerModuleId": "Document"
+      "object": "Document",
+      "businessBinding": "document.document.download"
     },
     {
       "id": "Document/view:document.document.detail/read",
@@ -407,7 +387,7 @@
       "viewKey": "document.document.list",
       "surface": "pageActions",
       "actionKey": "create",
-      "execution": "document.document.create",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -417,24 +397,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:create"
       ],
-      "requirements": [
-        {
-          "role": "candidate",
-          "stage": "submit",
-          "shape": "candidate",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "create"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "standardCrud.create"
+      "object": "Document",
+      "businessBinding": "document.document.create"
     },
     {
       "id": "Document/view:document.document.list/pageActions/action:initializeOwnershipPending",

@@ -18,6 +18,62 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class DocumentFileExecutionScopeTests
 {
+    [Fact]
+    public void DownloadOwnerContext_RequiresTheActualButtonBeforeItCanBeMinted()
+    {
+        var (_, _, scope, _, _) = Create();
+        using var phase = scope.Begin("Document_one", DocumentFileReadPhase.Open);
+        Assert.Throws<ActionDataAccessException>(() => scope.DownloadContext("Document_one"));
+    }
+
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("owner")]
+    [InlineData("http")]
+    [InlineData("actor")]
+    [InlineData("feature")]
+    [InlineData("button")]
+    [InlineData("legacy")]
+    [InlineData("endpoint")]
+    [InlineData("ended")]
+    [InlineData("nested")]
+    public async Task DownloadOwnerContext_RejectsCrossedOriginAndEndedOpenBeforeReadingAssociations(string problem)
+    {
+        var (_, http, scope, plan, _) = Create();
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "document.document.download");
+        http.HttpContext!.Request.Headers["X-NewP-Button"] = declaration.Id;
+        http.HttpContext.Request.Headers["X-NewP-Feature"] = Assert.Single(declaration.FeaturePositions);
+        http.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Document"),
+            new RequireFeatureAttribute("document.document.download"), new ButtonBusinessHandlerAttribute(typeof(DocumentFiles))), "download"));
+        using var phase = scope.Begin("Document_one", DocumentFileReadPhase.Open);
+        var context = scope.DownloadContext("Document_one");
+        var consuming = problem == "owner" ? new DocumentFileReadScope(http, null!) : scope;
+        if (problem == "http") http.HttpContext = Context();
+        if (problem == "actor") http.HttpContext!.User = new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "another-actor")], "test"));
+        if (problem == "feature") http.HttpContext!.Request.Headers["X-NewP-Feature"] = "wrong-feature";
+        if (problem == "button") http.HttpContext!.Request.Headers["X-NewP-Button"] = "another-button";
+        if (problem == "legacy") http.HttpContext!.Request.Headers["X-NewP-Data-Declaration"] = declaration.Id;
+        if (problem == "endpoint") http.HttpContext!.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Workspace")), "wrong-owner"));
+        if (problem == "ended") phase.Dispose();
+        using var nested = problem == "nested" ? scope.Begin("Document_two", DocumentFileReadPhase.Open) : null;
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, consuming, null!);
+        var operation = () => policy.VerifyBatchAsync([], FileOwnerOperation.Download, context, default);
+        if (problem == "valid") await operation();
+        else if (problem == "endpoint") await Assert.ThrowsAsync<ActionDataAccessException>(operation);
+        else
+        {
+            var failure = await Assert.ThrowsAsync<FileLifecycleException>(operation);
+            Assert.Equal("Document.FileReadContextInvalid", failure.Code);
+        }
+        if (problem == "nested")
+        {
+            nested!.Dispose();
+            Assert.Equal("Document_one", scope.DownloadObjectId(context));
+        }
+        phase.Dispose();
+        Assert.Null(scope.DownloadObjectId(context));
+    }
+
     [Theory]
     [InlineData("valid")]
     [InlineData("duplicate-same-behavior")]
@@ -27,30 +83,29 @@ public sealed class DocumentFileExecutionScopeTests
     [InlineData("execution")]
     [InlineData("resource")]
     [InlineData("owner")]
-    [InlineData("resource-owner")]
     public async Task OwnEndpoint_UsesItsRealStaticFeatureAndRejectsCrossedSources(string problem)
     {
-        var (access, http, scope, plan, reads) = Create(problem == "resource-owner");
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.files.download");
+        var (_, http, _, plan, reads) = Create();
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "document.document.download");
         var metadata = new List<object> { new EndpointModuleAttribute(problem == "owner" ? "Workspace" : "Document"),
-            new RequireFeatureAttribute(problem == "behavior" ? "document.document.read" : "document.document.download") };
+            new RequireFeatureAttribute(problem == "behavior" ? "document.document.read" : "document.document.download"),
+            new ButtonBusinessHandlerAttribute(typeof(DocumentFiles)) };
         if (problem == "duplicate-same-behavior") metadata.Add(new RequireFeatureAttribute("document.document.download"));
         if (problem == "two-behaviors") metadata.Add(new RequireFeatureAttribute("document.document.read"));
         http.HttpContext!.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(metadata), "owned-document-download"));
-        http.HttpContext.Request.Headers["X-NewP-Data-Declaration"] = problem == "execution"
-            ? Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.document.read").Id : declaration.Id;
+        http.HttpContext.Request.Headers["X-NewP-Button"] = problem == "execution"
+            ? Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.document.read" && item.ViewKey == "document.document.detail").Id : declaration.Id;
         http.HttpContext.Request.Headers["X-NewP-Feature"] = problem == "feature" ? "wrong-feature" : Assert.Single(declaration.FeaturePositions);
-        using var phase = scope.Begin("document-one", DocumentFileReadPhase.Open);
-        var target = problem == "resource" ? scope.Target("document-one") with { ResourceKey = "example.record" } : scope.Target("document-one");
-        var action = async () =>
-        {
-            var result = new List<DataExecutionTargetDecision>();
-            await foreach (var decision in access.EvaluateObjectsAsync(new("document.files.download", "document.files.download", "read"), "target", [target])) result.Add(decision);
-            return Assert.Single(result).Decision;
-        };
-        if (problem is "valid" or "duplicate-same-behavior") Assert.Equal(DataExecutionDecision.Allowed, await action());
+        var checks = new ButtonChecks();
+        var access = new ButtonExecutionAccess(plan, http, new ResourceCatalog(false), checks);
+        var target = new ButtonExecutionTarget(problem == "resource" ? "example.record" : "document.document", "Document", "Document_one",
+            new Dictionary<string, object?> { ["EID"] = "Document_one" });
+        var action = async () => await access.ExecuteAsync(access.BindHandler(typeof(DocumentFiles)), target, _ => Task.FromResult(true));
+        if (problem == "valid") Assert.True(await action());
         else await Assert.ThrowsAsync<ActionDataAccessException>(action);
         Assert.Equal(0, reads.Calls);
+        if (problem == "valid") Assert.Equal(new[] { "Document:download" }, checks.Calls);
+        else Assert.Empty(checks.Calls);
     }
 
     [Theory]
@@ -64,12 +119,12 @@ public sealed class DocumentFileExecutionScopeTests
     [InlineData("other-phase")]
     [InlineData("http")]
     [InlineData("actor")]
-    public async Task InternalFeedback_AcceptsOnlyItsFixedCallerAndCurrentReadFacts(string problem)
+    public async Task InternalCopyMetadata_AcceptsOnlyItsFixedCallerAndCurrentReadFacts(string problem)
     {
         var (access, http, scope, _, reads) = Create();
-        using var phase = scope.Begin("document-one", DocumentFileReadPhase.Metadata, Identity());
+        using var phase = scope.Begin("document-one", DocumentFileReadPhase.PolicyCopyMetadata, Identity());
         var target = scope.Target("document-one");
-        var binding = new DataExecutionInternalBinding("document.files.download.feedback", "document.files.download", typeof(DocumentFiles), nameof(DocumentFiles.ReadAsync));
+        var binding = new DataExecutionInternalBinding("document.files.copyMetadata", "document.backend", typeof(DocumentFiles), nameof(DocumentFiles.ReadCopySourceAsync));
         if (problem == "caller") binding = binding with { Caller = typeof(DocumentFileOwnerPolicy) };
         if (problem == "member") binding = binding with { Member = nameof(DocumentFiles.OpenAsync) };
         if (problem == "resource") target = target with { ResourceKey = "example.record" };
@@ -117,7 +172,7 @@ public sealed class DocumentFileExecutionScopeTests
     public async Task InternalCopyRead_RejectsAnArbitraryImplementationIdentityBeforeAnyQuery()
     {
         // 未构造后续基础设施，证明明确caller守卫在任何查询之前拒绝。
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, Microsoft.Extensions.Options.Options.Create(new DocumentOptions()), null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, Microsoft.Extensions.Options.Options.Create(new DocumentOptions()), null!, null!, null!);
         var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(IFileCopyService), "PrepareCopyAsync"), "document.document", "document-one");
         var failure = await Assert.ThrowsAsync<ICP.Platform.Modules.Files.Contracts.FileLifecycleException>(() => policy.VerifyBatchAsync([], ICP.Platform.Modules.Files.Contracts.FileOwnerOperation.CopySource, source, default));
         Assert.Equal("Document.FileReadContextInvalid", failure.Code);
@@ -130,7 +185,7 @@ public sealed class DocumentFileExecutionScopeTests
     [InlineData("ReadCopyAsync", false)]
     public async Task InternalCopySource_AcceptsOnlyItsTwoActualSourceReadingMembers(string member, bool allowed)
     {
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
         var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), member), "document.document", "document-one");
         if (allowed) await policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, source, default);
         else
@@ -162,7 +217,7 @@ public sealed class DocumentFileExecutionScopeTests
             _ => source with { Source = source.Source with { Member = "ReadCopyAsync" } }
         };
         // 没有任何DB或evaluator；guard必须在空批返回及任何读取前拒绝串用来源。
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, crossed, default));
         Assert.Equal("Document.FileReadContextInvalid", failure.Code);
     }
@@ -170,7 +225,7 @@ public sealed class DocumentFileExecutionScopeTests
     [Fact]
     public async Task CopyConfirmation_DoesNotBorrowThePrepareSourceIdentity()
     {
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
         var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), nameof(DocumentFiles.PrepareCopyFilesAsync)), "document.document", "document-one");
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, "target-link"),
             "target-file", null, FileOwnerOperation.ConfirmCopy, source, default));
@@ -181,7 +236,7 @@ public sealed class DocumentFileExecutionScopeTests
     public void ReadFacts_PreserveTheValidatedReferenceChainWithoutFollowingCurrentPointersAgain()
     {
         var http = new HttpContextAccessor { HttpContext = Context() };
-        var scope = new DocumentFileReadScope(http);
+        var scope = new DocumentFileReadScope(http, null!);
         var identity = Identity();
         identity.Master["LatestVersionId"] = "another-version";
         identity.Version["CurrentIterationId"] = "another-iteration";
@@ -212,7 +267,7 @@ public sealed class DocumentFileExecutionScopeTests
             _ => source
         };
         FileOwnerOperationContext? context = problem == "missing" ? null : new FileOwnerCreationContext(source, problem == "object" ? "" : "document-one");
-        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!, null!);
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, "link-one"), "file-one", null,
             FileOwnerOperation.Confirm, context, default));
         Assert.Equal("Document.FileWriteContextInvalid", failure.Code);
@@ -237,7 +292,7 @@ public sealed class DocumentFileExecutionScopeTests
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray());
         Assert.True(compilation.IsSuccess, JsonSerializer.Serialize(compilation.Diagnostics));
         var http = new HttpContextAccessor { HttpContext = Context() };
-        var scope = new DocumentFileReadScope(http); var reads = new Reads();
+        var scope = new DocumentFileReadScope(http, new ButtonExecutionAccess(compilation.Plan!, http, new ResourceCatalog(wrongResourceOwner), new ButtonChecks())); var reads = new Reads();
         return (new(compilation.Plan!, http, reads, new Decisions(), new ResourceCatalog(wrongResourceOwner), [new DocumentFileReadResolver(scope)]), http, scope, compilation.Plan!, reads);
     }
 

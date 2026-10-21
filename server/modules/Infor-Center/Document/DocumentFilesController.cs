@@ -24,7 +24,7 @@ public sealed class DocumentFilesController(IDocumentFiles files) : ControllerBa
     }
 
     /// <summary>独立重新裁决 download；框架在完成或取消时释放文件流。</summary>
-    [HttpGet("{documentId}/files/{fileLinkId}/content"), RequireFeature("document.document.download")]
+    [HttpGet("{documentId}/files/{fileLinkId}/content"), RequireFeature("document.document.download"), ButtonBusinessHandler(typeof(DocumentFiles))]
     public async Task<IResult> Download(string documentId, string fileLinkId, CancellationToken token)
     {
         if (Request.Query.Count > 0) return InvalidQuery();

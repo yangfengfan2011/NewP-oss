@@ -7,6 +7,6 @@
       { "key": "audit", "titleKey": "Audit", "fields": ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"] }
     ],
     "summaryBlocks": ["files"],
-    "featureActions": [{ "key": "download", "titleKey": "Download", "behaviorKey": "document.document.download", "dataAccess": { "execution": "document.files.download", "resources": ["document.document"] } }]
+    "featureActions": [{ "key": "download", "titleKey": "Download", "behaviorKey": "document.document.download", "dataAccess": { "object": "Document", "actions": ["download"] } }]
   }
 }

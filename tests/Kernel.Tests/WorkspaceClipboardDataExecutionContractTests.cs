@@ -44,7 +44,7 @@ public sealed class WorkspaceClipboardDataExecutionContractTests
         Assert.Equal(2, reorder.Length);
         Assert.All(reorder, item => { Assert.Equal("WorkspaceFolder", item.Object); Assert.Equal(new[] { "edit" }, item.Actions); Assert.Null(item.Requirements); });
         Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "workspace.folder.reorder");
-        foreach (var (action, model) in new[] { ("create", "WorkspaceFolder"), ("createPart", "Part") })
+        foreach (var (action, model) in new[] { ("create", "WorkspaceFolder"), ("createPart", "Part"), ("createDocument", "Document") })
         {
             var item = Assert.Single(allDeclarations, item => item.Surface == "pageActions" && item.ActionKey == action);
             Assert.Empty(item.Execution); Assert.Equal(model, item.Object); Assert.Equal(["create"], item.Actions);
@@ -58,6 +58,7 @@ public sealed class WorkspaceClipboardDataExecutionContractTests
             Assert.Equal(["Document", "Part", "WorkspaceFolder"], item.ObjectRequirements.Select(target => target.Object).Order());
             Assert.All(item.ObjectRequirements, target => Assert.Equal([required], target.Actions));
         }
+        Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "workspace.content.createDocument");
         // 同一正式fixture也覆盖已存在树动作的目标读取来源，位置仍取实际编译目录。
         var clipboardKeys = new[] { "create", "copy", "copySelected", "cut", "cutSelected", "paste", "remove", "removeSelected", "clearClipboard", "edit", "moveUp", "moveDown", "createPart", "createDocument", "delete", "deleteObjects", "pasteFolderCopy", "pasteFolderStructure", "pasteObjectCopy", "resolveObjectCopy" };
         var features = compiled.Plan.FeatureCatalog.Where(point => point.ModuleId == "Workspace"

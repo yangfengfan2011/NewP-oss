@@ -22,11 +22,9 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
     IStandardCrudResourceRegistry resources, StandardCrudDefaultWriter writer, IDataScopeObjectDecisionProvider decisions,
     IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit,
     DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options, IBusinessAuditRecorder businessAudit,
-    IDataExecutionAccess access, DocumentFileReadScope readScope) : IDocumentFiles, IDocumentCopies
+    IDataExecutionAccess access, DocumentFileReadScope readScope, IButtonBusinessExecutor buttons, IObjectActionAccess objectActions) : IDocumentFiles, IDocumentCopies
 {
     internal static readonly DataExecutionBindingReference FileReadBinding = new("document.document.read", "standardCrud.read", "read");
-    internal static readonly DataExecutionBindingReference FileDownloadBinding = new("document.files.download", "document.files.download", "read");
-    private static readonly DataExecutionInternalBinding DownloadFeedback = new("document.files.download.feedback", "document.files.download", typeof(DocumentFiles), nameof(ReadAsync));
 
     // 尚未迁移的真副本保留自己的固定内部来源；不冒充已迁移的Workspace创建或Stage来源。
     private static ObjectOperationWriteSource.Declared InternalCreateSource(string member) => new(new(
@@ -105,24 +103,15 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
                 item.FileName, item.Length, item.ContentType);
         }).ToArray();
         using var read = readScope.Begin(documentId, DocumentFileReadPhase.Metadata, current);
-        return new(documentId, (string)current.Version["EID"]!, (string)current.Iteration["EID"]!,
-            (await access.EvaluateInternalObjectAsync(DownloadFeedback, "target", readScope.Target(documentId), cancellationToken)).Decision == DataExecutionDecision.Allowed, result);
+        // 这里只反馈本次纯读取的业务资格；UI另核功能位置，反馈不交给真正下载或缓存为允许凭证。
+        var target = readScope.Resolve(readScope.Target(documentId));
+        var downloadable = await objectActions.CheckAsync("Document", target.ObjectId, ["download"], cancellationToken);
+        return new(documentId, (string)current.Version["EID"]!, (string)current.Iteration["EID"]!, downloadable == DataExecutionDecision.Allowed, result);
     }
 
     /// <inheritdoc/>
-    public async Task<FileUsageContent> OpenAsync(string documentId, string fileLinkId, CancellationToken cancellationToken = default)
-    {
-        access.Validate([FileDownloadBinding], "document.document");
-        await RequireReadAsync(documentId, cancellationToken);
-        using var read = readScope.Begin(documentId, DocumentFileReadPhase.Open);
-        await foreach (var decision in access.EvaluateObjectsAsync(FileDownloadBinding, "target", [readScope.Target(documentId)], cancellationToken))
-            RequireDownloadDecision(decision.Decision);
-        var current = await identities.ReadCurrentAsync(documentId, cancellationToken);
-        var link = await db.Set<Dictionary<string, object?>>("DocumentFileLink").AsNoTracking().SingleOrDefaultAsync(row =>
-            EF.Property<string>(row, "LID") == fileLinkId && EF.Property<string>(row, "PEID") == (string)current.Iteration["EID"]!, cancellationToken);
-        if (link is null) throw new FileLifecycleException(404, "Files.UsageUnavailable");
-        return await files.OpenUsageAsync(Reference(link), new FileOwnerExecutionContext(FileDownloadBinding, "document.document", documentId), cancellationToken);
-    }
+    public Task<FileUsageContent> OpenAsync(string documentId, string fileLinkId, CancellationToken cancellationToken = default) =>
+        buttons.ExecuteAsync(this, new DocumentFileDownloadInput(documentId, fileLinkId), cancellationToken);
 
     // 不可读保持404，读后下载拒绝保持403，不把声明错误翻译成业务拒绝。
     internal static void RequireDownloadDecision(DataExecutionDecision decision)
@@ -154,13 +143,13 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
              new("AttachmentFileCount", null, BusinessAuditValue.Text(links.Count(link => Equals(link["Role"], "attachment")).ToString(System.Globalization.CultureInfo.InvariantCulture)))]), token);
 
     // 先判 read，避免未授权目标借身份损坏或关联状态泄漏内部事实。
-    private async Task RequireReadAsync(string documentId, CancellationToken token)
+    private async Task<Dictionary<string, object?>> RequireReadAsync(string documentId, CancellationToken token)
     {
         if (!await decisions.IsAllowedAsync("document.document", documentId, "read", token))
             throw new FileLifecycleException(404, "Files.UsageUnavailable");
-        if (!await db.Set<Dictionary<string, object?>>("Document").AsNoTracking()
-            .AnyAsync(row => EF.Property<string>(row, "EID") == documentId, token))
-            throw new FileLifecycleException(404, "Files.UsageUnavailable");
+        return await db.Set<Dictionary<string, object?>>("Document").AsNoTracking()
+            .SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == documentId, token)
+            ?? throw new FileLifecycleException(404, "Files.UsageUnavailable");
     }
 
     // 只加载 current regular 的有界集合，额外一项用于明确拒绝损坏的超额事实。

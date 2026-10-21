@@ -168,6 +168,91 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         }
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Workspace无文件创建仍由同一正式Document候选按钮原子提交，缺身份与候选拒绝不写任何文件事实")]
+    public async Task WorkspaceDocumentButton_WithoutFilesKeepsMetadataOnlyCreationAtomic()
+    {
+        await using var fixture = await ControlledFixtureAsync();
+        using var admin = await fixture.LoginAdministratorAsync();
+        var position = await ContentAsync(fixture, admin);
+        var actor = await ActorAsync(fixture, admin, "DocumentNoFiles333");
+        using var ordinary = actor.Client;
+        var feature = Point(fixture, "workspace.folder.createDocument");
+        var body = new { position, values = new { ECODE = "NO-FILES-333", ENAME = "无文件图文档" }, uploads = (object?)null };
+        using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Post, "/api/workspace/content/documents", body))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using (var saved = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, feature, HttpMethod.Post, "/api/workspace/content/documents", body))
+        {
+            Assert.True(saved.StatusCode == HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
+            Assert.True((await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("succeeded").GetBoolean());
+        }
+        const string deniedCode = "NO-FILES-DENIED-333";
+        await SaveRuleAsync(fixture, admin, "DocumentNoFile333", "document.document", "ECODE", deniedCode, "create");
+        using (var denied = await new FeatureHttpTestRequests(fixture).SendButtonAsync(ordinary, feature, HttpMethod.Post, "/api/workspace/content/documents",
+            new { position, values = new { ECODE = deniedCode, ENAME = "候选拒绝" }, uploads = (object?)null }))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        var durable = await ObserveBusinessAsync(fixture);
+        var document = Assert.Single(durable.Documents);
+        var version = Assert.Single(durable.Versions); var iteration = Assert.Single(durable.Iterations);
+        Assert.Equal(actor.AccountId, document["OwnerId"]);
+        Assert.Equal(version["EID"], document["LatestVersionId"]); Assert.Equal(document["EID"], version["DocumentId"]);
+        Assert.Equal(iteration["EID"], version["CurrentIterationId"]); Assert.Equal(version["EID"], iteration["VersionId"]);
+        Assert.Equal(document["EID"], Assert.Single(durable.References)["CEID"]);
+        Assert.Empty(durable.Links); Assert.Empty(durable.Files); Assert.Empty(durable.Leases); Assert.Empty(durable.Usages);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Document下载采用自己的按钮和真实Document目标，保留独立read及双向文件关联，缺借混身份不打开文件")]
+    public async Task DownloadButton_UsesActualDocumentAndCurrentReadDownloadDecisions()
+    {
+        await using var fixture = await ControlledFixtureAsync();
+        using var admin = await fixture.LoginAdministratorAsync();
+        var position = await ContentAsync(fixture, admin);
+        var actor = await ActorAsync(fixture, admin, "DocumentDownload333");
+        using var ordinary = actor.Client;
+        byte[] bytes = [7, 6, 5, 4];
+        var created = await CreateMainAsync(fixture, ordinary, position, "DOWNLOAD-BUTTON-333", bytes);
+        var point = Point(fixture, "document.document.download");
+        var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
+        var download = Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Document"
+            && item.ViewKey == "document.document.detail" && item.Surface == "featureActions" && item.ActionKey == "download"
+            && item.FeaturePositions.Contains(point.Position));
+        var borrowed = Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Workspace"
+            && item.ViewKey == "workspace.folder.list" && item.Surface == "pageActions" && item.ActionKey == "createDocument");
+        foreach (var button in new string?[] { null, borrowed.Id })
+        {
+            using var deniedIdentity = await SendAsync(button);
+            Assert.Equal(HttpStatusCode.BadRequest, deniedIdentity.StatusCode);
+        }
+        using (var mixed = await SendAsync(download.Id, legacy: true)) Assert.Equal(HttpStatusCode.BadRequest, mixed.StatusCode);
+        using (var content = await SendAsync(download.Id))
+        {
+            Assert.True(content.StatusCode == HttpStatusCode.OK, await content.Content.ReadAsStringAsync());
+            Assert.Equal(bytes, await content.Content.ReadAsByteArrayAsync());
+        }
+        using (var wrongLink = await SendAsync(download.Id, path: $"/api/document/documents/{created.DocumentId}/files/DocumentFileLink_unknown/content"))
+            await ProblemAsync(wrongLink, HttpStatusCode.NotFound, "Files.UsageUnavailable");
+        await SaveRuleAsync(fixture, admin, "Download333Rule", "document.document", "EID", created.DocumentId, "download");
+        using (var deniedDownload = await SendAsync(download.Id)) await ProblemAsync(deniedDownload, HttpStatusCode.Forbidden, "Document.DownloadDenied");
+        var visible = await DocumentFileHttpTestRequests.ReadAsync(fixture, ordinary, Point(fixture, "document.document.read"), FilesUrl(created));
+        Assert.Single(visible.GetProperty("files").EnumerateArray());
+        Assert.False(visible.GetProperty("downloadAllowed").GetBoolean());
+        await SaveRuleAsync(fixture, admin, "Download333Read", "document.document", "EID", created.DocumentId, "read");
+        using (var hidden = await SendAsync(download.Id)) await ProblemAsync(hidden, HttpStatusCode.NotFound, "Files.UsageUnavailable");
+        var durable = await ObserveBusinessAsync(fixture);
+        Assert.Single(durable.Documents); Assert.Single(durable.Links);
+        Assert.Equal("active", Assert.Single(durable.Usages)["State"]);
+        Assert.Equal("confirmed", Assert.Single(durable.Leases)["State"]);
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(ContentPath(fixture, Assert.Single(durable.Files))));
+
+        async Task<HttpResponseMessage> SendAsync(string? button, bool legacy = false, string? path = null)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, path ?? ContentUrl(created));
+            request.Headers.Add("X-NewP-Feature", point.Position);
+            if (button is not null) request.Headers.Add("X-NewP-Button", button);
+            if (legacy) request.Headers.Add("X-NewP-Data-Declaration", download.Id);
+            return await ordinary.SendAsync(request);
+        }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "普通主体的新对象read拒绝不阻断原候选创建、首次确认或相同凭据幂等确认")]
     public async Task CreationAndConfirm_PreserveNoReadAndRejectCrossedTypedCredentials()
     {
@@ -219,7 +304,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             Assert.DoesNotContain(db.ChangeTracker.Entries(), entry => entry.Metadata.Name == "DocumentFileLink" && entry.State == EntityState.Added);
             // 不同owner实例不能借用私有context，真实确认与空批都必须在查关联前拒绝。
             var otherOwner = new DocumentFileCreationScope(db);
-            var otherPolicy = new DocumentFileOwnerPolicy(db, otherOwner, null!, null!, null!, null!);
+            var otherPolicy = new DocumentFileOwnerPolicy(db, otherOwner, null!, null!, null!, null!, null!);
             var foreign = await Assert.ThrowsAsync<FileLifecycleException>(() => otherPolicy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, created.LinkId),
                 created.FileId, created.UsageId, FileOwnerOperation.Confirm, context, default));
             Assert.Equal("Document.FileWriteContextInvalid", foreign.Code);

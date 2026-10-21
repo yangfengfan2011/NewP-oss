@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Document;
 /// <summary>从 Document 自有真实关联与当前资格核验文件使用，不把 Link 伪装成实体授权资源。</summary>
 public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFileCreationScope creation,
     IDataScopeReadableIds readable, IOptions<DocumentOptions> options,
-    IDataExecutionAccess access, DocumentFileReadScope readScope) : IFileOwnerPolicy
+    IDataExecutionAccess access, DocumentFileReadScope readScope, IObjectActionAccess objectActions) : IFileOwnerPolicy
 {
     public const string Key = "document.fileLink";
     public string OwnerKey => Key;
@@ -78,7 +78,7 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
             FileOwnerInternalExecutionContext source => source.ObjectId,
             FileOwnerCreationContext source => source.ObjectId,
             FileOwnerReleaseContext source => source.ObjectId,
-            _ => creation.CreatedObjectId(context)
+            _ => creation.CreatedObjectId(context) ?? readScope.DownloadObjectId(context)
         };
         if (sourceId is not null && (documentIds.Length != 1 || documentIds[0] != sourceId))
             throw new FileLifecycleException(404, "Files.UsageUnavailable");
@@ -113,8 +113,9 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
                     ? DocumentFileReadPhase.PolicyDownload : DocumentFileReadPhase.PolicyRelease, readFacts[documentId]);
                 if (operation == FileOwnerOperation.Download)
                 {
-                    await foreach (var decision in access.EvaluateObjectsAsync(DocumentFiles.FileDownloadBinding, "target", [readScope.Target(documentId)], token))
-                        DocumentFiles.RequireDownloadDecision(decision.Decision);
+                    // 实际回链的独立read与download业务检查仍在原policy时点，不继承按钮或元数据反馈的允许。
+                    var target = readScope.Resolve(readScope.Target(documentId));
+                    DocumentFiles.RequireDownloadDecision(await objectActions.CheckAsync("Document", target.ObjectId, ["download"], token));
                 }
                 else
                 {
@@ -150,9 +151,14 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
     // 内部复制只接受Document真实固定调用者；源Document仍须与本次文件回链一致。
     private void ValidateReadSource(FileOwnerOperation operation, FileOwnerOperationContext? context)
     {
-        if (context is FileOwnerExecutionContext formal && operation is FileOwnerOperation.Read or FileOwnerOperation.Download)
+        if (operation == FileOwnerOperation.Download)
         {
-            var expected = operation == FileOwnerOperation.Read ? DocumentFiles.FileReadBinding : DocumentFiles.FileDownloadBinding;
+            if (readScope.DownloadObjectId(context) is { Length: > 0 }) return;
+            throw new FileLifecycleException(400, "Document.FileReadContextInvalid");
+        }
+        if (context is FileOwnerExecutionContext formal && operation == FileOwnerOperation.Read)
+        {
+            var expected = DocumentFiles.FileReadBinding;
             if (formal.Binding != expected || formal.ResourceKey != "document.document" || string.IsNullOrWhiteSpace(formal.ObjectId))
                 throw new FileLifecycleException(400, "Document.FileReadContextInvalid");
             access.Validate([expected], formal.ResourceKey);

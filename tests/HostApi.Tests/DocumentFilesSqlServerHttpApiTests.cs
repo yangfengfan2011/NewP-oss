@@ -203,7 +203,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             (new { ECODE = "FORGED", ENAME = "服务端字段", FileUsageId = "forged" }, "Workspace.ServerFieldForbidden")
         })
         {
-            using var request = UploadRequest(fixture, position, values, new ByteArrayContent([1]), "main.pdf");
+            using var request = StageRequest(fixture, position, values, new ByteArrayContent([1]), "main.pdf");
             using var response = await admin.SendAsync(request);
             await ProblemAsync(response, HttpStatusCode.BadRequest, code);
         }
@@ -215,7 +215,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             ([1], new string('n', 253) + ".pdf", "Files.InvalidFileName")
         })
         {
-            using var request = UploadRequest(fixture, position, new { ECODE = "FILE-01", ENAME = "文件准入" }, new ByteArrayContent(bytes), name);
+            using var request = StageRequest(fixture, position, new { ECODE = "FILE-01", ENAME = "文件准入" }, new ByteArrayContent(bytes), name);
             using var response = await admin.SendAsync(request);
             await ProblemAsync(response, HttpStatusCode.BadRequest, code);
         }
@@ -246,7 +246,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             using HttpContent content = unknownLength
                 ? new StreamContent(new ForwardOnlyUploadStream(new byte[length]))
                 : new ByteArrayContent(new byte[length]);
-            using var request = UploadRequest(fixture, position, new { ECODE = $"LIMIT-{unknownLength}-{length}", ENAME = "单文件字节边界" }, content, "main.pdf");
+            using var request = StageRequest(fixture, position, new { ECODE = $"LIMIT-{unknownLength}-{length}", ENAME = "单文件字节边界" }, content, "main.pdf");
             Assert.Equal(!unknownLength, request.Content!.Headers.ContentLength.HasValue);
             using var response = await admin.SendAsync(request);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -292,7 +292,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             using var content = new ByteArrayContent([1]);
             if (oversizedHeader) content.Headers.Add("X-Upload-Test", new string('x', 65537));
             else for (var index = 0; index < 17; index++) content.Headers.Add($"X-Upload-Test-{index}", "x");
-            using var request = UploadRequest(fixture, position, new { ECODE = "HEADER-LIMIT", ENAME = "头预算" }, content, "main.pdf");
+            using var request = StageRequest(fixture, position, new { ECODE = "HEADER-LIMIT", ENAME = "头预算" }, content, "main.pdf");
             using var response = await admin.SendAsync(request);
             await ProblemAsync(response, HttpStatusCode.BadRequest, "REQUEST_VALIDATION_FAILED");
         }
@@ -377,7 +377,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             outcomes.Add((section, response.StatusCode, body.ValueKind == JsonValueKind.Object && body.TryGetProperty("code", out var code) ? code.GetString() : null));
         }
         // 同一真实Local先完成part写入，再以CreateNew碰撞制造存储IOException；它不属于输入解析错误。
-        using (var request = UploadRequest(fixture, position, values, new ByteArrayContent([1, 2, 3]), "main.pdf"))
+        using (var request = StageRequest(fixture, position, values, new ByteArrayContent([1, 2, 3]), "main.pdf"))
         using (var response = await admin.SendAsync(request))
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Equal(1, storage!.WriteFailures);
@@ -414,6 +414,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         content.Headers.ContentType = MediaTypeHeaderValue.Parse($"multipart/form-data; boundary={boundary}");
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/document-uploads") { Content = content };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
+        request.Headers.Add("X-NewP-Button", DocumentCreationButton(fixture).Id);
         return request;
     }
 
@@ -468,11 +469,11 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         await ChangeRowAsync(fixture, "FileUploadLease", "EID", ownedId, "ExpiresAt", DateTime.UtcNow.AddMinutes(-1));
         using (var expired = await SaveMainAsync(fixture, admin, position, values, ownedId))
             await ProblemAsync(expired, HttpStatusCode.Conflict, "Files.UploadExpired");
-        var cancelled = await StageAsync(fixture, admin, position, values, [4, 5]);
+        var cancelled = await StageAsync(fixture, ordinary, position, values, [4, 5]);
         var cancelledId = cancelled.GetProperty("uploadId").GetString()!;
-        using (var cancel = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Delete,
+        using (var cancel = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Delete,
             "/api/workspace/content/document-uploads/" + cancelledId)) Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
-        using (var rejected = await SaveMainAsync(fixture, admin, position, values, cancelledId))
+        using (var rejected = await SaveMainAsync(fixture, ordinary, position, values, cancelledId))
             await ProblemAsync(rejected, HttpStatusCode.Conflict, "Files.UploadCancelled");
         Assert.Empty((await ObserveBusinessAsync(fixture)).Documents);
         Assert.Empty((await ObserveBusinessAsync(fixture)).Usages);
@@ -506,9 +507,8 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         {
             var ruleId = "ChangedAdmission-" + action;
             await SaveRuleAsync(fixture, admin, ruleId, resource, field, value, action);
-            using (var request = UploadRequest(fixture, folder.Position, values, new ByteArrayContent([9]), "main.pdf"))
+            using (var request = StageRequest(fixture, folder.Position, values, new ByteArrayContent([9]), "main.pdf"))
             {
-                request.Headers.Add("X-NewP-Data-Declaration", WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument").Id);
                 using var deniedStage = await ordinary.SendAsync(request);
                 Assert.Equal(status, deniedStage.StatusCode);
             }
@@ -703,7 +703,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/documents")
         { Content = new StringContent(JsonSerializer.Serialize(new { position, values, uploads = new { mainUploadId = uploadId } }), Encoding.UTF8, "application/json") };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
-        request.Headers.Add("X-NewP-Data-Declaration", WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument").Id);
+        request.Headers.Add("X-NewP-Button", DocumentCreationButton(fixture).Id);
         fault.Armed = true;
         var saving = admin.SendAsync(request, cancellation.Token);
         Exception? primary = null;
@@ -1004,7 +1004,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
     // 正常创建取实际Workspace入口声明；不改变手工构造的缺声明/伪造凭据反例。
     private static Task<HttpResponseMessage> CreateDocumentAsync(BusinessAuditHostFixture fixture, HttpClient client, object input) =>
         FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post, "/api/workspace/content/documents", input,
-            WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument"));
+            DocumentCreationButton(fixture));
 
     private static ICP.Platform.Kernel.ModulePlanning.ActionDataAccessRequirement WorkspaceObjectDeclaration(
         BusinessAuditHostFixture fixture, string execution, string behavior) =>
@@ -1028,6 +1028,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         if (extra) content.Add(new StringContent("{}", Encoding.UTF8, "application/json"), "extra");
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/document-uploads") { Content = content };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
+        request.Headers.Add("X-NewP-Button", DocumentCreationButton(fixture).Id);
         return request;
     }
 
@@ -1080,12 +1081,23 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
     internal static async Task<JsonElement> StageAsync(BusinessAuditHostFixture fixture, HttpClient client, WorkspacePosition position,
         object values, byte[] bytes, string name = "main.pdf")
     {
-        using var request = UploadRequest(fixture, position, values, new ByteArrayContent(bytes), name);
-        request.Headers.Add("X-NewP-Button", WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument").Id);
+        using var request = StageRequest(fixture, position, values, new ByteArrayContent(bytes), name);
         using var response = await client.SendAsync(request);
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
+    internal static ICP.Platform.Kernel.ModulePlanning.ActionDataAccessRequirement DocumentCreationButton(BusinessAuditHostFixture fixture) =>
+        Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
+            item => item.ModuleId == "Workspace" && item.ViewKey == "workspace.folder.list" && item.Surface == "pageActions" && item.ActionKey == "createDocument"
+                && item.BusinessBinding == "workspace.folder.createDocument" && item.FeaturePositions.Contains(Point(fixture, "workspace.folder.createDocument").Position));
+
+    internal static HttpRequestMessage StageRequest(BusinessAuditHostFixture fixture, WorkspacePosition position, object values, HttpContent content, string name)
+    {
+        var request = UploadRequest(fixture, position, values, content, name);
+        request.Headers.Add("X-NewP-Button", DocumentCreationButton(fixture).Id);
+        return request;
+    }
+
     internal static HttpRequestMessage UploadRequest(BusinessAuditHostFixture fixture, WorkspacePosition position, object values, HttpContent content, string name)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/document-uploads");

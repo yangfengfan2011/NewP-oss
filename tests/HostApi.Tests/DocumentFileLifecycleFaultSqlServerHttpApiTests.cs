@@ -59,7 +59,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         using var admin = await fixture.LoginAdministratorAsync();
         var position = await ContentAsync(fixture, admin);
         control.Transactions.ArmStageFailure(phase, afterCommit);
-        using var request = UploadRequest(fixture, position, Values($"STAGE-{phase}-{afterCommit}"), new ByteArrayContent(Bytes), "main.pdf");
+        using var request = StageRequest(fixture, position, Values($"STAGE-{phase}-{afterCommit}"), new ByteArrayContent(Bytes), "main.pdf");
         var result = await HttpOutcomeAsync(() => admin.SendAsync(request));
         Assert.False(result.Succeeded);
         Assert.Equal(1, control.Transactions.InjectedFailures);
@@ -104,7 +104,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         using var admin = await fixture.LoginAdministratorAsync();
         var position = await ContentAsync(fixture, admin);
         control.Io.BarrierPoint = point;
-        using var request = UploadRequest(fixture, position, Values($"BARRIER-{point}-{expire}"), new ByteArrayContent(Bytes), "main.pdf");
+        using var request = StageRequest(fixture, position, Values($"BARRIER-{point}-{expire}"), new ByteArrayContent(Bytes), "main.pdf");
         var upload = HttpOutcomeAsync(() => admin.SendAsync(request));
         Task<HttpOutcome>? cancel = null;
         Task<CleanupOutcome>? cleanup = null;

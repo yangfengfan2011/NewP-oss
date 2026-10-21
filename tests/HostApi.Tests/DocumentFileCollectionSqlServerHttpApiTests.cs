@@ -233,6 +233,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/documents")
         { Content = JsonContent.Create(SaveInput(position, Values("SET-CANCEL"), staged), options: new JsonSerializerOptions()) };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
+        request.Headers.Add("X-NewP-Button", DocumentCreationButton(fixture).Id);
         control.Armed = true; var saving = admin.SendAsync(request, cancellation.Token);
         try
         {
@@ -379,12 +380,12 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     }, includeWorkspace: true);
 
     private static Task<HttpResponseMessage> SaveAsync(BusinessAuditHostFixture fixture, HttpClient client, WorkspacePosition position, object values, JsonElement[] staged) =>
-        FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post, "/api/workspace/content/documents", SaveInput(position, values, staged));
+        new FeatureHttpTestRequests(fixture).SendButtonAsync(client, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post, "/api/workspace/content/documents", SaveInput(position, values, staged));
 
     private static object SaveInput(WorkspacePosition position, object values, JsonElement[] staged) =>
         new { position, values, uploads = new { mainUploadId = Token(staged[0]), attachmentUploadIds = staged.Skip(1).Select(Token).ToArray() } };
     private static Task<HttpResponseMessage> RawSaveAsync(BusinessAuditHostFixture fixture, HttpClient client, WorkspacePosition position, object values, object? uploads) =>
-        FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post, "/api/workspace/content/documents", new { position, values, uploads });
+        new FeatureHttpTestRequests(fixture).SendButtonAsync(client, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post, "/api/workspace/content/documents", new { position, values, uploads });
     private static object Values(string code) => new { ECODE = code, ENAME = "集合图文档-" + code };
     private static string Token(JsonElement staged) => staged.GetProperty("uploadId").GetString()!;
     private static async Task<JsonElement[]> StageThreeAsync(BusinessAuditHostFixture fixture, HttpClient client, WorkspacePosition position, object values)

@@ -10,7 +10,7 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed partial class DocumentFilesSqlServerHttpApiTests
 {
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实下载要求独立正式声明，沿文件回链裁决并从相同合同派生下载反馈")]
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实下载要求自己的按钮身份，沿文件回链独立裁决，读取反馈不作为执行许可")]
     public async Task Download_RequiresBoundDeclarationAndTrustedOwnerChain()
     {
         await using var fixture = await ControlledFixtureAsync();
@@ -24,9 +24,9 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         var downloadFeature = Point(fixture, "document.document.download");
         // 首个反例必须先经过真实已授权对象与文件准备，不能因缺fixture或错误目标提前拒绝。
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, downloadFeature, HttpMethod.Get, ContentUrl(first)))
-            await ProblemAsync(missing, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await ProblemAsync(missing, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var download = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.files.download"
+        var download = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "document.document.download"
             && item.FeaturePositions.Contains(downloadFeature.Position));
         var read = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.document.read"
             && item.FeaturePositions.Contains(readFeature.Position));
@@ -36,13 +36,13 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             Assert.Equal(new byte[] { 1, 2, 3 }, await allowed.Content.ReadAsByteArrayAsync());
         }
         using (var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, downloadFeature, HttpMethod.Get, ContentUrl(first), dataAccess: read))
-            await ProblemAsync(crossed, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await ProblemAsync(crossed, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         using (var request = new HttpRequestMessage(HttpMethod.Get, ContentUrl(first)))
         {
             request.Headers.Add("X-NewP-Feature", downloadFeature.Position);
-            request.Headers.Add("X-NewP-Data-Declaration", "Document/view:unknown/featureActions/action:download");
+            request.Headers.Add("X-NewP-Button", "Document/view:unknown/featureActions/action:download");
             using var unknown = await ordinary.SendAsync(request);
-            await ProblemAsync(unknown, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await ProblemAsync(unknown, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         }
         using (var wrong = await FeatureHttpTestRequests.SendAsync(ordinary, downloadFeature, HttpMethod.Get,
             $"/api/document/documents/{first.DocumentId}/files/{second.LinkId}/content", dataAccess: download))

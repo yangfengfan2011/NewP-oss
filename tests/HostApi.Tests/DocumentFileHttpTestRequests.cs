@@ -7,22 +7,23 @@ using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
-/// <summary>旧 Document 文件消费者显式采用本视图正式声明；不按 URL 或目录首项推断绑定。</summary>
+/// <summary>Document 文件消费者显式采用本视图的独立read来源或实际download按钮；不按 URL 或目录首项推断绑定。</summary>
 internal static class DocumentFileHttpTestRequests
 {
     internal static Task<HttpResponseMessage> SendAsync(BusinessAuditHostFixture fixture, HttpClient client,
         FeaturePoint point, HttpMethod method, string path)
     {
-        var execution = point.BehaviorKey switch
+        var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
+        var declaration = point.BehaviorKey switch
         {
-            "document.document.read" => "document.document.read",
-            "document.document.download" => "document.files.download",
+            "document.document.read" => Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Document"
+                && item.ViewKey == "document.document.detail" && item.Execution == "document.document.read" && item.BusinessBinding is null
+                && item.FeaturePositions.Contains(point.Position)),
+            "document.document.download" => Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Document"
+                && item.ViewKey == "document.document.detail" && item.BusinessBinding == point.BehaviorKey && item.Surface == "featureActions"
+                && item.FeaturePositions.Contains(point.Position)),
             _ => throw new InvalidOperationException("Not a Document file read feature.")
         };
-        var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Document"
-            && item.ViewKey == "document.document.detail" && item.Execution == execution
-            && item.FeaturePositions.Contains(point.Position));
         return FeatureHttpTestRequests.SendAsync(client, point, method, path, dataAccess: declaration);
     }
 

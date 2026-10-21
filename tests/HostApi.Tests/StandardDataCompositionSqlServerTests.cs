@@ -62,6 +62,25 @@ public sealed class StandardDataCompositionSqlServerTests
                 [new("Partner.AssetCatalog", ["1.0.0"], "1.0.0", new Dictionary<string, string> { ["1.0.0"] = packageRoot })],
                 new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false));
             var external = Assert.Single(modules.Modules, module => module.ModuleId == ModuleId);
+            if (Environment.GetEnvironmentVariable("NEWP_STANDARD_DATA_RUNTIME_FIXTURE") is { Length: > 0 } runtimeFixture)
+            {
+                var runtimeRoot = Path.Combine(root, "runtime-export");
+                using var stage = new ICP.Platform.Kernel.PluginPackages.RuntimeViewMaterializer(
+                    new ICP.Platform.Kernel.PluginPackages.InstalledPluginStateStore(runtimeRoot),
+                    new ICP.Platform.Kernel.PluginPackages.FrontendRuntimeManifestBuilder(), builtIns,
+                    new ICP.Platform.Modeling.Projection.ModelRuntimeMetadataProjector().Project).Stage(runtimeRoot, modules);
+                File.WriteAllText(runtimeFixture, JsonSerializer.Serialize(new
+                {
+                    packageSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(package!))),
+                    blueprint,
+                    projection = JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "projections", "standard-data.json"))),
+                    documents = ICP.Platform.Kernel.PluginPackages.StandardDataMetadataProjection.ReadDocuments(
+                        Path.Combine(stage.StagedRuntimeRoot, "modules", ModuleId, "metadata")),
+                    dataAccess = modules.ActionDataAccessCatalog.Where(item => item.ModuleId == ModuleId),
+                    features = modules.FeatureCatalog.Where(item => item.ModuleId == ModuleId),
+                    nativeCatalog = JsonNode.Parse(File.ReadAllText(Path.Combine(stage.StagedRuntimeRoot, "active-module-runtime.json"))),
+                }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+            }
             Assert.NotEmpty(external.DataExecutions);
             Assert.All(external.DataExecutions, source => Assert.Contains(source.Provider, new[] { "standardCrud.list", "standardCrud.read" }));
             var descriptor = Assert.Single(new ICP.Platform.Crud.Planning.StandardDataCrudDescriptorProjector().Project(modules), item => item.ModuleId == ModuleId);

@@ -243,7 +243,8 @@ public sealed class AcceptanceGateTests
                 await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/plugins/partner-asset-catalog/assets");
                 var row = await driver.WaitForRowAsync(name);
                 var read = page.WaitForResponseAsync(response => response.Request.Method == "GET" && new Uri(response.Url).AbsolutePath == api + "/" + id);
-                await row.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
+                // 本正式包未提供动作字典，保留真实生成labelKey的既有fallback。
+                await row.GetByRole(AriaRole.Button, new() { Name = "Action_Edit", Exact = true }).ClickAsync();
                 var prepared = await read;
                 if (!prepared.Ok) throw new InvalidOperationException($"标准包编辑准备失败：{prepared.Status}");
                 var drawer = await driver.WaitForVisibleDrawerAsync("标准包编辑");

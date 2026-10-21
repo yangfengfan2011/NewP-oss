@@ -172,8 +172,7 @@ public static class StandardDataMetadataProjection
                 ["columns"] = JsonSerializer.SerializeToNode(columns),
                 ["pageActions"] = JsonSerializer.SerializeToNode(new object[]
                 {
-                    new { key = "create", labelKey = "Action_Create", standardAction = "create", variant = "primary", dataAccess = ButtonRequirement(resourceKey, "create") },
-                    new { key = "refresh", labelKey = "Action_Refresh", standardAction = "refresh", variant = (string?)null }
+                    new { key = "create", labelKey = "Action_Create", standardAction = "create", variant = "primary", dataAccess = ButtonRequirement(resourceKey, "create") }
                 }),
                 ["rowActions"] = JsonSerializer.SerializeToNode(rowActions)
             };

@@ -242,6 +242,8 @@ function requireObjectViewAction(document: RuntimeViewDocument): void {
 }
 
 function hasObjectViewAction(document: RuntimeViewDocument): boolean {
+  // 查询/履历投影可用自己的view输入查看外部对象，并不消费本列表的Detail View。
+  if (!readNonEmptyString(document.view.model)) return false;
   const actions = [document.view.rowActions, document.view.columns]
     .flatMap((value) => Array.isArray(value) ? value : []);
   return actions.some((value: unknown) => typeof value === 'object' && value !== null

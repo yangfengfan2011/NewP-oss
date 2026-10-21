@@ -94,7 +94,7 @@ public sealed class StandardReadExecutionSqlServerTests
         var read = http.Example(); var export = http.Example("export"); var manage = http.Example("authorize");
         using var created = await FeatureHttpTestRequests.SendAsync(admin, http.Example("create"), HttpMethod.Post, "/api/example/records",
             new { ECODE = "QUERY-309", ENAME = "QUERY-309", RecordSource = "Manual" },
-            plan.ActionDataAccessCatalog.Single(item => item.Execution == "example.record.create"));
+            plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "example.record.create"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var id = BusinessAuditSqlServerHttpApiTests.Id(JsonSerializer.Deserialize<JsonElement>(await created.Content.ReadAsStringAsync()));
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ExampleQuery309", "导出声明反例",

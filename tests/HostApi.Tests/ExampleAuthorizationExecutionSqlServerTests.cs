@@ -52,7 +52,7 @@ public sealed class ExampleAuthorizationExecutionSqlServerTests
         var create = http.Example("create"); var manage = http.Example("authorize"); var inspect = http.Example("viewAuthorization");
         using var created = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/example/records",
             new { ECODE = "AUTHORIZATION-EXECUTION", ENAME = "通用授权执行", RecordSource = "Manual" },
-            plan.ActionDataAccessCatalog.Single(item => item.Execution == "example.record.create" && item.FeaturePositions.Contains(create.Position)));
+            plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "example.record.create" && item.FeaturePositions.Contains(create.Position)));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var id = BusinessAuditSqlServerHttpApiTests.Id(await created.Content.ReadFromJsonAsync<JsonElement>());
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ExampleManagementExecution", "跨模块授权",
@@ -71,7 +71,7 @@ public sealed class ExampleAuthorizationExecutionSqlServerTests
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
         using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, path + "/eligibility",
-            dataAccess: plan.ActionDataAccessCatalog.Single(item => item.Execution == "example.record.create")))
+            dataAccess: plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "example.record.create")))
             Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
         using (var crossed = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, path + "/eligibility", dataAccess: viewBinding))
             Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);

@@ -25,7 +25,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var create = http.Example("create"); var manage = http.Example("authorize");
         using var created = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/example/records",
             new { ECODE = "AUTHORIZATION-COST", ENAME = "授权成本", RecordSource = "Manual" },
-            plan.ActionDataAccessCatalog.Single(item => item.Execution == "example.record.create" && item.FeaturePositions.Contains(create.Position)));
+            plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "example.record.create" && item.FeaturePositions.Contains(create.Position)));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var id = BusinessAuditSqlServerHttpApiTests.Id(JsonSerializer.Deserialize<JsonElement>(await created.Content.ReadAsStringAsync()));
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ExampleAuthorizationCost", "授权执行成本",

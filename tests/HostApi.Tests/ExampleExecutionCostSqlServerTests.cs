@@ -46,7 +46,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
                     "/api/example/records" + (operation == "create" ? "" : "/" + id),
                     operation == "create" ? new { ECODE = "EXECUTION-COST", ENAME = "成本记录", RecordSource = "Manual" } :
                     operation == "edit" ? new { ENAME = "成本更新" } : null,
-                    plan.ActionDataAccessCatalog.Single(item => item.Execution == "example.record." + (operation == "edit" ? "update" : operation)
+                    plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "example.record." + (operation == "edit" ? "update" : operation)
                         && item.FeaturePositions.Contains((operation == "create" ? create : operation == "edit" ? edit : delete).Position)));
                 Assert.True(response.StatusCode == (operation == "create" ? HttpStatusCode.Created :
                     operation == "edit" ? HttpStatusCode.OK : HttpStatusCode.NoContent), await response.Content.ReadAsStringAsync());

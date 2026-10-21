@@ -46,7 +46,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
             new { CompanyId = company, ECODE = "READ-309-D", ENAME = "关联部门", SortOrder = "0100" }));
         using var exampleCreated = await FeatureHttpTestRequests.SendAsync(admin, http.Example("create"), HttpMethod.Post, "/api/example/records",
             new { ECODE = "READ-309-000", ENAME = "READ-309-000", ReviewerUserEID = actor.AccountId, RecordSource = "Manual" },
-            plan.ActionDataAccessCatalog.Single(item => item.Execution == "example.record.create"));
+            plan.ActionDataAccessCatalog.Single(item => item.BusinessBinding == "example.record.create"));
         Assert.Equal(HttpStatusCode.Created, exampleCreated.StatusCode);
         var example = BusinessAuditSqlServerHttpApiTests.Id(JsonSerializer.Deserialize<JsonElement>(await exampleCreated.Content.ReadAsStringAsync()));
         var person = BusinessAuditSqlServerHttpApiTests.Id(await CreatePrototypeAsync(

@@ -31,9 +31,9 @@ public sealed class ExampleExecutionDeclarationSqlServerTests
         await Rule("RejectEdit", "ENAME", "不可编辑", "edit");
 
         using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/example/records", Payload("MISSING", "允许", "Manual")))
-            await Status(missing, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Status(missing, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         using (var swapped = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/example/records", Payload("SWAPPED", "允许", "Manual"), Declaration("update", edit)))
-            await Status(swapped, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+            await Status(swapped, HttpStatusCode.BadRequest, "ButtonExecution.BindingInvalid");
         using (var denied = await Send(create, "create", HttpMethod.Post, "/api/example/records", Payload("CREATE-DENIED", "允许", "Denied")))
             await Status(denied, HttpStatusCode.Forbidden, "DataScope.ActionDenied");
         using (var createdHidden = await Send(create, "create", HttpMethod.Post, "/api/example/records", Payload("CREATE-HIDDEN", "不可读", "Manual")))
@@ -52,7 +52,7 @@ public sealed class ExampleExecutionDeclarationSqlServerTests
         using (var deniedEdit = await Send(edit, "update", HttpMethod.Put, "/api/example/records/" + noEditId, new { ENAME = "不得写入" }))
             await Status(deniedEdit, HttpStatusCode.Forbidden, "DataScope.ActionDenied");
         var id = await CreateAdmin("EDIT-HIDDEN", "编辑前可读");
-        using (var preparation = await Send(edit, "update", HttpMethod.Get, "/api/example/records/" + id))
+        using (var preparation = await Send(edit, "read", HttpMethod.Get, "/api/example/records/" + id))
             await Status(preparation, HttpStatusCode.OK);
         using (var updatedHidden = await Send(edit, "update", HttpMethod.Put, "/api/example/records/" + id, new { ENAME = "不可读" }))
         {
@@ -68,8 +68,8 @@ public sealed class ExampleExecutionDeclarationSqlServerTests
         using (var deleted = await Send(delete, "delete", HttpMethod.Delete, "/api/example/records/" + deletable))
             await Status(deleted, HttpStatusCode.NoContent);
 
-        ActionDataAccessRequirement Declaration(string execution, FeaturePoint point) => plan.ActionDataAccessCatalog.Single(item =>
-            item.Execution == "example.record." + execution && item.FeaturePositions.Contains(point.Position));
+        ActionDataAccessRequirement Declaration(string execution, FeaturePoint point) => execution == "read"
+            ? http.ReadDeclaration("example.record.read", point) : http.Declaration("example.record." + execution, point);
         Task<HttpResponseMessage> Send(FeaturePoint point, string execution, HttpMethod method, string path, object? body = null) =>
             FeatureHttpTestRequests.SendAsync(ordinary, point, method, path, body, Declaration(execution, point));
         async Task<string> CreateAdmin(string code, string name)

@@ -42,7 +42,7 @@ it.each(['list', 'detail'] as const)('selects formal read and mutation declarati
   const fields = { EID: 'ExampleRecord_one', ECODE: 'DECL-01', ENAME: '声明记录', ReviewerUserEID: null, RecordSource: 'Manual',
     CreatedBy: 'actor', CreatedBy_DisplayValue: '账号', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '账号',
     CreatedAt: '2026-10-19T00:00:00Z', CreatedAt_DisplayValue: '2026-10-19 08:00', UpdatedAt: '2026-10-19T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-19 08:00' };
-  const requests: Array<{ method: string; path: string; declaration: string | null; position: string | null }> = [];
+  const requests: Array<{ method: string; path: string; declaration: string | null; button: string | null; position: string | null }> = [];
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false,
     isLocalAdministrator: false, timeZoneId: 'Asia/Taipei', featurePositions: [...new Set(declarations.flatMap(item => item.featurePositions))] };
   const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
@@ -54,16 +54,15 @@ it.each(['list', 'detail'] as const)('selects formal read and mutation declarati
     if (path.endsWith('current-user')) return json(user);
     if (path.startsWith('/api/authorization/')) return json({}, 403);
     const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
-    const request = { method, path, declaration: headers.get('X-NewP-Data-Declaration'), position: headers.get('X-NewP-Feature') };
+    const request = { method, path, declaration: headers.get('X-NewP-Data-Declaration'), button: headers.get('X-NewP-Button'), position: headers.get('X-NewP-Feature') };
     requests.push(request);
     const expected = method === 'DELETE' ? idFor(list.view.key, 'rowActions', 'delete')
       : method === 'POST' ? idFor(list.view.key, 'pageActions', 'create')
       : method === 'PUT' ? idFor(entry === 'list' ? list.view.key : detail.view.key, entry === 'list' ? 'rowActions' : 'pageActions', 'edit')
-        : path.includes('?') ? idFor(list.view.key, 'read')
-          : request.position === editPosition(entry)
-            ? idFor(entry === 'list' ? list.view.key : detail.view.key, entry === 'list' ? 'rowActions' : 'pageActions', 'edit')
-            : idFor(detail.view.key, 'read');
-    if (request.declaration !== expected) return json({ message: '声明不匹配', code: 'DECLARATION_MISMATCH' }, 400);
+        : path.includes('?') ? idFor(list.view.key, 'read') : idFor(detail.view.key, 'read');
+    const writing = method === 'POST' || method === 'PUT' || method === 'DELETE';
+    if (writing ? request.button !== expected || request.declaration !== null : request.declaration !== expected || request.button !== null)
+      return json({ message: '声明不匹配', code: 'DECLARATION_MISMATCH' }, 400);
     if (method === 'PUT' && denyWrite) return json({ message: '正式提交已拒绝', code: 'DATA_ACTION_DENIED' }, 403);
     if (method === 'DELETE') return new Response(null, { status: 204 });
     if (method === 'POST' || method === 'PUT') return json({ succeeded: true });
@@ -110,12 +109,12 @@ it.each(['list', 'detail'] as const)('selects formal read and mutation declarati
   await vi.waitFor(() => expect(document.querySelector('form #ENAME')).not.toBeNull());
   const editForm = () => document.querySelector<HTMLFormElement>(entry === 'list' ? '.ant-drawer form' : 'form')!;
   const editDeclaration = idFor(entry === 'list' ? list.view.key : detail.view.key, entry === 'list' ? 'rowActions' : 'pageActions', 'edit');
-  if (entry === 'list') await vi.waitFor(() => expect(requests.some(request => request.method === 'GET' && request.declaration === editDeclaration)).toBe(true));
+  if (entry === 'list') await vi.waitFor(() => expect(requests.some(request => request.method === 'GET' && request.declaration === idFor(detail.view.key, 'read') && request.button === null)).toBe(true));
   else expect(requests.filter(request => request.method === 'GET')).toHaveLength(readsBeforeEdit);
   denyWrite = true;
   await act(async () => editForm().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   await vi.waitFor(() => expect(document.body.textContent).toContain('当前操作已被拒绝'));
-  expect(requests.filter(request => request.method === 'PUT')).toEqual([expect.objectContaining({ declaration: editDeclaration, position: editPosition(entry) })]);
+  expect(requests.filter(request => request.method === 'PUT')).toEqual([expect.objectContaining({ button: editDeclaration, declaration: null, position: editPosition(entry) })]);
   denyWrite = false;
   await act(async () => editForm().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   await vi.waitFor(() => expect(requests.filter(request => request.method === 'PUT')).toHaveLength(2));
@@ -126,7 +125,7 @@ it.each(['list', 'detail'] as const)('selects formal read and mutation declarati
     await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(node => node.textContent === '删除')!.click());
     await vi.waitFor(() => expect(button('确认')).toBeDefined());
     await act(async () => button('确认')!.click());
-    await vi.waitFor(() => expect(requests.filter(request => request.method === 'DELETE')).toEqual([expect.objectContaining({ declaration: idFor(list.view.key, 'rowActions', 'delete'), position: requirementFor(list.view.key, 'rowActions', 'delete').featurePositions[0] })]));
+    await vi.waitFor(() => expect(requests.filter(request => request.method === 'DELETE')).toEqual([expect.objectContaining({ button: idFor(list.view.key, 'rowActions', 'delete'), declaration: null, position: requirementFor(list.view.key, 'rowActions', 'delete').featurePositions[0] })]));
   }
 });
 

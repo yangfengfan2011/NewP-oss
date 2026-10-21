@@ -212,7 +212,7 @@ public sealed class DocumentFileExecutionScopeTests
             _ => source
         };
         FileOwnerOperationContext? context = problem == "missing" ? null : new FileOwnerCreationContext(source, problem == "object" ? "" : "document-one");
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!);
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, "link-one"), "file-one", null,
             FileOwnerOperation.Confirm, context, default));
         Assert.Equal("Document.FileWriteContextInvalid", failure.Code);

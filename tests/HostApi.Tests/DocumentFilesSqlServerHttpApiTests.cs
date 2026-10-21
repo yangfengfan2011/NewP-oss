@@ -1081,7 +1081,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         object values, byte[] bytes, string name = "main.pdf")
     {
         using var request = UploadRequest(fixture, position, values, new ByteArrayContent(bytes), name);
-        request.Headers.Add("X-NewP-Data-Declaration", WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument").Id);
+        request.Headers.Add("X-NewP-Button", WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument").Id);
         using var response = await client.SendAsync(request);
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();

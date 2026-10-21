@@ -311,11 +311,13 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         Assert.Equal(fixture.ActorId, actorId);
         var expected = new ConfirmedFileUsage((string)originalUsage["EID"]!, (string)originalUsage["FileId"]!);
         FileOwnerReference originalOwner;
-        string contentLinkId, documentId;
+        string contentLinkId;
+        DocumentCurrentIdentity identity;
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            documentId = (string)(await db.Set<Dictionary<string, object?>>("Document").AsNoTracking().SingleAsync())["EID"]!;
+            var documentId = (string)(await db.Set<Dictionary<string, object?>>("Document").AsNoTracking().SingleAsync())["EID"]!;
+            identity = await scope.ServiceProvider.GetRequiredService<DocumentInitialIdentity>().ReadCurrentAsync(documentId, tracking: false);
             var actualLink = await db.Set<Dictionary<string, object?>>("DocumentFileLink").AsNoTracking().SingleAsync();
             Assert.Equal(expected.UsageId, actualLink["FileUsageId"]);
             Assert.Equal(expected.FileId, actualLink["CEID"]);
@@ -324,8 +326,8 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         }
         // confirmed 的 ExpiresAt 只是历史；真实关联仍 active 时不得把重复确认当到期 token。
         await ExpireAsync(fixture, uploadId);
-        Assert.Equal(expected, await ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, documentId));
-        Assert.Equal(expected, await ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, documentId));
+        Assert.Equal(expected, await ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, identity));
+        Assert.Equal(expected, await ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, identity));
 
         var otherStage = await StageAsync(fixture, admin, position, Values("CONFIRM-OTHER"), Bytes);
         using (var otherCreated = await CreateDocumentAsync(fixture, admin, position, "CONFIRM-OTHER", otherStage.GetProperty("uploadId").GetString()!))
@@ -338,12 +340,12 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
                 .SingleAsync(row => EF.Property<string>(row, "LID") != originalOwner.Id);
             otherOwner = new(DocumentFileOwnerPolicy.Key, (string)otherLink["LID"]!);
         }
-        var retarget = await Assert.ThrowsAsync<FileLifecycleException>(() => ConfirmAsActualActorAsync(fixture, actorId, uploadId, otherOwner, documentId));
+        var retarget = await Assert.ThrowsAsync<FileLifecycleException>(() => ConfirmAsActualActorAsync(fixture, actorId, uploadId, otherOwner, identity));
         Assert.Equal(409, retarget.StatusCode);
         Assert.Equal("Files.UploadAlreadyConfirmed", retarget.Code);
-        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
+        using (var deleted = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
                    "/api/workspace/content/" + contentLinkId, new { position })) Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
-        var released = await Assert.ThrowsAsync<FileLifecycleException>(() => ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, documentId));
+        var released = await Assert.ThrowsAsync<FileLifecycleException>(() => ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, identity));
         Assert.Equal(409, released.StatusCode);
         Assert.Equal("Files.UploadAlreadyConfirmed", released.Code);
         var final = await ObserveAsync(fixture);
@@ -353,7 +355,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
     }
 
     private static async Task<ConfirmedFileUsage> ConfirmAsActualActorAsync(BusinessAuditHostFixture fixture, string actorId,
-        string uploadId, FileOwnerReference owner, string documentId)
+        string uploadId, FileOwnerReference owner, DocumentCurrentIdentity identity)
     {
         using var scope = fixture.Services.CreateScope();
         var accessor = fixture.Services.GetRequiredService<IHttpContextAccessor>();
@@ -370,9 +372,14 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
             Assert.Empty(db.ChangeTracker.Entries());
             var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
             var transaction = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
-            var result = await transaction.ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(service.ConfirmUsageAsync(uploadId, owner,
-                new FileOwnerCreationContext(new(new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
-                { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CreateWithFilesAsync)) }, documentId), token)));
+            var creation = scope.ServiceProvider.GetRequiredService<DocumentFileCreationScope>();
+            var result = await transaction.ExecuteAsync(async token =>
+            {
+                // 新owner上下文依据实际已创建身份，不复用活动Added证明或旧按钮允许结果。
+                using var proof = creation.BeginCreated(identity, out var context);
+                proof.Dispose();
+                return await service.ConfirmUsageAsync(uploadId, owner, context, token);
+            });
             Assert.DoesNotContain(db.ChangeTracker.Entries(), entry => entry.Metadata.Name == "DocumentFileLink" && entry.State == EntityState.Added);
             return result;
         }
@@ -391,7 +398,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
 
     private static object Values(string code) => new { ECODE = code, ENAME = "真实文件故障", Description = "SQL/Local" };
     private static Task<HttpResponseMessage> CreateDocumentAsync(BusinessAuditHostFixture fixture, HttpClient admin, WorkspacePosition position,
-        string code, string uploadId) => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post,
+        string code, string uploadId) => new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post,
             "/api/workspace/content/documents", new { position, values = Values(code), uploads = new { mainUploadId = uploadId } });
     private static string ContentPath(BusinessAuditHostFixture fixture, IReadOnlyDictionary<string, object?> file) => Path.Combine(fixture.StorageRoot, (string)file["StorageKey"]!);
 

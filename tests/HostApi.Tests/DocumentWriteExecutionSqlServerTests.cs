@@ -188,22 +188,58 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         using var trace = new Activity(nameof(CreationAndConfirm_PreserveNoReadAndRejectCrossedTypedCredentials)).Start();
         try
         {
-            var contract = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().Modules.SelectMany(module => module.DataExecutions), item => item.Key == "document.document.internal.create");
-            var source = new DataExecutionWriteContext(new(contract.Key, contract.Provider, "submit"), "document.document", null)
-            { Internal = new(contract.Key, contract.Provider, typeof(DocumentFiles), nameof(DocumentFiles.CreateWithFilesAsync)) };
-            var context = new FileOwnerCreationContext(source, created.DocumentId);
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var identity = await scope.ServiceProvider.GetRequiredService<DocumentInitialIdentity>().ReadCurrentAsync(created.DocumentId);
+            var creation = scope.ServiceProvider.GetRequiredService<DocumentFileCreationScope>();
+            var policy = scope.ServiceProvider.GetRequiredService<DocumentFileOwnerPolicy>();
             var files = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
             var transactions = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
-            Task<ConfirmedFileUsage> Confirm(FileOwnerCreationContext value) => transactions.ExecuteAsync(token =>
+            // 新owner scope取得实际持久身份；已确认重试不要求旧的活动创建证明。
+            var context = await transactions.ExecuteAsync(token =>
+            {
+                using var proof = creation.BeginCreated(identity, out var value);
+                return ValueTask.FromResult(value);
+            });
+            Task<ConfirmedFileUsage> Confirm(FileOwnerOperationContext value) => transactions.ExecuteAsync(token =>
                 new ValueTask<ConfirmedFileUsage>(files.ConfirmUsageAsync(created.UploadId, new(DocumentFileOwnerPolicy.Key, created.LinkId), value, token))).AsTask();
             var expected = new ConfirmedFileUsage(created.UsageId, created.FileId);
             Assert.Equal(expected, await Confirm(context));
             Assert.Equal(expected, await Confirm(context));
-            var crossed = await Assert.ThrowsAsync<FileLifecycleException>(() => Confirm(context with { Source = source with { ResourceKey = "part.part" } }));
+            var legacy = new FileOwnerCreationContext(new(new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
+            { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CreateWithFilesAsync)) }, created.DocumentId);
+            var crossed = await Assert.ThrowsAsync<FileLifecycleException>(() => Confirm(legacy));
             Assert.Equal("Document.FileWriteContextInvalid", crossed.Code);
-            var wrongTarget = await Assert.ThrowsAsync<FileLifecycleException>(() => Confirm(context with { ObjectId = "another-document" }));
+            var wrongContext = await transactions.ExecuteAsync(token =>
+            {
+                using var proof = creation.BeginCreated(identity with { Master = new() { ["EID"] = "another-document" } }, out var value);
+                return ValueTask.FromResult(value);
+            });
+            var wrongTarget = await Assert.ThrowsAsync<FileLifecycleException>(() => Confirm(wrongContext));
             Assert.Equal(HttpStatusCode.NotFound, (HttpStatusCode)wrongTarget.StatusCode);
-            Assert.DoesNotContain(scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().ChangeTracker.Entries(), entry => entry.Metadata.Name == "DocumentFileLink" && entry.State == EntityState.Added);
+            Assert.DoesNotContain(db.ChangeTracker.Entries(), entry => entry.Metadata.Name == "DocumentFileLink" && entry.State == EntityState.Added);
+            // 不同owner实例不能借用私有context，真实确认与空批都必须在查关联前拒绝。
+            var otherOwner = new DocumentFileCreationScope(db);
+            var otherPolicy = new DocumentFileOwnerPolicy(db, otherOwner, null!, null!, null!, null!);
+            var foreign = await Assert.ThrowsAsync<FileLifecycleException>(() => otherPolicy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, created.LinkId),
+                created.FileId, created.UsageId, FileOwnerOperation.Confirm, context, default));
+            Assert.Equal("Document.FileWriteContextInvalid", foreign.Code);
+            var foreignEmpty = await Assert.ThrowsAsync<FileLifecycleException>(() => otherPolicy.VerifyBatchAsync([], FileOwnerOperation.Confirm, context, default));
+            Assert.Equal("Document.FileWriteContextInvalid", foreignEmpty.Code);
+            // 首次确认仍需当前事务、同一来源与真实Added Link；结束证明不能授权追加。
+            await transactions.ExecuteAsync(async token =>
+            {
+                using var proof = creation.BeginCreated(identity, out var fresh);
+                var link = new Dictionary<string, object?> { ["LID"] = "DocumentFileLink_context333", ["PEID"] = identity.Iteration["EID"],
+                    ["CEID"] = created.FileId, ["Role"] = "attachment", ["Ordinal"] = 1L };
+                var entry = db.Set<Dictionary<string, object?>>("DocumentFileLink").Add(link);
+                await policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, (string)link["LID"]!), created.FileId, null, FileOwnerOperation.Confirm, fresh, token);
+                proof.Dispose();
+                var expired = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, (string)link["LID"]!),
+                    created.FileId, null, FileOwnerOperation.Confirm, fresh, token));
+                Assert.Equal("Document.CreationProofRequired", expired.Code);
+                entry.State = EntityState.Detached;
+                return true;
+            });
         }
         finally { accessor.HttpContext = previous; }
         var facts = await ObserveBusinessAsync(fixture);

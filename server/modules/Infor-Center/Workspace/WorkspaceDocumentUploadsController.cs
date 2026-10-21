@@ -17,14 +17,14 @@ namespace ICP.Platform.Modules.Workspace;
 
 /// <summary>正式位置准入先于文件 I/O，手工解析有界元数据并将非 seek 文件流交给 Files。</summary>
 [ApiController, Route("api/workspace/content/document-uploads"), EndpointModule("Workspace"), PlatformRequestValidation]
-public sealed partial class WorkspaceDocumentUploadsController(WorkspaceContents contents, IFileLifecycleService files,
+public sealed partial class WorkspaceDocumentUploadsController(IFileLifecycleService files, IButtonBusinessExecutor buttons, WorkspaceDocumentUploadHandler uploadHandler,
     ILogger<WorkspaceDocumentUploadsController> logger) : ControllerBase
 {
     private const int MetadataBudget = 65536;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>只接受 position、values 与单 file 的顺序；多余 part 会取消已暂存文件而不会返回假成功。</summary>
-    [HttpPost, RequireFeature("workspace.folder.createDocument"), WorkspaceDocumentUploadLimits]
+    [HttpPost, RequireFeature("workspace.folder.createDocument"), WorkspaceDocumentUploadLimits, ButtonBusinessHandler(typeof(WorkspaceDocumentUploadHandler))]
     public async Task<IResult> Stage(CancellationToken token)
     {
         StagedFileInfo? staged = null;
@@ -46,9 +46,8 @@ public sealed partial class WorkspaceDocumentUploadsController(WorkspaceContents
             var filePart = await RequireSectionAsync(reader, "file", true, token);
             var disposition = ContentDispositionHeaderValue.Parse(filePart.ContentDisposition!);
             var fileName = HeaderUtilities.RemoveQuotes(disposition.FileNameStar.HasValue ? disposition.FileNameStar : disposition.FileName).Value!;
-            var error = await contents.ValidateDocumentUploadAsync(Actor(), position, values, fileName, filePart.ContentType ?? "application/octet-stream", token);
-            if (error is not null) return Results.Json(error, statusCode: error.StatusCode);
-            staged = await files.StageAsync(filePart.Body, fileName, filePart.ContentType, "document.fileLink", token);
+            staged = await buttons.ExecuteAsync(uploadHandler,
+                new WorkspaceDocumentUploadInput(Actor(), position, values, filePart.Body, fileName, filePart.ContentType ?? "application/octet-stream"), token);
             if (await ReadSectionAsync(reader, token) is not null) throw new JsonException("Unexpected multipart section.");
             // final boundary 后的 epilogue 仍计入真实请求开销，chunked 也不能绕过预算。
             await body.CopyToAsync(Stream.Null, token);
@@ -56,12 +55,13 @@ public sealed partial class WorkspaceDocumentUploadsController(WorkspaceContents
                 throw new FileLifecycleException(413, "Files.UploadTooLarge");
             return Results.Ok(staged);
         }
-        catch (Exception exception) when (exception is JsonException or InvalidDataException or FileLifecycleException or LinkQueryException or ActionDataAccessException or OperationCanceledException)
+        catch (Exception exception) when (exception is JsonException or InvalidDataException or FileLifecycleException or LinkQueryException or ActionDataAccessException or WorkspaceCreationRejectedException or OperationCanceledException)
         {
             if (staged is not null) await CancelRejectedAsync(staged.UploadId);
             if (exception is OperationCanceledException) throw;
             return exception switch
             {
+                WorkspaceCreationRejectedException rejected => Results.Json(rejected.Error, statusCode: rejected.Error.StatusCode),
                 FileLifecycleException file => FileProblem(file),
                 LinkQueryException link => LinkQueryEndpointExtensions.Problem(link),
                 ActionDataAccessException access => Results.Problem(statusCode: access.Status, title: access.Code,

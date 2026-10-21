@@ -28,24 +28,22 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
     internal static readonly DataExecutionBindingReference FileDownloadBinding = new("document.files.download", "document.files.download", "read");
     private static readonly DataExecutionInternalBinding DownloadFeedback = new("document.files.download.feedback", "document.files.download", typeof(DocumentFiles), nameof(ReadAsync));
 
-    // 固定内部来源只替换原owner候选裁决；不替代Workspace的功能/父位置或公开POST的入口声明。
+    // 尚未迁移的真副本保留自己的固定内部来源；不冒充已迁移的Workspace创建或Stage来源。
     private static ObjectOperationWriteSource.Declared InternalCreateSource(string member) => new(new(
         new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
         { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), member) });
 
     /// <inheritdoc/>
-    public async Task<StandardCrudError?> ValidateUploadAsync(IReadOnlyDictionary<string, object?> values, string fileName,
-        string contentType, CancellationToken cancellationToken = default)
-    {
-        var result = await writer.PrepareCreateCandidateAsync(resources.FindByResourceKey("document.document")!, values, InternalCreateSource(nameof(ValidateUploadAsync)), cancellationToken);
-        if (!result.Succeeded) return result.Error;
-        policy.ValidateUpload(fileName, contentType);
-        return null;
-    }
+    public Task<StandardCrudMutationResult> PrepareUploadCandidateAsync(IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken = default) =>
+        writer.PrepareCreateCandidateFactsAsync(resources.FindByResourceKey("document.document")!, values, cancellationToken);
+
+    /// <inheritdoc/>
+    public void ValidateUpload(string fileName, string contentType) => policy.ValidateUpload(fileName, contentType);
 
     /// <inheritdoc/>
     public async Task<StandardCrudMutationResult> CreateWithFilesAsync(IReadOnlyDictionary<string, object?> values,
-        DocumentUploadSet? uploads, CancellationToken cancellationToken = default)
+        DocumentUploadSet? uploads, ObjectOperationWriteSource.CreateContinuation source, CancellationToken cancellationToken = default)
     {
         if (!transactions.IsActive || db.Database.CurrentTransaction is null) throw new InvalidOperationException("Document.TransactionRequired");
         IReadOnlyList<StagedFileInfo> staged = [];
@@ -60,12 +58,10 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
             staged = await files.ReadOwnedStagedAsync(uploadIds, DocumentFileOwnerPolicy.Key, cancellationToken);
             if (staged.Select(item => item.FileId).Distinct(StringComparer.Ordinal).Count() != staged.Count) return InvalidUploadSet();
         }
-        var source = InternalCreateSource(nameof(CreateWithFilesAsync));
         var result = await operations().ExecuteAsync("document.document", ObjectOperationAction.Create, null, values, source, cancellationToken);
         if (!result.Succeeded || staged.Count == 0) return result;
         var current = await identities.ReadCurrentAsync((string)result.Detail!.Fields["EID"]!, cancellationToken);
-        var fileSource = new FileOwnerCreationContext(source.Context, (string)current.Master["EID"]!);
-        using var proof = creation.Begin(current, source: fileSource);
+        using var proof = creation.BeginCreated(current, out var fileSource);
         var stamp = audit.Current();
         var links = staged.Select((item, ordinal) => new Dictionary<string, object?>
         {

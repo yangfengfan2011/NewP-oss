@@ -106,7 +106,7 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
     }
 
     /// <inheritdoc/>
-    public async Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, FileOwnerCreationContext context, CancellationToken token = default)
+    public async Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, FileOwnerOperationContext context, CancellationToken token = default)
     {
         state.RequireTransaction();
         ValidateUploadId(uploadId);
@@ -154,7 +154,7 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
     }
 
     /// <inheritdoc/>
-    public async Task<FileUsageContent> OpenUsageAsync(FileUsageReference usageReference, FileOwnerExecutionContext context, CancellationToken token = default)
+    public async Task<FileUsageContent> OpenUsageAsync(FileUsageReference usageReference, FileOwnerOperationContext context, CancellationToken token = default)
     {
         var facts = await ReadUsageFactsAsync([usageReference], FileOwnerOperation.Download, context, token);
         var file = facts[usageReference.UsageId];

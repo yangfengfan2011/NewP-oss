@@ -34,7 +34,7 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
                 && Equals(entry.Property("LID").CurrentValue, owner.Id));
             if (entry is null || entry.State != EntityState.Added || entry.Entity is not Dictionary<string, object?> link
                 || !Equals(link["CEID"], fileId) || link.GetValueOrDefault("PEID") is not string iterationId
-                || !(operation == FileOwnerOperation.ConfirmCopy ? creation.ProvesCopyIteration(iterationId, (FileOwnerCreationContext)context!) : creation.ProvesIteration(iterationId, (FileOwnerCreationContext)context!))
+                || !(operation == FileOwnerOperation.ConfirmCopy ? creation.ProvesCopyIteration(iterationId, context!) : creation.ProvesIteration(iterationId, context!))
                 || !HasValidRole(link, operation == FileOwnerOperation.ConfirmCopy ? 100 : options.Value.MaxAttachmentsPerDocument)
                 || link.GetValueOrDefault("FileUsageId") is not null)
                 throw new FileLifecycleException(409, "Document.CreationProofRequired");
@@ -78,7 +78,7 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
             FileOwnerInternalExecutionContext source => source.ObjectId,
             FileOwnerCreationContext source => source.ObjectId,
             FileOwnerReleaseContext source => source.ObjectId,
-            _ => null
+            _ => creation.CreatedObjectId(context)
         };
         if (sourceId is not null && (documentIds.Length != 1 || documentIds[0] != sourceId))
             throw new FileLifecycleException(404, "Files.UsageUnavailable");
@@ -137,13 +137,13 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
     }
 
     // 上传与复制确认各核自己的真实新建来源与凭据；首次真实Added关联证明由下方原事务检查完成，不增加新对象read。
-    private static void ValidateCreationSource(FileOwnerOperation operation, FileOwnerOperationContext? context)
+    private void ValidateCreationSource(FileOwnerOperation operation, FileOwnerOperationContext? context)
     {
-        if (context is not FileOwnerCreationContext source || string.IsNullOrWhiteSpace(source.ObjectId)
+        if (operation == FileOwnerOperation.Confirm && creation.CreatedObjectId(context) is { Length: > 0 }) return;
+        if (operation != FileOwnerOperation.ConfirmCopy || context is not FileOwnerCreationContext source || string.IsNullOrWhiteSpace(source.ObjectId)
             || source.Source.ResourceKey != "document.document" || source.Source.ObjectId is not null
             || source.Source.Binding != new DataExecutionBindingReference("document.document.internal.create", "standardCrud.create", "submit")
-            || source.Source.Internal != new DataExecutionInternalBinding("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), operation == FileOwnerOperation.Confirm
-                ? nameof(DocumentFiles.CreateWithFilesAsync) : nameof(DocumentFiles.CopyAsync)))
+            || source.Source.Internal != new DataExecutionInternalBinding("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CopyAsync)))
             throw new FileLifecycleException(400, "Document.FileWriteContextInvalid");
     }
 

@@ -38,12 +38,12 @@ public interface IFileLifecycleService
     /// 集合总量由业务 owner 约束，结果占用 O(N) 空间；此读取不预留使用，Confirm 仍须在原业务事务内重验。
     /// </summary>
     Task<IReadOnlyList<StagedFileInfo>> ReadOwnedStagedAsync(IReadOnlyList<string> uploadIds, string ownerKey, CancellationToken token = default);
-    /// <summary>在已有平台事务内登记使用；不会保存、Flush 或独立提交。</summary>
-    Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, FileOwnerCreationContext context, CancellationToken token = default);
+    /// <summary>在已有平台事务内登记使用；owner核对其typed来源、真实创建状态与Added关联，不会保存、Flush或独立提交。</summary>
+    Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, FileOwnerOperationContext context, CancellationToken token = default);
     /// <summary>有界批量验证 owner read 与完整持久回链，按输入次序返回安全元数据。</summary>
     Task<IReadOnlyList<FileUsageMetadata>> ReadUsageMetadataAsync(IReadOnlyList<FileUsageReference> usageReferences, FileOwnerOperationContext context, CancellationToken token = default);
-    /// <summary>独立核验 read/download 和使用回链后开流；缺少物理内容是完整性故障。</summary>
-    Task<FileUsageContent> OpenUsageAsync(FileUsageReference usageReference, FileOwnerExecutionContext context, CancellationToken token = default);
+    /// <summary>由owner独立核验typed来源、read/download及持久使用回链后开流；缺少物理内容是完整性故障。</summary>
+    Task<FileUsageContent> OpenUsageAsync(FileUsageReference usageReference, FileOwnerOperationContext context, CancellationToken token = default);
     /// <summary>只取消当前 actor 的未确认暂存；已确认使用不能通过此操作删除。</summary>
     Task CancelStageAsync(string uploadId, CancellationToken token = default);
     /// <summary>在已有业务事务内标记释放和回收候选，不保存或删除字节。</summary>

@@ -90,6 +90,84 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             return await ordinary.SendAsync(request);
         }
     }
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Workspace实际Document按钮贯通Stage与保存，借身份/错租约owner及保存时撤销create不产生业务残留")]
+    public async Task WorkspaceDocumentButton_StagesAndCreatesWithTheSameOwnedLeaseAndCurrentCandidateDecision()
+    {
+        await using var fixture = await ControlledFixtureAsync();
+        using var admin = await fixture.LoginAdministratorAsync();
+        var position = await ContentAsync(fixture, admin);
+        var actor = await ActorAsync(fixture, admin, "DocumentButton333");
+        using var ordinary = actor.Client;
+        var feature = Point(fixture, "workspace.folder.createDocument");
+        var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Workspace"
+            && item.ViewKey == "workspace.folder.list" && item.Surface == "pageActions" && item.ActionKey == "createDocument"
+            && item.FeaturePositions.Contains(feature.Position));
+        var borrowed = Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Document"
+            && item.ViewKey == "document.document.list" && item.Surface == "pageActions" && item.ActionKey == "create");
+        const string code = "DOCUMENT-BUTTON-333";
+        var values = new { ECODE = code, ENAME = "正式含文件图文档", Description = "同事务首版" };
+        byte[] bytes = [1, 2, 3, 4];
+        foreach (var button in new string?[] { null, borrowed.Id })
+        {
+            using var rejected = await StageWithButtonAsync(button);
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        }
+        var empty = await ObserveBusinessAsync(fixture);
+        Assert.Empty(empty.Documents); Assert.Empty(empty.Files); Assert.Empty(empty.Leases); Assert.Empty(empty.Usages);
+        using var stage = await StageWithButtonAsync(declaration.Id);
+        Assert.True(stage.StatusCode == HttpStatusCode.OK, await stage.Content.ReadAsStringAsync());
+        var staged = await stage.Content.ReadFromJsonAsync<JsonElement>();
+        var uploadId = staged.GetProperty("uploadId").GetString()!;
+        var stagedFacts = await ObserveBusinessAsync(fixture);
+        Assert.Empty(stagedFacts.Documents); Assert.Empty(stagedFacts.Versions); Assert.Empty(stagedFacts.Iterations);
+        Assert.Empty(stagedFacts.Usages); Assert.Empty(stagedFacts.Links);
+        Assert.Equal("staged", Assert.Single(stagedFacts.Leases)["State"]);
+        Assert.Equal(actor.AccountId, Assert.Single(stagedFacts.Leases)["ActorId"]);
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(ContentPath(fixture, Assert.Single(stagedFacts.Files))));
+        var body = new { position, values, uploads = new { mainUploadId = uploadId } };
+        // Stage不签署后续许可：仍从当前候选规则重新裁决，失败保留同一暂存供纠正。
+        await SaveRuleAsync(fixture, admin, "DocumentButton333Candidate", "document.document", "ECODE", code, "create");
+        using (var denied = await SaveWithButtonAsync(ordinary, body)) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        await SaveRuleAsync(fixture, admin, "DocumentButton333Candidate", "document.document", "ECODE", "not-this-candidate", "create");
+        using (var foreign = await SaveWithButtonAsync(admin, body)) Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
+        var refused = await ObserveBusinessAsync(fixture);
+        Assert.Empty(refused.Documents); Assert.Empty(refused.Versions); Assert.Empty(refused.Iterations);
+        Assert.Empty(refused.Links); Assert.Empty(refused.References); Assert.Empty(refused.Usages);
+        Assert.Equal("staged", Assert.Single(refused.Leases)["State"]);
+        using (var saved = await SaveWithButtonAsync(ordinary, body))
+        {
+            Assert.True(saved.StatusCode == HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
+            Assert.True((await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("succeeded").GetBoolean());
+        }
+        var durable = await ObserveBusinessAsync(fixture);
+        var document = Assert.Single(durable.Documents);
+        var version = Assert.Single(durable.Versions); var iteration = Assert.Single(durable.Iterations);
+        var link = Assert.Single(durable.Links); var usage = Assert.Single(durable.Usages);
+        Assert.Equal(document["EID"], version["DocumentId"]); Assert.Equal(version["EID"], iteration["VersionId"]);
+        Assert.Equal(iteration["EID"], link["PEID"]); Assert.Equal(usage["EID"], link["FileUsageId"]);
+        Assert.Equal(link["LID"], usage["OwnerObjectId"]); Assert.Equal(link["CEID"], usage["FileId"]);
+        Assert.Equal(document["EID"], Assert.Single(durable.References)["CEID"]);
+        Assert.Equal("active", usage["State"]); Assert.Equal("confirmed", Assert.Single(durable.Leases)["State"]);
+        Assert.Equal(actor.AccountId, document["CreatedBy"]);
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(ContentPath(fixture, Assert.Single(durable.Files))));
+
+        async Task<HttpResponseMessage> StageWithButtonAsync(string? button)
+        {
+            using var request = UploadRequest(fixture, position, values, new ByteArrayContent(bytes), "main.pdf");
+            if (button is not null) request.Headers.Add("X-NewP-Button", button);
+            return await ordinary.SendAsync(request);
+        }
+        async Task<HttpResponseMessage> SaveWithButtonAsync(HttpClient client, object input)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/documents");
+            request.Headers.Add("X-NewP-Feature", feature.Position);
+            request.Headers.Add("X-NewP-Button", declaration.Id);
+            request.Content = JsonContent.Create(input, options: new JsonSerializerOptions());
+            return await client.SendAsync(request);
+        }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "普通主体的新对象read拒绝不阻断原候选创建、首次确认或相同凭据幂等确认")]
     public async Task CreationAndConfirm_PreserveNoReadAndRejectCrossedTypedCredentials()
     {

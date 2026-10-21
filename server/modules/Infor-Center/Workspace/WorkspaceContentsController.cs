@@ -18,7 +18,7 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
     ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler, WorkspaceEditValuesHandler editValuesHandler,
-    WorkspacePartCreationHandler partCreationHandler, WorkspaceFolderCreationHandler folderCreationHandler, WorkspaceRemoveReferencesHandler removeReferencesHandler,
+    WorkspacePartCreationHandler partCreationHandler, WorkspaceDocumentCreationHandler documentCreationHandler, WorkspaceFolderCreationHandler folderCreationHandler, WorkspaceRemoveReferencesHandler removeReferencesHandler,
     WorkspaceClipboardSelectionHandler clipboardSelectionHandler, WorkspacePasteReferencesHandler pasteReferencesHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
@@ -238,16 +238,17 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     public Task<IResult> CreatePart(CreateFolderInput input, CancellationToken token) => CreateObjectAsync(input, WorkspaceObjectCreation.CreatePart, token);
 
     /// <summary>在当前文件夹内创建真实图文档，不通过两个 HTTP 写入拼接。</summary>
-    [HttpPost("content/documents"), RequireFeature("workspace.folder.createDocument")]
+    [HttpPost("content/documents"), RequireFeature("workspace.folder.createDocument"), ButtonBusinessHandler(typeof(WorkspaceDocumentCreationHandler))]
     public async Task<IResult> CreateDocument(CreateWorkspaceDocumentInput input, CancellationToken token)
     {
         try
         {
             if (input.Position is null || input.Values is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["input"] = ["Position and values are required."] }, title: "REQUEST_VALIDATION_FAILED", extensions: new Dictionary<string, object?> { ["code"] = "REQUEST_VALIDATION_FAILED" });
-            var result = await operations.ExecuteAsync(WorkspaceObjectCreation.BehaviorDefinition.ObjectKey, WorkspaceObjectCreation.CreateDocument, null,
-                new Dictionary<string, object?> { ["ActorId"] = Actor(), ["Position"] = input.Position, ["Values"] = input.Values, ["Uploads"] = input.Uploads }, token);
+            var result = await buttonBusiness.ExecuteAsync(documentCreationHandler,
+                new WorkspaceDocumentCreationInput(Actor(), input.Position, input.Values, input.Uploads), token);
             return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
         }
+        catch (WorkspaceCreationRejectedException exception) { return Results.Json(exception.Error, statusCode: exception.Error.StatusCode); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
         catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)

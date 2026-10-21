@@ -53,16 +53,16 @@ public sealed class DocumentFileExecutionContractTests
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
         var plan = result.Plan!;
         var owner = Assert.Single(plan.Modules, item => item.ModuleId == "Document");
-        var create = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "document.document.create");
-        Assert.Equal(("document.document.list", "pageActions", "create", "standardCrud.create"),
-            (create.ViewKey, create.Surface, create.ActionKey, create.Provider));
-        var candidate = Assert.Single(create.Requirements!);
-        Assert.Equal(("candidate", "submit", "candidate"), (candidate.Role, candidate.Stage, candidate.Shape));
-        Assert.Equal(new[] { "create" }, Assert.Single(candidate.AnyOf));
+        var create = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "document.document.create");
+        Assert.Equal(("document.document.list", "pageActions", "create", "Document"),
+            (create.ViewKey, create.Surface, create.ActionKey, create.Object));
+        Assert.Equal(new[] { "create" }, create.Actions);
+        Assert.Null(create.Requirements);
+        Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "document.document.create");
         var internalCreate = Assert.Single(owner.DataExecutions, item => item.Key == "document.document.internal.create");
         Assert.Equal("internal", internalCreate.Boundary);
-        Assert.Equal(new[] { "ICP.Platform.Modules.Document.DocumentFiles.ValidateUploadAsync", "ICP.Platform.Modules.Document.DocumentFiles.CreateWithFilesAsync",
-            "ICP.Platform.Modules.Document.DocumentFiles.ValidateCopyCandidateAsync", "ICP.Platform.Modules.Document.DocumentFiles.CopyAsync" }, internalCreate.FixedBindings.Select(item => item.Caller));
+        Assert.Equal(new[] { "ICP.Platform.Modules.Document.DocumentFiles.ValidateCopyCandidateAsync", "ICP.Platform.Modules.Document.DocumentFiles.CopyAsync" },
+            internalCreate.FixedBindings.Select(item => item.Caller));
         var release = Assert.Single(owner.DataExecutions, item => item.Key == "document.files.release");
         Assert.Equal("internal", release.Boundary);
         Assert.Equal("ICP.Platform.Modules.Document.DocumentFileOwnerPolicy.VerifyBatchAsync", Assert.Single(release.FixedBindings).Caller);

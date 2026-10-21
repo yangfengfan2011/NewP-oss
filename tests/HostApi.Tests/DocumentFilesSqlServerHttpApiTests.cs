@@ -327,8 +327,9 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             var context = new DefaultHttpContext();
             context.Request.ContentType = $"multipart/form-data; boundary={boundary}";
             context.Request.Body = input;
-            var controller = new WorkspaceDocumentUploadsController(scope.ServiceProvider.GetRequiredService<WorkspaceContents>(),
-                scope.ServiceProvider.GetRequiredService<IFileLifecycleService>(), Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceDocumentUploadsController>.Instance)
+            var controller = new WorkspaceDocumentUploadsController(scope.ServiceProvider.GetRequiredService<IFileLifecycleService>(),
+                scope.ServiceProvider.GetRequiredService<ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor>(),
+                scope.ServiceProvider.GetRequiredService<WorkspaceDocumentUploadHandler>(), Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceDocumentUploadsController>.Instance)
             { ControllerContext = new() { HttpContext = context } };
             var failure = await Assert.ThrowsAsync<BadHttpRequestException>(() => controller.Stage(CancellationToken.None));
             Assert.Same(input.Rejection, failure);
@@ -1008,7 +1009,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
     private static ICP.Platform.Kernel.ModulePlanning.ActionDataAccessRequirement WorkspaceObjectDeclaration(
         BusinessAuditHostFixture fixture, string execution, string behavior) =>
         Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
-            item => (item.Execution == execution || item.BusinessBinding == execution) && item.FeaturePositions.Contains(Point(fixture, behavior).Position));
+            item => (item.Execution == execution && item.BusinessBinding is null || item.BusinessBinding == behavior) && item.FeaturePositions.Contains(Point(fixture, behavior).Position));
 
     private static async Task<JsonElement> ProblemAsync(HttpResponseMessage response, HttpStatusCode status, string code)
     {

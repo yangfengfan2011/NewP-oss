@@ -187,47 +187,41 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 ? await CreatePartFromButtonAsync(context, continuation, operations, cancellationToken)
                 : throw new InvalidOperationException("WORKSPACE_BUTTON_CONTINUATION_REQUIRED");
         if (context.Action != WorkspaceObjectCreation.CreateDocument) throw new InvalidOperationException("Unsupported Workspace creation action.");
-        const string model = "Document";
-        var actor = (string)context.Values["ActorId"]!;
-        var position = (WorkspacePosition)context.Values["Position"]!;
-        var input = (IReadOnlyDictionary<string, JsonElement>)context.Values["Values"]!;
-        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var (field, value) in input)
-        {
-            if (field is not ("ECODE" or "ENAME" or "Description"))
-                throw new LinkQueryException(400, "Workspace.ServerFieldForbidden", field);
-            if (value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
-                throw new LinkQueryException(400, "Workspace.InvalidCreateInput", field);
-            values[field] = value.ValueKind == JsonValueKind.Null ? null : value.GetString();
-        }
-        var binding = WorkspaceObjectExecutions.CreateDocumentBinding("submit");
-        executionAccess.Validate([binding], "workspace.folder");
-        await LockGraphAsync(cancellationToken);
-        var path = await ResolveClipboardPositionAsync(binding, "parent", position, cancellationToken);
-        RequireContainer(position, path, model);
-        if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == model))
+        if (context.Values.GetValueOrDefault(WorkspaceDocumentCreationHandler.ContinuationField) is not WorkspaceDocumentCreationContinuation document)
+            throw new InvalidOperationException("WORKSPACE_BUTTON_CONTINUATION_REQUIRED");
+        return await CreateDocumentFromButtonAsync(context, document, cancellationToken);
+    }
+
+    // 原图锁与parent/read/edit先于读取暂存；完整Document候选只由实际writer形成，Files仍共享该root事务。
+    private async ValueTask<StandardCrudMutationResult> CreateDocumentFromButtonAsync(ObjectOperationContext context,
+        WorkspaceDocumentCreationContinuation continuation, CancellationToken token)
+    {
+        var input = continuation.ReadInput(context);
+        var values = ReadValues(input.Values, "Document", true);
+        await LockGraphAsync(token);
+        var path = await ResolveWritableButtonPositionAsync(input.ActorId, input.Position, token);
+        RequireContainer(input.Position, path, "Document");
+        if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == "Document"))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
-        var result = await documentFiles.CreateWithFilesAsync(values, context.Values.GetValueOrDefault("Uploads") as DocumentUploadSet, cancellationToken);
+        var source = context.ContinueCreate("document.document", "Document", (candidate, persist, cancellation) =>
+            continuation.Execute(new(candidate, persist), cancellation));
+        var result = await documentFiles.CreateWithFilesAsync(values, input.Uploads, source, token);
         if (!result.Succeeded) return result;
-        var id = result.Detail?.Fields.GetValueOrDefault("EID") as string
-            ?? throw new InvalidOperationException("Created object identity is missing.");
-        var linkId = await RegisterCreatedReferenceAsync(path.FolderId, model, id, cancellationToken);
-        await referenceAudit.AddedAsync(linkId, path.FolderId, new(model, id), cancellationToken);
-        // 不执行展示读取；事务完成后由独立列表读取决定新对象的可见性。
+        var id = result.Detail?.Fields.GetValueOrDefault("EID") as string ?? throw new InvalidOperationException("Created object identity is missing.");
+        var link = await RegisterCreatedReferenceAsync(path.FolderId, "Document", id, token);
+        await referenceAudit.AddedAsync(link, path.FolderId, new("Document", id), token);
         return StandardCrudMutationResult.Success();
     }
 
-    /// <summary>上传前只读重验完整位置、父 edit 与正式 Document 候选，不取得图锁或创建对象。</summary>
-    public async Task<StandardCrudError?> ValidateDocumentUploadAsync(string actorId, WorkspacePosition position,
-        IReadOnlyDictionary<string, JsonElement> input, string fileName, string contentType, CancellationToken token)
+    // 原Stage准入仍在外层事务之外，不取得图锁；完整候选随后由实际上传handler交平台检查。
+    internal async Task<StandardCrudMutationResult> PrepareDocumentUploadCandidateAsync(string actorId, WorkspacePosition position,
+        IReadOnlyDictionary<string, JsonElement> input, CancellationToken token)
     {
-        var binding = WorkspaceObjectExecutions.CreateDocumentBinding("prepare");
-        executionAccess.Validate([binding], "workspace.folder");
-        var path = await ResolveClipboardPositionAsync(binding, "parent", position, token);
+        var path = await ResolveWritableButtonPositionAsync(actorId, position, token);
         RequireContainer(position, path, "Document");
         if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == "Document"))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
-        return await documentFiles.ValidateUploadAsync(ReadValues(input, "Document"), fileName, contentType, token);
+        return await documentFiles.PrepareUploadCandidateAsync(ReadValues(input, "Document"), token);
     }
 
     // 锁后位置只解析一次；目标规则、所属行为和全部引用清理在同一对象操作事务内完成。

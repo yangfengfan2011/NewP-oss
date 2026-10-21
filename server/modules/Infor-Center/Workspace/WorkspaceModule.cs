@@ -29,6 +29,8 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceMutationHandler>();
         services.AddScoped<WorkspaceEditValuesHandler>();
         services.AddScoped<WorkspacePartCreationHandler>();
+        services.AddScoped<WorkspaceDocumentCreationHandler>();
+        services.AddScoped<WorkspaceDocumentUploadHandler>();
         services.AddScoped<WorkspaceFolderCreationHandler>();
         services.AddScoped<WorkspaceHistoryButtonHandler>();
         services.AddScoped<WorkspaceOwnershipTransferButtonHandler>();

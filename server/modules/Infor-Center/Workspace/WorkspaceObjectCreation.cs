@@ -10,7 +10,7 @@ public sealed class WorkspaceObjectCreation(Func<WorkspaceContents> resolveConte
     public static readonly ObjectOperationAction CreateDocument = new("createDocument");
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new(
         "workspace.content.creation", "Workspace", "WorkspaceFolderContent",
-        [CreatePart, CreateDocument], [], ["Position", "ActorId", WorkspacePartCreationHandler.ContinuationField],
+        [CreatePart, CreateDocument], [], ["Position", "ActorId", WorkspacePartCreationHandler.ContinuationField, WorkspaceDocumentCreationHandler.ContinuationField],
         [new(CreatePart, new("part.part", ObjectOperationAction.Create)),
          new(CreateDocument, new("document.document", ObjectOperationAction.Create))]);
     public ObjectBehaviorDefinition Definition => BehaviorDefinition;

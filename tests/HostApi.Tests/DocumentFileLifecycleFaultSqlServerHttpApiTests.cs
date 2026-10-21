@@ -371,7 +371,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
             var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
             var transaction = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
             var result = await transaction.ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(service.ConfirmUsageAsync(uploadId, owner,
-                new(new(new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
+                new FileOwnerCreationContext(new(new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
                 { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CreateWithFilesAsync)) }, documentId), token)));
             Assert.DoesNotContain(db.ChangeTracker.Entries(), entry => entry.Metadata.Name == "DocumentFileLink" && entry.State == EntityState.Added);
             return result;

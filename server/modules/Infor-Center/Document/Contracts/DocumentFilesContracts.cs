@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Modules.Files.Contracts;
 
 namespace ICP.Platform.Modules.Document.Contracts;
@@ -15,13 +16,16 @@ public sealed record DocumentUploadSet
 /// <summary>Document 拥有完整文件创建、读取和下载，Workspace 不访问其私有表。</summary>
 public interface IDocumentFiles
 {
-    /// <summary>复用正式字段与候选 create 规则预检；只返回失败信息，不登记对象或授权凭证。</summary>
-    Task<StandardCrudError?> ValidateUploadAsync(IReadOnlyDictionary<string, object?> values, string fileName,
-        string contentType, CancellationToken cancellationToken = default);
+    /// <summary>只准备本次完整Document候选供实际按钮检查，不判权、登记对象或签署后续保存许可。</summary>
+    Task<StandardCrudMutationResult> PrepareUploadCandidateAsync(IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>候选入口获准后按原顺序验证上传格式；Files仍独立执行自己的接收边界。</summary>
+    void ValidateUpload(string fileName, string contentType);
 
     /// <summary>在当前对象事务内经原 Create 建立首版、版次与真实文件关联；省略选择保留 metadata-only 行为。</summary>
     Task<StandardCrudMutationResult> CreateWithFilesAsync(IReadOnlyDictionary<string, object?> values,
-        DocumentUploadSet? uploads, CancellationToken cancellationToken = default);
+        DocumentUploadSet? uploads, ObjectOperationWriteSource.CreateContinuation source, CancellationToken cancellationToken = default);
 
     /// <summary>沿实际当前身份与 owner read 获取有界安全列表；不会公开存储身份或路径。</summary>
     Task<DocumentFileList> ReadAsync(string documentId, CancellationToken cancellationToken = default);

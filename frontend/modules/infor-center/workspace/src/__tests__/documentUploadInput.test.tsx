@@ -17,14 +17,14 @@ vi.mock('../workspaceDocumentUpload', async importOriginal => ({
 const scope = { spaceId: 'space', rootFolderId: 'root', linkIds: '["content-folder-link"]' };
 // 本文件只测输入/会话生命周期；声明身份取正式编译fixture，实际Provider透传由PageEntry消费者证明。
 const source = compiled.declarations.find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === 'createDocument') as unknown as ActionDataAccessRequirement;
-const createAction = { key: 'createDocument', labelKey: 'Create', inputKey: 'createObject', dataAccess: source };
+const createAction = { key: 'createDocument', labelKey: 'Create', inputKey: 'createObject', buttonId: source.id, dataAccess: source };
 const staged: DocumentStage = { uploadId: 'FileUploadLease_11111111111111111111111111111111', fileId: 'private', fileName: 'main.pdf', length: 4, contentType: 'application/pdf', expiresAt: '2026-10-15T00:00:00Z' };
 const roots: { root: Root; element: HTMLElement }[] = [];
 let currentDraft: WorkspaceDocumentDraft;
 const state = vi.fn();
-function Harness({ queryScope = scope, declarationId = source.id }: { queryScope?: Record<string, unknown>; declarationId?: string }) {
+function Harness({ queryScope = scope, buttonId = source.id }: { queryScope?: Record<string, unknown>; buttonId?: string }) {
   const [value, change] = useState<WorkspaceDocumentDraft>({ ECODE: 'FILE', ENAME: '图文档' }); currentDraft = value;
-  const context: StandardCrudActionInputRenderContext = { action: { ...createAction, dataAccess: { ...source, id: declarationId } },
+  const context: StandardCrudActionInputRenderContext = { action: { ...createAction, buttonId, dataAccess: { ...source, id: buttonId } }, buttonId,
     value, onChange: next => change(next as WorkspaceDocumentDraft), queryScope, featurePosition: 'create-position', onDraftStateChange: state };
   return <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{}}><WorkspaceDocumentCreateInput {...context} /></LocalizationProvider>;
 }
@@ -87,7 +87,7 @@ it.each(['position', 'declaration'] as const)('isolates late response after %s c
   vi.mocked(stageDocumentFile).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
   const { root, element } = await mount(); await choose(element);
   const signal = vi.mocked(stageDocumentFile).mock.calls[0][4];
-  await act(async () => root.render(changed === 'position' ? <Harness queryScope={{ ...scope, rootFolderId: 'other' }} /> : <Harness declarationId="other-declaration" />));
+  await act(async () => root.render(changed === 'position' ? <Harness queryScope={{ ...scope, rootFolderId: 'other' }} /> : <Harness buttonId="other-declaration" />));
   expect(signal.aborted).toBe(true);
   await act(async () => finish(staged)); expect(currentDraft.session?.getSnapshot().choices.find(choice => choice.role === 'main')?.staged?.uploadId).toBeUndefined();
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
@@ -105,7 +105,7 @@ it.each(['before-response', 'body-read', 'truncated-json'] as const)('retains un
   });
   vi.stubGlobal('fetch', request);
   await act(async () => {
-    await expect(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position', action: createAction }))
+    await expect(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position', action: createAction, buttonId: createAction.buttonId }))
       .rejects.toMatchObject({ code: 'Platform.MutationOutcomeUnknown', ...(failure === 'before-response' ? {} : { status: 200 }),
         cause: failure === 'truncated-json' ? expect.any(SyntaxError) : cause });
   });
@@ -140,7 +140,7 @@ it('keeps the live session across rerenders after StrictMode replay and rejects 
   expect(session.canSubmit()).toBe(true);
   const request = vi.fn(); vi.stubGlobal('fetch', request);
   await act(async () => root.unmount()); roots.splice(0);
-  await expect(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position', action: createAction })).rejects.toThrow('上传会话');
+  await expect(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position', action: createAction, buttonId: createAction.buttonId })).rejects.toThrow('上传会话');
   expect(request).not.toHaveBeenCalled();
   expect(cancelDocumentStage).toHaveBeenCalledTimes(1);
 });

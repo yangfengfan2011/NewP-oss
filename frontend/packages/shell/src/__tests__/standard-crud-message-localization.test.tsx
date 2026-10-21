@@ -44,7 +44,8 @@ it.each(['createPart', 'createDocument'] as const)('retranslates the real Worksp
     if (url.pathname === '/api/workspace/folders/candidates') return new Response(JSON.stringify({ items: [{ id: 'draft-object', name: '保留的业务草稿' }], total: 1, page: 1, pageSize: 20 }));
     if (url.pathname === path) {
       const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
-      expect(headers.get(scenario === 'createPart' ? 'X-NewP-Button' : 'X-NewP-Data-Declaration')).toBe(dataAccess.id);
+      expect(headers.get('X-NewP-Button')).toBe(dataAccess.id);
+      expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
     }
     if (url.pathname === path) return new Response(JSON.stringify({ title: 'Workspace.ParentWriteDenied', code: 'Workspace.ParentWriteDenied', reasonKey: 'Workspace.ParentWriteDenied', status: 403 }), { status: 403 });
     throw new Error(`Unexpected request ${url.pathname}`);

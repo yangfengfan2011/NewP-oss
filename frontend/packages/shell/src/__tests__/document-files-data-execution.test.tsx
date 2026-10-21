@@ -39,7 +39,7 @@ it('downloads through the actual Document route entry, metadata Provider and sum
     return json(relative === 'models/Document.model.json' ? model : readComponentJson('Document', 'metadata/' + relative));
   }));
   const reads = projection.dataAccess!.filter(item => item.execution === 'document.document.read');
-  const downloads = projection.dataAccess!.filter(item => item.execution === 'document.files.download');
+  const downloads = projection.dataAccess!.filter(item => item.businessBinding === 'document.document.download');
   expect(reads).toHaveLength(1); expect(downloads).toHaveLength(1);
   const [read] = reads; const [download] = downloads;
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...bindings }], 'document-file-execution');
@@ -64,7 +64,8 @@ it('downloads through the actual Document route entry, metadata Provider and sum
     requests.push(request);
     const isDownload = path.endsWith('/content');
     const expected = isDownload ? download : read;
-    if (request.headers.get('X-NewP-Data-Declaration') !== expected.id
+    if (request.headers.get(isDownload ? 'X-NewP-Button' : 'X-NewP-Data-Declaration') !== expected.id
+        || request.headers.has(isDownload ? 'X-NewP-Data-Declaration' : 'X-NewP-Button')
         || request.headers.get('X-NewP-Feature') !== (isDownload ? downloadPosition : entry.featurePosition))
       return json({ code: 'ActionDataAccess.DeclarationInvalid' }, 400);
     if (path === '/api/document/documents/document-one') return json({ fields,
@@ -108,7 +109,8 @@ it('downloads through the actual Document route entry, metadata Provider and sum
   const content = requests.filter(request => new URL(request.url).pathname.endsWith('/content'));
   expect(content).toHaveLength(1);
   expect(content[0].headers.get('X-NewP-Feature')).toBe(downloadPosition);
-  expect(content[0].headers.get('X-NewP-Data-Declaration')).toBe(download.id);
+  expect(content[0].headers.get('X-NewP-Button')).toBe(download.id);
+  expect(content[0].headers.has('X-NewP-Data-Declaration')).toBe(false);
   expect(createUrl).toHaveBeenCalledTimes(1); expect(revokeUrl).toHaveBeenCalledWith('blob:document-file');
   denied = true;
   await act(async () => button()!.click());
@@ -120,7 +122,7 @@ it('downloads through the actual Document route entry, metadata Provider and sum
 
 it.each(['missing-projection', 'duplicate-projection', 'missing-authoring'] as const)('rejects a featureAction binding with %s', mode => {
   const document = readComponentJson('Document', 'metadata/views/DocumentDetail.view.json');
-  const download = projection.dataAccess!.filter(item => item.execution === 'document.files.download');
+  const download = projection.dataAccess!.filter(item => item.businessBinding === 'document.document.download');
   expect(download).toHaveLength(1);
   if (mode === 'missing-authoring') delete document.view.featureActions[0].dataAccess;
   const declarations = mode === 'missing-projection' ? projection.dataAccess!.filter(item => item.id !== download[0].id)
@@ -130,7 +132,7 @@ it.each(['missing-projection', 'duplicate-projection', 'missing-authoring'] as c
 
 it('cancels a pending download when its declaration disappears at the same object and feature position', async () => {
   const reads = projection.dataAccess!.filter(item => item.execution === 'document.document.read');
-  const downloads = projection.dataAccess!.filter(item => item.execution === 'document.files.download');
+  const downloads = projection.dataAccess!.filter(item => item.businessBinding === 'document.document.download');
   expect(reads).toHaveLength(1); expect(downloads).toHaveLength(1);
   const [read] = reads; const [download] = downloads;
   expect(download.featurePositions).toHaveLength(1); const [downloadPosition] = download.featurePositions;
@@ -148,7 +150,7 @@ it('cancels a pending download when its declaration disappears at the same objec
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   const render = (enabled: boolean) => <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]}
     catalogs={{ zhs: {} }}><PlatformQueryProvider scopeKey="document-file-cancellation"><DocumentFilesPanel documentId="document-one"
-      featurePosition={readPosition[0]} dataAccess={read} downloadPosition={downloadPosition} downloadDataAccess={enabled ? download : undefined} title="文件" />
+      featurePosition={readPosition[0]} dataAccess={read} downloadPosition={downloadPosition} downloadButtonId={enabled ? download.id : undefined} title="文件" />
     </PlatformQueryProvider></LocalizationProvider>;
   onTestFinished(async () => { await act(async () => root.unmount()); container.remove(); anchor.mockRestore(); vi.unstubAllGlobals(); });
   await act(async () => root.render(render(true)));
@@ -156,7 +158,8 @@ it('cancels a pending download when its declaration disappears at the same objec
   await vi.waitFor(() => expect(button()).not.toBeNull());
   await act(async () => button().click());
   await vi.waitFor(() => expect(pending).toBeDefined());
-  expect(pending!.headers.get('X-NewP-Data-Declaration')).toBe(download.id);
+  expect(pending!.headers.get('X-NewP-Button')).toBe(download.id);
+  expect(pending!.headers.has('X-NewP-Data-Declaration')).toBe(false);
   await act(async () => root.render(render(false)));
   expect(pending!.signal.aborted).toBe(true);
   expect(button().disabled).toBe(true);
@@ -199,7 +202,7 @@ it('creates through the actual Document list PageEntry and its compiled candidat
     const relative = path.slice(projection.metadataBasePath.length + 1);
     return json(relative === 'models/Document.model.json' ? model : readComponentJson('Document', 'metadata/' + relative));
   }));
-  const creates = projection.dataAccess!.filter(item => item.execution === 'document.document.create');
+  const creates = projection.dataAccess!.filter(item => item.businessBinding === 'document.document.create');
   const lists = projection.dataAccess!.filter(item => item.execution === 'document.document.list');
   expect(creates).toHaveLength(1); expect(lists).toHaveLength(1);
   const [create] = creates; const [list] = lists;
@@ -221,7 +224,8 @@ it('creates through the actual Document list PageEntry and its compiled candidat
     if (path.endsWith('/antiforgery-token')) return json({ requestToken: 'token' });
     requests.push(request);
     const expected = request.method === 'POST' ? create : list;
-    if (request.headers.get('X-NewP-Data-Declaration') !== expected.id
+    if (request.headers.get(request.method === 'POST' ? 'X-NewP-Button' : 'X-NewP-Data-Declaration') !== expected.id
+        || request.headers.has(request.method === 'POST' ? 'X-NewP-Data-Declaration' : 'X-NewP-Button')
         || request.headers.get('X-NewP-Feature') !== (request.method === 'POST' ? createPosition : entry.featurePosition))
       return json({ code: 'ActionDataAccess.DeclarationInvalid' }, 400);
     if (path === '/api/document/documents' && request.method === 'POST') return json({ succeeded: true });
@@ -255,7 +259,8 @@ it('creates through the actual Document list PageEntry and its compiled candidat
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer-open')).toBeNull());
   const submitted = requests.filter(request => request.method === 'POST');
   expect(submitted[0].headers.get('X-NewP-Feature')).toBe(createPosition);
-  expect(submitted[0].headers.get('X-NewP-Data-Declaration')).toBe(create.id);
+  expect(submitted[0].headers.get('X-NewP-Button')).toBe(create.id);
+  expect(submitted[0].headers.has('X-NewP-Data-Declaration')).toBe(false);
   expect(await submitted[0].clone().json()).toEqual({ ECODE: 'D-CREATE-313', ENAME: '真实声明创建', Description: null });
   await vi.waitFor(() => expect(requests.filter(request => request.method === 'GET')).toHaveLength(2));
   expect(requests.every(request => new URL(request.url).pathname === '/api/document/documents')).toBe(true);

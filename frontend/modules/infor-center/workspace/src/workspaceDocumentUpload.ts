@@ -1,5 +1,5 @@
 import { platformFetch, platformUpload } from '@icp-platform/core';
-import { readStandardCrudRequestError, StandardCrudRequestError } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, standardCrudRequestHeaders, StandardCrudRequestError } from '@icp-platform/sdk';
 import { workspacePosition } from './workspacePosition';
 import type { WorkspaceDocumentSession } from './workspaceDocumentSession';
 
@@ -16,13 +16,13 @@ export function documentBusinessValues(input: unknown): Record<string, unknown> 
 
 /** 显式用户选择触发单上传，正式 transport 提供真实进度与取消。 */
 export async function stageDocumentFile(file: File, draft: unknown, scope: Record<string, unknown> | undefined, featurePosition: string | undefined,
-  signal: AbortSignal, onProgress: (loaded: number, total?: number) => void, declarationId?: string): Promise<DocumentStage> {
-  if (!declarationId) throw new StandardCrudRequestError('缺少当前图文档上传声明。', 400);
+  signal: AbortSignal, onProgress: (loaded: number, total?: number) => void, buttonId?: string): Promise<DocumentStage> {
+  if (!buttonId) throw new StandardCrudRequestError('缺少当前图文档上传声明。', 400);
   const body = new FormData();
   body.append('position', JSON.stringify(workspacePosition(scope))); body.append('values', JSON.stringify(documentBusinessValues(draft)));
   body.append('file', file);
   const response = await platformUpload('/api/workspace/content/document-uploads', body,
-    { signal, onProgress, headers: { ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}), 'X-NewP-Data-Declaration': declarationId } });
+    { signal, onProgress, headers: standardCrudRequestHeaders({ featurePosition, buttonId }) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   return await response.json() as DocumentStage;
 }
@@ -36,10 +36,10 @@ export async function cancelDocumentStage(uploadId: string, featurePosition?: st
 
 /** 显式保存只投影业务字段与上传身份；成功回执读不完整仍保留未知提交语义。 */
 export async function saveDocument(values: unknown, uploads: { mainUploadId: string; attachmentUploadIds: string[] },
-  scope: Record<string, unknown> | undefined, featurePosition?: string, declarationId?: string): Promise<unknown> {
-  if (!declarationId) throw new StandardCrudRequestError('缺少当前图文档创建声明。', 400);
+  scope: Record<string, unknown> | undefined, featurePosition?: string, buttonId?: string): Promise<unknown> {
+  if (!buttonId) throw new StandardCrudRequestError('缺少当前图文档创建声明。', 400);
   const response = await platformFetch('/api/workspace/content/documents', { method: 'POST',
-    headers: { ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}), 'X-NewP-Data-Declaration': declarationId, 'Content-Type': 'application/json' },
+    headers: { ...standardCrudRequestHeaders({ featurePosition, buttonId }), 'Content-Type': 'application/json' },
     body: JSON.stringify({ position: workspacePosition(scope), values: documentBusinessValues(values),
       uploads: { mainUploadId: uploads.mainUploadId, ...(uploads.attachmentUploadIds.length ? { attachmentUploadIds: uploads.attachmentUploadIds } : {}) } }) });
   if (!response.ok) throw await readStandardCrudRequestError(response);

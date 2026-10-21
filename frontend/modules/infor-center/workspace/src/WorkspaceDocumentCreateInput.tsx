@@ -13,7 +13,7 @@ import { documentBusinessValues, type WorkspaceDocumentDraft } from './workspace
 import { WorkspaceDocumentSession, type DocumentUploadSnapshot, type UploadChoice } from './workspaceDocumentSession';
 
 /** Document 输入只持有本次暂存；共享 Drawer 继续拥有草稿保护、提交和成功刷新。 */
-export default function WorkspaceDocumentCreateInput({ value, onChange, queryScope, featurePosition, action, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
+export default function WorkspaceDocumentCreateInput({ value, onChange, queryScope, featurePosition, buttonId, action, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
   const { t } = useLocalization();
   const inputId = useId(); const attachmentInputId = useId();
   const fileInput = useRef<HTMLInputElement>(null); const attachmentInput = useRef<HTMLInputElement>(null);
@@ -21,16 +21,16 @@ export default function WorkspaceDocumentCreateInput({ value, onChange, querySco
   const latest = useRef({ draft, onChange, queryScope }); latest.current = { draft, onChange, queryScope };
   const [view, setView] = useState<{ session: WorkspaceDocumentSession; snapshot: DocumentUploadSnapshot }>();
   const positionKey = JSON.stringify(queryScope);
-  const declarationId = action.dataAccess?.id;
+  const inputButtonId = buttonId && buttonId === action.buttonId ? buttonId : undefined;
   // 每次实际生命周期 setup 创建独立会话；StrictMode 重挂载不能复用已经结束的实例。
   useEffect(() => {
-    const session = new WorkspaceDocumentSession(latest.current.queryScope, featurePosition, () => latest.current.draft, declarationId);
+    const session = new WorkspaceDocumentSession(latest.current.queryScope, featurePosition, () => latest.current.draft, inputButtonId);
     const observe = () => setView({ session, snapshot: session.getSnapshot() });
     const unsubscribe = session.subscribe(observe);
     observe();
     latest.current.onChange({ ...documentBusinessValues(latest.current.draft), session });
     return () => { unsubscribe(); session.close(); };
-  }, [positionKey, featurePosition, declarationId]);
+  }, [positionKey, featurePosition, inputButtonId]);
   const uploads = view?.snapshot.choices ?? [];
   const main = uploads.find(item => item.role === 'main'); const attachments = uploads.filter(item => item.role === 'attachment');
   const fieldsReady = ['ECODE', 'ENAME'].every(key => typeof draft[key] === 'string' && String(draft[key]).trim().length > 0);

@@ -34,11 +34,11 @@ it.each(['committed', 'unknown'] as const)('unmounts the real input on authority
   function Harness({ feature }: { feature: string }) {
     const [value, setValue] = useState<unknown>({ ECODE: 'DOC', ENAME: '图文档' }); draft = value;
     const execution = useStandardCrudActionExecution({ refresh });
-    return <StandardCrudActionReviewDialog action={{ key: 'createDocument', labelKey: '新建图文档', inputKey: 'createObject', dataAccess }}
+    return <StandardCrudActionReviewDialog action={{ key: 'createDocument', labelKey: '新建图文档', inputKey: 'createObject', buttonId: dataAccess.id, dataAccess }}
       title="新建图文档" featurePosition={feature} queryScope={scope} value={value} onChange={setValue}
       inputRenderer={resource.actionInputRenderers!.createObject} pending={execution.pendingKey !== null} onCancel={cancel}
       onConfirm={() => { saving = execution.execute({ key: 'createDocument', handler: resource.actionHandlers!.createDocument,
-        context: { input: value, queryScope: scope, featurePosition: feature, action: { key: 'createDocument', labelKey: '新建图文档', dataAccess } } }); }} />;
+        context: { input: value, queryScope: scope, featurePosition: feature, action: { key: 'createDocument', labelKey: '新建图文档', buttonId: dataAccess.id, dataAccess }, buttonId: dataAccess.id } }); }} />;
   }
   const element = document.createElement('div'); document.body.append(element); const root = createRoot(element);
   try {
@@ -55,7 +55,7 @@ it.each(['committed', 'unknown'] as const)('unmounts the real input on authority
     await act(async () => root.render(<Harness feature="changed-position" />));
     expect(document.querySelector('.ant-drawer input[type=file]')).toBeNull();
     expect(cancel).not.toHaveBeenCalled();
-    await expect(resource.actionHandlers!.createDocument({ input: oldDraft, queryScope: scope, featurePosition, action: { key: 'createDocument', labelKey: '新建图文档', dataAccess } })).rejects.toThrow('上传会话');
+    await expect(resource.actionHandlers!.createDocument({ input: oldDraft, queryScope: scope, featurePosition, action: { key: 'createDocument', labelKey: '新建图文档', buttonId: dataAccess.id, dataAccess }, buttonId: dataAccess.id })).rejects.toThrow('上传会话');
     await act(async () => { finish(new Response(outcome === 'committed' ? '{"succeeded":true}' : '{"succeeded":', { status: 200 })); await saving; });
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledTimes(outcome === 'committed' ? 1 : 0);

@@ -90,6 +90,11 @@ async function renderMixedProperties(type: 'part' | 'document') {
     if (url.pathname.endsWith('/path')) return json(workspaceTreePath(url.searchParams.get('nodeKey')!, ['root', 'shared'], ['公共空间', '当前共享文件夹']));
     if (url.pathname.endsWith('/children')) return json(workspaceTreeChildren(url.searchParams.get('nodeKey')!, [{ linkId: 'shared-link', associatedObject: { id: 'shared' }, fields: { Name: '当前共享文件夹' }, hasChildren: false }]));
     if (url.pathname === `/api/workspace/content/${type === 'part' ? 'parts' : 'documents'}`) {
+      if (type === 'document') {
+        const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+        expect(headers.get('X-NewP-Button')).toBe(formalDataAccessFor('workspace.folder.list', 'pageActions', 'createDocument').id);
+        expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
+      }
       writes.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
       return json({ succeeded: true });
     }
@@ -194,6 +199,8 @@ it.each(['part', 'document'] as const)('creates %s with draft confirmation and o
     expect(JSON.parse(String(body.get('position')))).toEqual({ spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] });
     expect(JSON.parse(String(body.get('values')))).toEqual({ ECODE: 'NEW-CODE', ENAME: '文件夹内新对象' });
     expect(new Headers(options?.headers).get('X-NewP-Feature')).toBe('workspace-createDocument');
+    expect(new Headers(options?.headers).get('X-NewP-Button')).toBe(formalDataAccessFor('workspace.folder.list', 'pageActions', 'createDocument').id);
+    expect(new Headers(options?.headers).has('X-NewP-Data-Declaration')).toBe(false);
     expect(body.get('file')).toBeInstanceOf(File);
     return new Response(JSON.stringify({ uploadId, fileId: 'FileRecord_internal', fileName: 'main.pdf', length: 4,
       contentType: 'application/pdf', expiresAt: '2026-10-14T00:00:00Z' }));

@@ -16,14 +16,14 @@ vi.mock('../workspaceDocumentUpload', async importOriginal => ({
 const scope = { spaceId: 'space', rootFolderId: 'root', linkIds: '["content-folder-link"]' };
 // 本文件只测输入/会话生命周期；声明身份取正式编译fixture，实际Provider透传由PageEntry消费者证明。
 const source = compiled.declarations.find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === 'createDocument') as unknown as ActionDataAccessRequirement;
-const createAction = { key: 'createDocument', labelKey: 'Create', inputKey: 'createObject', dataAccess: source };
+const createAction = { key: 'createDocument', labelKey: 'Create', inputKey: 'createObject', buttonId: source.id, dataAccess: source };
 const roots: { root: Root; element: HTMLElement }[] = [];
 let currentDraft: WorkspaceDocumentDraft;
 const state = vi.fn();
 function Harness({ queryScope = scope }: { queryScope?: Record<string, unknown> }) {
   const [value, change] = useState<WorkspaceDocumentDraft>({ ECODE: 'COLLECTION', ENAME: '集合图文档' }); currentDraft = value;
   return <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{}}>
-    <WorkspaceDocumentCreateInput action={createAction}
+    <WorkspaceDocumentCreateInput action={createAction} buttonId={createAction.buttonId}
       value={value} onChange={next => change(next as WorkspaceDocumentDraft)} queryScope={queryScope}
       featurePosition="create-position" onDraftStateChange={state} />
   </LocalizationProvider>;
@@ -134,8 +134,8 @@ it.each(['committed', 'unknown'] as const)('posts the selected collection once a
     return new Promise<Response>(resolve => { finish = resolve; });
   }); vi.stubGlobal('fetch', request);
   let saved!: Promise<unknown>;
-  await act(async () => { saved = Promise.resolve(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position', action: createAction })); });
-  await expect(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position', action: createAction })).rejects.toThrow('本次保存已经开始');
+  await act(async () => { saved = Promise.resolve(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position', action: createAction, buttonId: createAction.buttonId })); });
+  await expect(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position', action: createAction, buttonId: createAction.buttonId })).rejects.toThrow('本次保存已经开始');
   await act(async () => {
     finish(new Response(outcome === 'committed' ? '{"succeeded":true}' : '{"succeeded":', { status: 200 }));
     if (outcome === 'committed') await expect(saved).resolves.toMatchObject({ operation: 'action', change: { operation: 'update' } });

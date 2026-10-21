@@ -55,7 +55,7 @@ it.each(['Part', 'Document'] as const)('carries the compiled %s creation source 
     if (url.pathname === '/api/workspace/content/' + (type === 'Part' ? 'parts' : 'documents') && method === 'POST') {
       const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
       writes.push({ body: input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)),
-        declaration: headers.get(type === 'Part' ? 'X-NewP-Button' : 'X-NewP-Data-Declaration'), position: headers.get('X-NewP-Feature') });
+        declaration: headers.get('X-NewP-Button'), position: headers.get('X-NewP-Feature') });
       return json({ succeeded: true });
     }
     throw new Error(`Unexpected request ${method} ${url.pathname}`);
@@ -63,7 +63,8 @@ it.each(['Part', 'Document'] as const)('carries the compiled %s creation source 
   const uploadId = 'FileUploadLease_11111111111111111111111111111111';
   const upload = vi.spyOn(core, 'platformUpload').mockImplementation(async (_path, body, options) => {
     const headers = new Headers(options?.headers);
-    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(headers.get('X-NewP-Button')).toBe(declaration.id);
+    expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
     expect(headers.get('X-NewP-Feature')).toBe(create.position);
     expect(JSON.parse(String((body as FormData).get('position')))).toEqual({ spaceId: 'public', rootFolderId: 'root', linkIds: ['parent-link'] });
     return json({ uploadId, fileId: 'FileRecord_private', fileName: 'main.pdf', length: 4, contentType: 'application/pdf', expiresAt: '2099-01-01T00:00:00Z' });

@@ -204,11 +204,10 @@ const resource: StandardCrudResourceRegistration = {
       return referenceCommand('POST', '/api/workspace/content/parts',
         { position: workspacePosition(queryScope), values: input }, featurePosition, undefined, identity);
     },
-    createDocument: Object.assign(async ({ input, queryScope, featurePosition, action }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+    createDocument: Object.assign(async ({ input, queryScope, featurePosition, action, buttonId }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const draft = typeof input === 'object' && input !== null ? input as WorkspaceDocumentDraft : undefined;
       if (!(draft?.session instanceof WorkspaceDocumentSession)) throw new Error('缺少有效的上传会话，请重新打开。');
-      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前图文档创建声明。', 400);
-      const payload = await draft.session.submit(draft, queryScope, featurePosition, action.dataAccess.id);
+      const payload = await draft.session.submit(draft, queryScope, featurePosition, currentButtonId(buttonId, action));
       return { operation: 'action' as const, payload, change: { operation: 'update' as const, id: '' } };
     }, {
       // 重复代码已确定未消费暂存；修正字段后可由用户再次保存，其他409沿共享冲突生命周期。

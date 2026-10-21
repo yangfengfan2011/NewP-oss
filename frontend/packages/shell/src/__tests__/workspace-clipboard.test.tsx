@@ -601,7 +601,8 @@ it.each(['copy', 'copy-structure'] as const)('submits the real prepared folder c
   expect((firstPreparation[0] instanceof Request ? firstPreparation[0].signal : firstPreparation[1]?.signal)?.aborted).toBe(true);
   for (const call of copyCalls) {
     const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
-    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(headers.get('X-NewP-Button')).toBe(declaration.id);
+    expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
     expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
   }
   expect(page.request.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/folders/'))).toBe(false);

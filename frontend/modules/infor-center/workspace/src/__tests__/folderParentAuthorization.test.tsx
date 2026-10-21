@@ -104,7 +104,7 @@ it('explains the space-root boundary and submits no parent initialization there'
 
 it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('uses the existing %s input and single submit for the default and opted-out parent choice', async actionKey => {
   const dataAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === actionKey)!;
-  const action = { key: actionKey, labelKey: 'Workspace.PasteFolderCopy', dataAccess };
+  const action = { key: actionKey, labelKey: 'Workspace.PasteFolderCopy', dataAccess, buttonId: dataAccess.id };
   const featurePosition = dataAccess.featurePositions.find(position => position.includes('/surface:list.pageActions/'))!;
   const entries = new Map<symbol, unknown>();
   const instance: StandardCrudActionInstance = { active: true, changed: vi.fn(), getOrCreate: (key, create) => {
@@ -116,7 +116,7 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('uses the existing
   let input: unknown;
   function Harness() {
     const [value, change] = useState<unknown>(); input = value;
-    return localized(<WorkspaceFolderCopyInput instance={instance} action={action}
+    return localized(<WorkspaceFolderCopyInput instance={instance} action={action} buttonId={action.buttonId}
       featurePosition={featurePosition} queryScope={target} value={value} onChange={change} />);
   }
   const view = host();
@@ -126,11 +126,14 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('uses the existing
   if (actionKey === 'pasteFolderStructure') expect(view.element.textContent).toContain('新根从目标父文件夹初始化');
   await act(async () => checkbox.click());
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response('{"succeeded":true,"noChange":false}'));
-  await act(async () => { await resource.actionHandlers![actionKey]({ instance, input, queryScope: target, featurePosition, action }); });
+  await act(async () => { await resource.actionHandlers![actionKey]({ instance, input, queryScope: target, featurePosition, action, buttonId: action.buttonId }); });
   const writes = vi.mocked(platformFetch).mock.calls.filter(([path]) => String(path).endsWith(actionKey === 'pasteFolderCopy' ? '/folders/copy' : '/folders/copy-structure'));
   expect(writes).toHaveLength(1);
   const prepared = vi.mocked(platformFetch).mock.calls.find(([path]) => String(path).endsWith('/prepare'))!;
-  for (const call of [prepared, writes[0]]) expect(new Headers(call[1]?.headers).get('X-NewP-Data-Declaration')).toBe(dataAccess.id);
+  for (const call of [prepared, writes[0]]) {
+    expect(new Headers(call[1]?.headers).get('X-NewP-Button')).toBe(dataAccess.id);
+    expect(new Headers(call[1]?.headers).has('X-NewP-Data-Declaration')).toBe(false);
+  }
   expect(JSON.parse(String(writes[0][1]?.body))).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: [] },
     linkIds: ['source'], targetPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['target'] }, name: '来源', copyParentAuthorization: false });
 });
@@ -159,7 +162,7 @@ it('discards edit preparation when the current declaration disappears and never 
   expect(vi.mocked(platformFetch)).toHaveBeenCalledTimes(1);
 });
 
-it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('cancels the actual %s preparation when its declaration disappears and ignores a late name', async actionKey => {
+it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('cancels the actual %s preparation when its button identity disappears and ignores a late name', async actionKey => {
   const entries = new Map<symbol, unknown>();
   const instance: StandardCrudActionInstance = { active: true, changed: vi.fn(), getOrCreate: (key, create) => {
     if (!entries.has(key)) entries.set(key, create()); return entries.get(key) as ReturnType<typeof create>;
@@ -172,11 +175,11 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('cancels the actua
   vi.mocked(platformFetch).mockImplementationOnce((_path, init) => { signal = init?.signal as AbortSignal; return new Promise(resolve => { finish = resolve; }); });
   const change = vi.fn(); const draft = vi.fn(); const view = host();
   const render = (dataAccess?: ActionDataAccessRequirement) => localized(<WorkspaceFolderCopyInput instance={instance}
-    action={{ key: actionKey, labelKey: 'Workspace.PasteFolderCopy', dataAccess }} featurePosition={declaration.featurePositions[0]}
+    action={{ key: actionKey, labelKey: 'Workspace.PasteFolderCopy', dataAccess, buttonId: dataAccess?.id }} buttonId={dataAccess?.id} featurePosition={declaration.featurePositions[0]}
     queryScope={target} value={null} onChange={change} onDraftStateChange={draft} />);
   await act(async () => view.root.render(render(declaration)));
   const prepared = change.mock.calls[change.mock.calls.length - 1][0].draft;
-  expect(new Headers(vi.mocked(platformFetch).mock.calls[vi.mocked(platformFetch).mock.calls.length - 1][1]?.headers).get('X-NewP-Data-Declaration')).toBe(declaration.id);
+  expect(new Headers(vi.mocked(platformFetch).mock.calls[vi.mocked(platformFetch).mock.calls.length - 1][1]?.headers).get('X-NewP-Button')).toBe(declaration.id);
   await act(async () => view.root.render(render()));
   expect(signal?.aborted).toBe(true); expect(prepared.closed).toBe(true);
   await act(async () => finish(new Response('{"sourceName":"stale-name","sourcePath":["source"],"targetPath":["target"]}')));
@@ -184,4 +187,24 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('cancels the actua
   expect(view.element.textContent).not.toContain('stale-name');
   expect(draft).toHaveBeenLastCalledWith({ dirty: false, ready: false });
   expect(platformFetch).toHaveBeenCalledTimes(2);
+});
+
+it.each((['pasteFolderCopy', 'pasteFolderStructure'] as const).flatMap(key =>
+  (['missing', 'borrowed'] as const).map(identity => [key, identity] as const)))('rejects %s %s current button before any preparation request', async (actionKey, identity) => {
+  const entries = new Map<symbol, unknown>();
+  const instance: StandardCrudActionInstance = { active: true, changed: vi.fn(), getOrCreate: (key, create) => {
+    if (!entries.has(key)) entries.set(key, create()); return entries.get(key) as ReturnType<typeof create>;
+  } };
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response('{"items":[{"linkId":"source","modelKey":"WorkspaceFolder"}]}'));
+  await workspaceClipboard(instance).copy({ spaceId: 'public', rootFolderId: 'root', linkIds: [] }, ['source'], 'copy', 'copy-button');
+  const declaration = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === actionKey)!;
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response('{"sourceName":"must not prepare","sourcePath":["source"],"targetPath":["target"]}'));
+  const view = host(); const draft = vi.fn();
+  await act(async () => view.root.render(localized(<WorkspaceFolderCopyInput instance={instance}
+    action={{ key: actionKey, labelKey: 'Workspace.PasteFolderCopy', dataAccess: declaration, buttonId: declaration.id }}
+    buttonId={identity === 'missing' ? undefined : 'another-actual-button'} featurePosition={declaration.featurePositions[0]}
+    queryScope={target} value={null} onChange={vi.fn()} onDraftStateChange={draft} />)));
+  expect(platformFetch).toHaveBeenCalledTimes(1);
+  expect(view.element.textContent).not.toContain('must not prepare');
+  expect(draft).toHaveBeenLastCalledWith({ dirty: false, ready: false });
 });

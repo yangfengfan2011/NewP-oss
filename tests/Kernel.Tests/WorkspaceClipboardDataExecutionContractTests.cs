@@ -59,6 +59,15 @@ public sealed class WorkspaceClipboardDataExecutionContractTests
             Assert.All(item.ObjectRequirements, target => Assert.Equal([required], target.Actions));
         }
         Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "workspace.content.createDocument");
+        foreach (var action in new[] { "pasteFolderCopy", "pasteFolderStructure" })
+        {
+            var item = Assert.Single(allDeclarations, item => item.Surface == "pageActions" && item.ActionKey == action);
+            Assert.Empty(item.Execution); Assert.Null(item.Provider); Assert.Null(item.Requirements);
+            Assert.Equal("WorkspaceFolder", item.Object); Assert.Equal(["workspaceCopy"], item.Actions);
+            Assert.Equal("workspace.folder." + action, item.BusinessBinding);
+        }
+        Assert.DoesNotContain(owner.DataExecutions, item => item.Key is "workspace.folder.shallowCopy" or "workspace.folder.shallowCopy.directTarget"
+            or "workspace.folder.structureCopy" or "workspace.folder.structureCopy.node");
         // 同一正式fixture也覆盖已存在树动作的目标读取来源，位置仍取实际编译目录。
         var clipboardKeys = new[] { "create", "copy", "copySelected", "cut", "cutSelected", "paste", "remove", "removeSelected", "clearClipboard", "edit", "moveUp", "moveDown", "createPart", "createDocument", "delete", "deleteObjects", "pasteFolderCopy", "pasteFolderStructure", "pasteObjectCopy", "resolveObjectCopy" };
         var features = compiled.Plan.FeatureCatalog.Where(point => point.ModuleId == "Workspace"

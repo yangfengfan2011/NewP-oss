@@ -14,9 +14,9 @@ await loadComponentSource('Workspace', 'WorkspaceFolderCopyInput.tsx');
 import compiled from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 function copyContext(actionKey: string) {
   const dataAccess = (compiled.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === actionKey)!;
-  return { action: { key: actionKey, labelKey: '粘贴文件夹副本', dataAccess }, featurePosition: dataAccess.featurePositions.find(position => position.includes('/surface:list.pageActions/'))! };
+  return { action: { key: actionKey, labelKey: '粘贴文件夹副本', dataAccess, buttonId: dataAccess.id }, buttonId: dataAccess.id, featurePosition: dataAccess.featurePositions.find(position => position.includes('/surface:list.pageActions/'))! };
 }
-// 共享选择使用真实行复制按钮；副本输入继续消费自己的独立旧来源。
+// 共享选择和两类副本各用自己实际按钮，当前上下文与动作身份必须一致。
 function selectionContext() {
   const declaration = (compiled.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'rowActions' && item.actionKey === 'copy')!;
   const action = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json').view.rowActions.find((item: { key: string }) => item.key === 'copy')!;

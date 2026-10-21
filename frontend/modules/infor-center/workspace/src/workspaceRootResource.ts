@@ -136,16 +136,16 @@ const resource: StandardCrudResourceRegistration = {
       return { operation: 'action', payload: { kind: 'workspace.objectCopy', receipt }, ...(receipt.succeeded ? { change: { operation: 'create' as const, id: '' } } : { noChange: true as const }),
         notice: { reasonKey: receipt.succeeded ? 'Workspace.ObjectCopied' : receipt.state === 'cancelled' ? 'Workspace.CopyCancelled' : 'Workspace.CopyNotCommitted' } };
     },
-    pasteFolderCopy: Object.assign(async ({ instance, input, queryScope, featurePosition, action }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+    pasteFolderCopy: Object.assign(async ({ instance, input, queryScope, featurePosition, action, buttonId }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const value = input as { draft?: FolderCopyDraft; name?: string; copyParentAuthorization?: boolean } | undefined;
       if (!value?.draft || typeof value.name !== 'string') throw new StandardCrudRequestError('Workspace.FolderCopyInputExpired', 409, {}, { code: 'Workspace.FolderCopyInputExpired' });
-      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition, 'copy', value.copyParentAuthorization, action?.dataAccess?.id);
+      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition, 'copy', value.copyParentAuthorization, currentButtonId(buttonId, action));
       return { operation: 'action' as const, payload: receipt, change: { operation: 'update' as const, id: '' }, notice: { reasonKey: 'Workspace.FolderCopied' } };
     }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.code === 'Workspace.SiblingNameConflict' }),
-    pasteFolderStructure: Object.assign(async ({ instance, input, queryScope, featurePosition, action }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+    pasteFolderStructure: Object.assign(async ({ instance, input, queryScope, featurePosition, action, buttonId }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const value = input as { draft?: FolderCopyDraft; name?: string; copyParentAuthorization?: boolean } | undefined;
       if (!value?.draft || typeof value.name !== 'string') throw new StandardCrudRequestError('Workspace.FolderCopyInputExpired', 409, {}, { code: 'Workspace.FolderCopyInputExpired' });
-      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition, 'copy-structure', value.copyParentAuthorization, action?.dataAccess?.id);
+      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition, 'copy-structure', value.copyParentAuthorization, currentButtonId(buttonId, action));
       return { operation: 'action' as const, payload: receipt, change: { operation: 'update' as const, id: '' }, notice: { reasonKey: 'Workspace.FolderStructureCopied' } };
     }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.code === 'Workspace.SiblingNameConflict' }),
     copy: async ({ action, instance, id, selectedRows, queryScope, featurePosition, buttonId }) => {

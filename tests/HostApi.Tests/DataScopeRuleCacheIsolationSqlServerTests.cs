@@ -31,7 +31,9 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         await AssertPartEditAsync(scenario.ExplanationAsync(), false, part.Id);
         var audit = await scenario.AuditCountAsync();
         var actions = JsonSerializer.Serialize(child.Subjects[0].Actions);
-        foreach (var damage in new[] { "disabledSubjectJson", "subjectOpinion", "foreignParent", "foreignRoot", "missingParent", "orphanSubject", "unknownResource" })
+        var condition = JsonSerializer.Serialize(child.Condition, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        const string nullConditionChild = """{"type":"group","field":"","operator":"and","value":null,"children":[null]}""";
+        foreach (var damage in new[] { "disabledSubjectJson", "nullConditionChild", "subjectOpinion", "foreignParent", "foreignRoot", "missingParent", "orphanSubject", "unknownResource" })
         {
             await scenario.Fixture.RestartAfterMaintenanceAsync(async provider =>
             {
@@ -42,7 +44,8 @@ public sealed partial class DataScopePermissionCostSqlServerTests
                 await nodes.Where(row => EF.Property<string>(row, "EID") == child.Id).ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => EF.Property<string>(row, "RootId"), damage == "foreignRoot" ? part.Id : original.Id)
                     .SetProperty(row => EF.Property<string>(row, "ParentId"), damage == "foreignParent" ? part.Id : damage == "missingParent" ? "MissingParent340" : original.Id)
-                    .SetProperty(row => EF.Property<string>(row, "ResourceKey"), damage == "unknownResource" ? "unknown.resource340" : original.ResourceKey));
+                    .SetProperty(row => EF.Property<string>(row, "ResourceKey"), damage == "unknownResource" ? "unknown.resource340" : original.ResourceKey)
+                    .SetProperty(row => EF.Property<string>(row, "ConditionJson"), damage == "nullConditionChild" ? nullConditionChild : condition));
                 await subjects.Where(row => EF.Property<string>(row, "EID") == child.Subjects[0].Id).ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => EF.Property<string>(row, "NodeId"), damage == "orphanSubject" ? "MissingNode340" : child.Id)
                     .SetProperty(row => EF.Property<string>(row, "ActionsJson"), damage == "disabledSubjectJson" ? "{" : damage == "subjectOpinion" ? "{\"read\":\"broken\"}" : actions));

@@ -61,6 +61,17 @@ public sealed class DataScopeRuleMaterializerTests
         Assert.Throws<JsonException>(() => DataScopeRuleMaterializer.Build([node], []));
     }
 
+    [Theory]
+    [InlineData("""{"type":"group","field":"","operator":"and","value":null,"children":[null]}""")]
+    [InlineData("""{"type":"group","field":"","operator":"and","value":null,"children":[{"type":"group","field":"","operator":"and","value":null,"children":[null]}]}""")]
+    public void NullConditionChild_IsReportedAsInvalidConfiguration(string conditionJson)
+    {
+        var node = Node("root", "root", null, false);
+        node["ConditionJson"] = conditionJson;
+        var error = Assert.Throws<InvalidOperationException>(() => DataScopeRuleMaterializer.Build([node], []));
+        Assert.Equal("DATA_SCOPE_CONDITION_INVALID", error.Message);
+    }
+
     private static Dictionary<string, object?> Node(string id, string root, string? parent, bool enabled = true) => new()
     {
         ["EID"] = id, ["RootId"] = root, ["ParentId"] = parent, ["Name"] = id, ["ResourceKey"] = "organization.person", ["Enabled"] = enabled,

@@ -48,9 +48,14 @@ internal static class DataScopeRuleMaterializer
     }
 
     // JsonElement 保留独立只读值，嵌套条件集合也不能从已发布结果中改写。
-    private static DataScopeConditionDto Freeze(DataScopeConditionDto condition) => condition with
+    private static DataScopeConditionDto Freeze(DataScopeConditionDto? condition)
     {
-        Value = condition.Value.ValueKind == JsonValueKind.Undefined ? condition.Value : condition.Value.Clone(),
-        Children = condition.Children is null ? null : condition.Children.Select(Freeze).ToImmutableArray()
-    };
+        // JSON 可反序列化出 null 子项；明确识别结构错误，不能升级为无关资源的整体故障。
+        if (condition is null) throw new InvalidOperationException("DATA_SCOPE_CONDITION_INVALID");
+        return condition with
+        {
+            Value = condition.Value.ValueKind == JsonValueKind.Undefined ? condition.Value : condition.Value.Clone(),
+            Children = condition.Children is null ? null : condition.Children.Select(Freeze).ToImmutableArray()
+        };
+    }
 }

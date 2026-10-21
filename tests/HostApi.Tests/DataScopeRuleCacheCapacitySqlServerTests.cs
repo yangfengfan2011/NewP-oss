@@ -55,8 +55,8 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var sources = reads.Select(read => fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Single(source =>
             source.Execution == read.ModuleId.ToLowerInvariant() + "." + read.ModuleId.ToLowerInvariant() + ".authorization.view"
             && source.Provider == "authorization.object.view"
-            && (read.ModuleId == "Part" ? source.ViewKey == "part.part.list" && source.ActionKey == "viewAuthorization"
-                : source.ViewKey == "document.document.permissions" && source.Surface == "read")
+            && source.ViewKey == read.ModuleId.ToLowerInvariant() + "." + read.ModuleId.ToLowerInvariant() + ".permissions"
+            && source.Surface == "read"
             && source.FeaturePositions.Contains(read.Position))).ToArray();
         await CaptureAsync("first-request", 1, 1, ReadAsync);
         foreach (var concurrency in new[] { 1, 16, 64 })

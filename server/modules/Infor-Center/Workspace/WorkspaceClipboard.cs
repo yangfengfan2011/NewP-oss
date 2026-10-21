@@ -52,9 +52,16 @@ public sealed partial class WorkspaceContents
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var source = await positions.ResolveAsync(input.ActorId, sourcePosition, cancellation);
-            if (input.Mode == "cut" && !await objectDecisions.IsAllowedAsync("workspace.folder", source.FolderId, "edit", cancellation))
-                throw new LinkQueryException(403, "Workspace.ParentWriteDenied");
+            var source = await objectActions.WithReadAsync(async readToken =>
+            {
+                var path = await positions.ResolveAsync(input.ActorId, sourcePosition, readToken);
+                return new ObjectActionRead<WorkspacePositionPath>(WorkspacePositions.FolderModel, path.FolderId, path);
+            }, async (path, scope, checkedToken) =>
+            {
+                if (input.Mode == "cut" && await scope.CheckAsync(WorkspacePositions.FolderModel, path.FolderId, ["edit"], checkedToken)
+                    != DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.ParentWriteDenied");
+                return path;
+            }, cancellation);
             var targets = await ReadClipboardButtonTargetsAsync(source.FolderId, selection.ToArray(), input.Mode, false, cancellation);
             var target = await positions.ResolveAsync(input.ActorId, targetPosition, cancellation);
             return await execute(new(input.Mode, sourcePosition, source, targetPosition, target, ReferenceParentFacts(target),
@@ -101,28 +108,37 @@ public sealed partial class WorkspaceContents
     private static IReadOnlyDictionary<string, object?> ReferenceParentFacts(WorkspacePositionPath path) =>
         new Dictionary<string, object?>(StringComparer.Ordinal) { ["EID"] = path.FolderId }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    // 继续原Link完整read，再由通用裁决引擎检查实际用途；OR只属于copy选择业务，不成为新权限配置。
+    // 平台现场调用原Link完整read后，只在同一目标作用域检查实际用途；OR仍是copy选择业务，不成为权限配置。
     private async Task<LinkObjectReference[]> ReadClipboardButtonTargetsAsync(string parentId, string[] linkIds, string mode,
         bool selection, CancellationToken token)
     {
         var targets = await ReadClipboardTargetsAsync(parentId, linkIds, token);
         // 先核整批存储类型，保留原损坏来源首错；对象读取和动作仍逐项执行。
         var endpoints = targets.Select(target => (Target: target, ResourceKey: Resource(target.ModelKey))).ToArray();
-        foreach (var (target, resourceKey) in endpoints)
+        foreach (var (target, _) in endpoints)
         {
-            if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            string[] actions = mode == "cut" ? ["edit"] : target.ModelKey switch
+            await objectActions.WithReadAsync(async readToken =>
             {
-                WorkspacePositions.FolderModel => ["workspaceCopy"],
-                "Part" => selection ? ["partCopy", "partObjectCopy"] : ["partCopy"],
-                "Document" => selection ? ["documentCopy", "documentObjectCopy"] : ["documentCopy"],
-                _ => throw new LinkQueryException(400, "Workspace.InvalidEndpoint")
-            };
-            var allowed = false;
-            foreach (var action in actions)
-                if (await objectDecisions.IsAllowedAsync(resourceKey, target.Id, action, token)) { allowed = true; break; }
-            if (!allowed) throw new LinkQueryException(403, mode == "cut" ? "Workspace.ObjectWriteDenied" : "Workspace.ObjectCopyDenied");
-            await RequireNonRootClipboardTargetAsync(target, token);
+                if (!await reader.IsEndpointReadableAsync("workspace.content", target, readToken))
+                    throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+                return new ObjectActionRead<LinkObjectReference>(target.ModelKey, target.Id, target);
+            }, async (actual, scope, checkedToken) =>
+            {
+                string[] actions = mode == "cut" ? ["edit"] : actual.ModelKey switch
+                {
+                    WorkspacePositions.FolderModel => ["workspaceCopy"],
+                    "Part" => selection ? ["partCopy", "partObjectCopy"] : ["partCopy"],
+                    "Document" => selection ? ["documentCopy", "documentObjectCopy"] : ["documentCopy"],
+                    _ => throw new LinkQueryException(400, "Workspace.InvalidEndpoint")
+                };
+                var allowed = false;
+                foreach (var action in actions)
+                    if (await scope.CheckAsync(actual.ModelKey, actual.Id, [action], checkedToken) == DataExecutionDecision.Allowed)
+                    { allowed = true; break; }
+                if (!allowed) throw new LinkQueryException(403, mode == "cut" ? "Workspace.ObjectWriteDenied" : "Workspace.ObjectCopyDenied");
+                await RequireNonRootClipboardTargetAsync(actual, checkedToken);
+                return 0;
+            }, token);
         }
         return targets;
     }

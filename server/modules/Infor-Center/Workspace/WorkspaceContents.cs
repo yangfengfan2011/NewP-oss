@@ -24,7 +24,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership,
     ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor,
     IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization, IDataExecutionAccess executionAccess,
-    IObjectActionAccess objectActions, IStandardCrudRepository mutationRepository, IDataScopeObjectDecisionProvider objectDecisions,
+    IObjectActionAccess objectActions, IStandardCrudRepository mutationRepository,
     IButtonBusinessExecutor copyButtons, WorkspaceObjectCopyPreparationHandler copyPreparationHandler, WorkspaceObjectCopyHandler copyHandler,
     WorkspaceFolderCopyPreparationHandler folderCopyPreparationHandler, WorkspaceFolderCopyHandler folderCopyHandler)
 {

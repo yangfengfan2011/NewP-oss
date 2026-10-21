@@ -3,6 +3,10 @@ namespace ICP.Platform.Authorization.Contracts;
 /// <summary>业务可按自己选择的时点检查规范对象；不要求按钮或执行合同，也不缓存允许结果。</summary>
 public interface IObjectActionAccess
 {
+    /// <summary>现场执行owner的完整读取，再在同一可信请求及规范目标作用域内检查业务动作；不接收预先允许结果，离开回调即失效。</summary>
+    Task<TResult> WithReadAsync<TRead, TResult>(Func<CancellationToken, Task<ObjectActionRead<TRead>>> read,
+        Func<TRead, IObjectActionReadScope, CancellationToken, Task<TResult>> consume, CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException("DATA_SCOPE_READ_CONTINUATION_UNSUPPORTED");
     /// <summary>对真实对象逐个检查全部动作，保留不可读与动作拒绝的区别；依赖故障原样传播。</summary>
     Task<DataExecutionDecision> CheckAsync(string objectName, string objectId, IReadOnlyList<string> actions,
         CancellationToken cancellationToken = default);

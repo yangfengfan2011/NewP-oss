@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ICP.Platform.Modules.Workspace;
+using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Kernel.ModulePlanning;
@@ -18,7 +19,7 @@ public sealed class DataScopeDecisionBoundaryTests
         .Select(field => (OpCode)field.GetValue(null)!).ToDictionary(code => code.Value);
 
     [Fact]
-    public void ProductionDecisionCalls_HaveAnExactOwnerAndMigrationReason()
+    public void ProductionDecisionCalls_RemainInsideAuthorizationOrTheCompleteReadBoundary()
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));
         var assemblies = candidates.Where(candidate => candidate.BackendEntry is not null).Select(candidate =>
@@ -26,18 +27,16 @@ public sealed class DataScopeDecisionBoundaryTests
             .Append(typeof(StandardCrudDefaultWriter).Assembly).Distinct().ToArray();
         var calls = FindCalls(assemblies).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         Assert.NotEmpty(calls);
-        Assert.All(calls.Where(call => !call.Contains(".DataExecutionAccess.", StringComparison.Ordinal) && !call.Contains(".ObjectActionAccess.", StringComparison.Ordinal)),
-            call => Assert.True(IsReadBoundaryOrigin(call), call));
+        // Authorization拥有通用判权实现；其他组件只可保留完整read/写后read，不能按业务调用名单豁免写动作。
+        var outsideAuthorization = FindCalls(assemblies, method => method.DeclaringType!.Assembly != typeof(ObjectActionAccess).Assembly).ToArray();
+        Assert.All(outsideAuthorization, call => Assert.True(IsReadBoundaryOrigin(call), call));
+        // 事实清单只诊断实现变化，不是上面owner/read规则的许可来源；业务通用接口调用无需逐项登记。
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
-        var json = JsonSerializer.Serialize(calls, new JsonSerializerOptions { WriteIndented = true });
-        if (Environment.GetEnvironmentVariable("NEWP_DECISION_CALL_INVENTORY") is { } file)
-            File.WriteAllText(Path.Combine(root!.FullName, ".codex-temp", "issue-305", file), json);
         var inventoryFile = Path.Combine(root!.FullName, "tests", "HostApi.Tests", "Fixtures", "DataScopeDecisionCalls.json");
-        Assert.True(File.Exists(inventoryFile), json);
         var inventory = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(inventoryFile))!;
         Assert.All(inventory, item => Assert.False(string.IsNullOrWhiteSpace(item.Value)));
-        Assert.Equal(inventory.Keys.Order(StringComparer.Ordinal), calls);
+        Assert.True(inventory.Keys.Order(StringComparer.Ordinal).SequenceEqual(calls), JsonSerializer.Serialize(calls));
     }
 
     [Fact]
@@ -76,6 +75,7 @@ public sealed class DataScopeDecisionBoundaryTests
         Assert.True(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(".ReadAction[", StringComparison.Ordinal))));
         Assert.False(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(nameof(ConstantAction), StringComparison.Ordinal))));
         Assert.False(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(nameof(VariableAction), StringComparison.Ordinal))));
+        Assert.False(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(nameof(CandidateReadAction), StringComparison.Ordinal))));
     }
 
     private static Task<bool> VariableAction(IDataScopeObjectDecisionProvider decisions, string action)
@@ -90,7 +90,9 @@ public sealed class DataScopeDecisionBoundaryTests
     }
     private static Task<bool> ReadAction(IDataScopeObjectDecisionProvider decisions) => decisions.IsAllowedAsync("test.resource", "id", "read");
     private static Task<bool> ConcreteAction(ConcreteDecisions decisions, string action) => decisions.IsAllowedAsync("test.resource", "id", action);
-    private static bool IsReadBoundaryOrigin(string call) => call.EndsWith(" action=constant:read", StringComparison.Ordinal);
+    private static Task<bool> CandidateReadAction(IDataScopeObjectDecisionProvider decisions) =>
+        decisions.IsCandidateAllowedAsync("test.resource", new Dictionary<string, object?>(), "read");
+    private static bool IsReadBoundaryOrigin(string call) => call.Contains(" -> IsAllowedAsync action=constant:read", StringComparison.Ordinal);
 
     private sealed class ConcreteDecisions : IDataScopeObjectDecisionProvider
     {
@@ -98,12 +100,13 @@ public sealed class DataScopeDecisionBoundaryTests
         public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string actionKey, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
-    private static IEnumerable<string> FindCalls(IEnumerable<Assembly> assemblies)
+    private static IEnumerable<string> FindCalls(IEnumerable<Assembly> assemblies, Func<MethodInfo, bool>? include = null)
     {
         foreach (var assembly in assemblies)
             foreach (var type in assembly.GetTypes())
                 foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
                 {
+                    if (include is not null && !include(method)) continue;
                     var stack = new List<string>();
                     var il = method.GetMethodBody()?.GetILAsByteArray();
                     if (il is null) continue;

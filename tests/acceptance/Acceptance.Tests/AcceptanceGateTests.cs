@@ -213,12 +213,15 @@ public sealed class AcceptanceGateTests
         var (root, runId) = PrepareRun("native-standard-data-generated-edit");
         var package = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_STANDARD_DATA_PACKAGE")
             ?? throw new InvalidOperationException("设置 NEWP_ACCEPTANCE_STANDARD_DATA_PACKAGE 为已verify的正式无详情标准包。");
+        string pagePath;
         using (var archive = System.IO.Compression.ZipFile.OpenRead(package))
         using (var projectionStream = archive.GetEntry("projections/standard-data.json")!.Open())
         using (var projection = System.Text.Json.JsonDocument.Parse(projectionStream))
         {
             var resource = Assert.Single(projection.RootElement.GetProperty("resources").EnumerateArray());
             Assert.Equal("Asset", resource.GetProperty("resourceKey").GetString());
+            pagePath = resource.GetProperty("pageRoute").GetString()
+                ?? throw new InvalidOperationException("正式标准包缺少页面路径。");
             Assert.True(!resource.TryGetProperty("detailViewKey", out var detail) || detail.ValueKind == System.Text.Json.JsonValueKind.Null);
         }
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
@@ -239,8 +242,7 @@ public sealed class AcceptanceGateTests
             {
                 token.ThrowIfCancellationRequested();
                 var driver = new StandardCrudPageDriver(page);
-                await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "资产", Exact = true }).ClickAsync();
-                await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/plugins/partner-asset-catalog/assets");
+                await driver.OpenSidebarPathAsync(pagePath);
                 var row = await driver.WaitForRowAsync(name);
                 var read = page.WaitForResponseAsync(response => response.Request.Method == "GET" && new Uri(response.Url).AbsolutePath == api + "/" + id);
                 // 本正式包未提供动作字典，保留真实生成labelKey的既有fallback。

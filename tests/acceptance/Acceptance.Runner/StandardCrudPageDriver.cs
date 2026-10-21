@@ -60,6 +60,14 @@ internal sealed class StandardCrudPageDriver
 
     // ---- 标准列表入口 ----
 
+    // 标签可能回退到元数据键；仍从真实可见菜单链接进入，不以直接URL导航代替点击。
+    internal async Task OpenSidebarPathAsync(string path)
+    {
+        var href = path.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+        await Page.Locator($".np-sidebar-menu a[href=\"{href}\"]").ClickAsync();
+        await Page.WaitForURLAsync(url => new Uri(url).PathAndQuery == path);
+    }
+
     // 单一正式菜单与外层标签共同拥有入口，内嵌列表保留自己的筛选和 Drawer 状态。
     internal async Task OpenOrganizationTabAsync(string title, string key)
     {

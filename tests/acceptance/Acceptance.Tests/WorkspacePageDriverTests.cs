@@ -7,6 +7,35 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实Chromium按正式href点击可见侧栏链接，保留元数据键fallback，不直接导航，无Host或SQL")]
+    public async Task StandardDataSidebar_ClicksItsFormalPathWhenTheAccessibleNameFallsBackToTheMetadataKey()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        const string path = "/plugins/partner-asset-catalog/assets";
+        await page.RouteAsync("http://sidebar.test/**", async route => await route.FulfillAsync(new()
+        {
+            ContentType = "text/html",
+            Body = """
+                <meta charset="utf-8"><nav class="np-sidebar-menu">
+                  <a href="/wrong">资产</a><section aria-expanded="true">
+                    <a href="/plugins/partner-asset-catalog/assets" onclick="sessionStorage.setItem('menuClicks', String(Number(sessionStorage.getItem('menuClicks') || 0) + 1))">partner-asset-catalog.asset</a>
+                  </section>
+                </nav>
+                """
+        }));
+        await page.GotoAsync("http://sidebar.test/");
+        await new StandardCrudPageDriver(page).OpenSidebarPathAsync(path);
+        Assert.Equal(path, new Uri(page.Url).AbsolutePath);
+        Assert.Equal("1", await page.EvaluateAsync<string>("sessionStorage.getItem('menuClicks')"));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实Chromium复现整组核对后Review仍dirty，取消必须经标准丢弃确认，无服务器或端口")]
     public async Task ReconciledBatchReview_CancelsThroughTheExistingDiscardConfirmationWithoutSaving()
     {

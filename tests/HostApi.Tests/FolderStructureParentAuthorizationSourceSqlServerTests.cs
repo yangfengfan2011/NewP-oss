@@ -38,7 +38,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
         var feature = Point(fixture, "workspace.folder.pasteFolderStructure");
         var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.pasteFolderStructure", feature);
         var before = await TransactionSnapshotAsync(fixture);
-        foreach (var mismatch in new[] { "missing", "parent-id", "parent-values", "parent-resource", "target", "foreign-caller", "unknown-proof", "ordinary-shape", "different-opinion", "different-expiry" })
+        foreach (var mismatch in new[] { "missing", "parent-id", "parent-values", "parent-resource", "target", "unknown-proof", "ordinary-shape", "different-opinion", "different-expiry" })
         {
             state.Mode = mismatch; state.Reached = false; state.ConfigurationCommands = 0;
             using var response = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post,
@@ -124,7 +124,6 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
                     "parent-values" => graph with { Parents = [first with { Values = new Dictionary<string, object?> { ["LID"] = first.ObjectId } }, .. graph.Parents.Skip(1)] },
                     "parent-resource" => graph with { Parents = [first with { ResourceKey = "part.part" }, .. graph.Parents.Skip(1)] },
                     "target" => graph with { Target = graph.Target with { ObjectId = "foreign-child" } },
-                    "foreign-caller" => graph with { Caller = new("workspace.folder.create", "workspace.backend", typeof(WorkspaceFolderCreationHandler), nameof(WorkspaceFolderCreationHandler.ExecuteAsync)) },
                     "unknown-proof" => graph with { Proof = new UnknownCreationProof() },
                     "ordinary-shape" => new DataScopeObjectInitializationSource.Created(graph.ParentObjectIds, graph.Target),
                     _ => source

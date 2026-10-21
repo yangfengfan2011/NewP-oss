@@ -40,7 +40,14 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实创建的初始化缺/串用来源在任何配置读取和克隆前拒绝；合法来源沿原事务执行")]
-    public async Task FolderCreate_InitializationRejectsMissingOrMismatchedSourceBeforeAnyConfigurationSql()
+    public Task FolderCreate_InitializationRejectsMissingOrMismatchedSourceBeforeAnyConfigurationSql() =>
+        ExerciseInitializationSourcesAsync(["missing", "parents", "target", "values", "unregistered-shape", "partial", "changed", "not-added", "not-tracked"]);
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "未知初始化来源在配置锁与SQL之前拒绝，当前Created来源仍能完成同一真实创建")]
+    public Task FolderCreate_RejectsUnknownInitializationSourceBeforeAnyConfigurationSql() =>
+        ExerciseInitializationSourcesAsync(["unregistered-shape"]);
+
+    private static async Task ExerciseInitializationSourcesAsync(IReadOnlyList<string> mismatches)
     {
         var state = new InitializationProbe();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
@@ -55,7 +62,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
         var declaration = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
             binding => binding.BusinessBinding == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position));
         var before = await Snapshot();
-        foreach (var mismatch in new[] { "missing", "parents", "target", "values", "caller", "binding", "unregistered-shape", "partial", "changed", "not-added", "not-tracked" })
+        foreach (var mismatch in mismatches)
         {
             state.Mismatch = mismatch; state.ConfigurationCommands = 0; state.Calls = 0;
             using var rejected = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, "/api/workspace/content/folders",
@@ -482,8 +489,6 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             {
                 if (state.Mismatch == "missing") return await inner.InitializeFromParentAsync(resource, parent, target, null!, token);
                 var created = Assert.IsType<DataScopeObjectInitializationSource.Created>(source);
-                var caller = new DataExecutionInternalBinding("workspace.folder.create", "workspace.backend",
-                    typeof(WorkspaceFolderCreationHandler), nameof(WorkspaceFolderCreationHandler.ExecuteAsync));
                 if (state.Mismatch is "not-added" or "not-tracked")
                 {
                     var entry = db.Set<Dictionary<string, object?>>("WorkspaceFolder").Local.FindEntry(target)!;
@@ -494,9 +499,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
                     "parents" => created with { ParentObjectIds = ["different-parent"] },
                     "target" => created with { Target = created.Target with { ObjectId = "different-target" } },
                     "values" => created with { Target = created.Target with { Values = new Dictionary<string, object?> { ["LID"] = target } } },
-                    "caller" => created with { Caller = caller },
-                    "binding" => new DataScopeObjectInitializationSource.Declared(caller, new("workspace.clipboard.copy", "workspace.backend", "submit"), created.ParentObjectIds, created.Target),
-                    "unregistered-shape" => new UnregisteredInitializationSource(caller, created.ParentObjectIds, created.Target),
+                    "unregistered-shape" => new UnregisteredInitializationSource(created.ParentObjectIds, created.Target),
                     "partial" => created with { Target = created.Target with { Values = created.Target.Values.Where(value => value.Key != "Description").ToDictionary() } },
                     "changed" => created with { Target = created.Target with { Values = new Dictionary<string, object?>(created.Target.Values) { ["ENAME"] = "forged" } } },
                     _ => source
@@ -510,7 +513,7 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             }
         }
     }
-    private sealed record UnregisteredInitializationSource(DataExecutionInternalBinding Caller, IReadOnlyList<string> Parents,
-        DataExecutionWriteFacts Target) : DataScopeObjectInitializationSource(Caller, Parents, Target);
+    private sealed record UnregisteredInitializationSource(IReadOnlyList<string> Parents,
+        DataExecutionWriteFacts Target) : DataScopeObjectInitializationSource(Parents, Target);
 
 }

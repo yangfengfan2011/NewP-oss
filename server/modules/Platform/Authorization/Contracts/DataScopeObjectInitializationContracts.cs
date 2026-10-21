@@ -11,13 +11,12 @@ public abstract class DataScopeObjectCreationProof
 }
 
 /// <summary>初始化只核对本次创建的真实参与对象，不携带允许结果或替代父权限裁决。</summary>
-public abstract record DataScopeObjectInitializationSource(DataExecutionInternalBinding? Caller,
-    IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
+public abstract record DataScopeObjectInitializationSource(IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
 {
     /// <summary>当前活动事务中的真实创建目标；只证明创建事实，不表示父或候选已获准。</summary>
     /// <remarks>无Proof只接受Added；结构图需在首次Flush前捕获真实Entry，并逐次核对原事务和当前完整事实。</remarks>
     public sealed record Created(IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
-        : DataScopeObjectInitializationSource(null, ParentObjectIds, Target)
+        : DataScopeObjectInitializationSource(ParentObjectIds, Target)
     {
         /// <summary>结构创建在首次Flush前捕获；缺省仍只接受当前Added目标，不扩大普通创建来源。</summary>
         public DataScopeObjectCreationProof? Proof { get; init; }
@@ -25,24 +24,8 @@ public abstract record DataScopeObjectInitializationSource(DataExecutionInternal
     /// <summary>内部新父及目标来自同一实际创建图，Flush后仍逐次核对当前事实与原Entry引用。</summary>
     public sealed record CreatedFromCreatedParents(IReadOnlyList<DataExecutionWriteFacts> Parents,
         DataExecutionWriteFacts Target, DataScopeObjectCreationProof Proof)
-        : DataScopeObjectInitializationSource(null, Parents.Select(parent => parent.ObjectId).ToArray(), Target);
-    public sealed record Declared(DataExecutionInternalBinding Caller, DataExecutionBindingReference Binding,
-        IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
-        : DataScopeObjectInitializationSource(Caller, ParentObjectIds, Target);
-    /// <summary>受控结构创建的真实新父候选事实；不表示这些新对象已被读取或获准编辑。</summary>
-    public sealed record DeclaredFromCreatedParents(DataExecutionInternalBinding Caller, DataExecutionBindingReference Binding,
-        IReadOnlyList<DataExecutionWriteFacts> Parents, DataExecutionWriteFacts Target)
-        : DataScopeObjectInitializationSource(Caller, Parents.Select(parent => parent.ObjectId).ToArray(), Target);
-
+        : DataScopeObjectInitializationSource(Parents.Select(parent => parent.ObjectId).ToArray(), Target);
 }
-
-/// <summary>有限来源登记只引用同一正式执行的角色，不维护第二份数据动作要求。</summary>
-public sealed record DataScopeObjectInitializationBinding(string ModuleId, string ResourceKey,
-    DataExecutionInternalBinding Caller, string Stage, string ParentRole, string CandidateRole);
-
-/// <summary>只为实际结构创建者登记新图父事实来源，复用其原候选角色，不定义第二份权限要求。</summary>
-public sealed record DataScopeObjectInitializationCreatedParentsBinding(string ModuleId, string ResourceKey,
-    DataExecutionInternalBinding Caller, string Stage, string CandidateRole);
 
 /// <summary>真实对象拥有者在创建事务内初始化直接授权；此契约不提供HTTP授权管理旁路。</summary>
 public interface IDataScopeObjectInitializer

@@ -81,7 +81,7 @@ interface StandardDataProjectionResource {
   resourceKey: string;
   apiRoute: string;
   pageRoute: string;
-  detailViewKey?: string;
+  detailViewKey?: string | null;
 
 }
 
@@ -260,11 +260,11 @@ function createStandardDataStateActionHandlers(apiRoute: string): Record<string,
   };
 
   return {
-    disable: async ({ id, featurePosition }) => {
-      await client.disable(requireId(id, '停用'), { featurePosition });
+    disable: async ({ id, featurePosition, buttonId, dataAccess }) => {
+      await client.disable(requireId(id, '停用'), { featurePosition, buttonId, dataAccess });
     },
-    enable: async ({ id, featurePosition }) => {
-      await client.enable(requireId(id, '启用'), { featurePosition });
+    enable: async ({ id, featurePosition, buttonId, dataAccess }) => {
+      await client.enable(requireId(id, '启用'), { featurePosition, buttonId, dataAccess });
     },
   };
 }
@@ -301,7 +301,8 @@ async function projectStandardDataModule(
       throw new Error(`standard-data resource '${bindingKey}' has no active projection binding`);
     }
 
-    if (resource.detailViewKey !== projected.detailViewKey
+    const projectedDetailViewKey = projected.detailViewKey ?? undefined;
+    if (resource.detailViewKey !== projectedDetailViewKey
       || (resource.detailViewKey !== undefined
         && (typeof resource.detailViewKey !== 'string' || resource.detailViewKey.trim().length === 0))) {
       throw new Error(`standard-data resource '${bindingKey}' has an inconsistent detail view projection`);
@@ -322,8 +323,8 @@ async function projectStandardDataModule(
       }),
       listViewKey: `${projection.moduleSlug}.${resourceSlug}.list`,
       listRoutePath: projected.pageRoute,
-      detailViewKey: projected.detailViewKey,
-      detailRoutePath: projected.detailViewKey
+      detailViewKey: projectedDetailViewKey,
+      detailRoutePath: projectedDetailViewKey
         ? `${projected.pageRoute.replace(/\/$/, '')}/:id`
         : undefined,
       listPanelTitle: resource.displayName,

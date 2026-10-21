@@ -462,7 +462,16 @@ describe('active-module-runtime-loader', () => {
     })).rejects.toThrow('MODULE_PROJECTION_FAILED');
   });
 
-  it('projects a standard-data entry without importing plugin runtime code', async () => {
+  it.each([
+    { label: 'omitted projection detail', projectedDetailKey: undefined, authoringDetailKey: undefined, invalid: false },
+    { label: 'nullable projection DTO', projectedDetailKey: null, authoringDetailKey: undefined, invalid: false },
+    { label: 'explicit authoring null', projectedDetailKey: null, authoringDetailKey: null, invalid: true },
+    { label: 'empty authoring key', projectedDetailKey: '', authoringDetailKey: '', invalid: true },
+    { label: 'numeric authoring key', projectedDetailKey: 42, authoringDetailKey: 42, invalid: true },
+    { label: 'numeric projection key', projectedDetailKey: 42, authoringDetailKey: undefined, invalid: true },
+    { label: 'object projection key', projectedDetailKey: {}, authoringDetailKey: undefined, invalid: true },
+    { label: 'array projection key', projectedDetailKey: [], authoringDetailKey: undefined, invalid: true },
+  ])('projects a standard-data entry without importing plugin runtime code ($label)', async ({ projectedDetailKey, authoringDetailKey, invalid }) => {
     const fetchStandardCrud = vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -513,6 +522,7 @@ describe('active-module-runtime-loader', () => {
               },
               {
                 key: 'Audit',
+                detailViewKey: authoringDetailKey,
                 displayName: 'Audit',
                 displayField: 'Name',
                 fields: [
@@ -538,19 +548,24 @@ describe('active-module-runtime-loader', () => {
             resourceKey: 'Audit',
             apiRoute: '/api/standard/partner-asset-catalog/audits',
             pageRoute: '/audits',
-
+            detailViewKey: projectedDetailKey,
           },
         ],
       };
     });
     const importModule = vi.fn();
 
-    const result = await loadActiveModuleRuntimeWith({
+    const load = loadActiveModuleRuntimeWith({
       fetchCatalog,
       fetchJson,
       importModule,
       internalModules: {},
     });
+    if (invalid) {
+      await expect(load).rejects.toThrow('inconsistent detail view projection');
+      return;
+    }
+    const result = await load;
 
     expect(importModule).not.toHaveBeenCalled();
     expect(result.modules).toHaveLength(1);
@@ -587,17 +602,21 @@ describe('active-module-runtime-loader', () => {
       detailViewKey: undefined,
       detailRoutePath: undefined,
     });
-    await resource?.actionHandlers?.disable({ id: 'asset-1', row: {}, featurePosition: 'disable-position' });
+    await resource?.actionHandlers?.disable({ id: 'asset-1', row: {}, featurePosition: 'disable-position', buttonId: 'actual-disable-button' });
     expect(fetchStandardCrud).toHaveBeenNthCalledWith(
       1,
       '/api/standard/partner-asset-catalog/assets/asset-1/disable',
-      { method: 'POST', headers: { 'X-NewP-Feature': 'disable-position' } },
+      { method: 'POST', headers: { 'X-NewP-Feature': 'disable-position', 'X-NewP-Button': 'actual-disable-button' } },
     );
-    await resource?.actionHandlers?.enable({ id: 'asset-1', row: {}, featurePosition: 'enable-position' });
+    await resource?.actionHandlers?.enable({ id: 'asset-1', row: {}, featurePosition: 'enable-position', dataAccess: {
+      id: 'actual-enable-button', moduleId: 'Partner.AssetCatalog', viewKey: 'partner-asset-catalog.asset.list',
+      surface: 'rowActions', actionKey: 'enable', execution: '', actions: ['edit'], resources: ['Partner.AssetCatalog.Asset'],
+      featurePositions: ['enable-position'], businessBinding: 'Partner.AssetCatalog.Asset.enable', object: 'Asset',
+    } });
     expect(fetchStandardCrud).toHaveBeenNthCalledWith(
       2,
       '/api/standard/partner-asset-catalog/assets/asset-1/enable',
-      { method: 'POST', headers: { 'X-NewP-Feature': 'enable-position' } },
+      { method: 'POST', headers: { 'X-NewP-Feature': 'enable-position', 'X-NewP-Button': 'actual-enable-button' } },
     );
     expect(module.permissions).toBeUndefined();
   });

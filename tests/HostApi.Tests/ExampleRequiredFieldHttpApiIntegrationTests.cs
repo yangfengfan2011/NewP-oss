@@ -42,8 +42,9 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
     {
         var root = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(TrustedBuiltInModuleSource.CreateForHost(root, Path.Combine(root, "modules")));
-        return new CanonicalModulePlanCompiler().Compile("example-api-tests", candidates).Plan
+        var plan = new CanonicalModulePlanCompiler().Compile("example-api-tests", candidates).Plan
             ?? throw new InvalidOperationException("Formal module plan did not compile.");
+        return FieldHttpEfRepository.ForModule(plan, "Example");
     }
 
     private static readonly DateTime TrustedAuditTime =
@@ -125,7 +126,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("Example.Record.SourceRequired", explicitNullError.GetProperty("code").GetString());
         Assert.Equal("Legacy", row["RecordSource"]);
 
-        row["RecordSource"] = "";
+        await repository.CorruptStoredFieldAsync(id, "RecordSource", "");
         var inheritedInvalidResponse = await SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?> { ["ENAME"] = "不应写入" });
@@ -251,15 +252,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
 
     private static Task<HttpResponseMessage> SendAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object? body = null) =>
         FeatureHttpTestRequests.SendAsync(client, point, method, path, body,
-            Plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Execution == point.BehaviorKey && item.FeaturePositions.Contains(point.Position)));
-
-    // 此既有内存fixture只验证字段和功能流水线；数据权限的正式消费由Example SQL测试证明。
-    private sealed class UnusedDataScope : ICP.Platform.Authorization.Contracts.IDataScopeObjectAccess, ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider
-    {
-        public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default) => throw new NotSupportedException();
-        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string actionKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-    }
+            Plan.ActionDataAccessCatalog.SingleOrDefault(item => (item.BusinessBinding == point.BehaviorKey || item.Execution == point.BehaviorKey) && item.FeaturePositions.Contains(point.Position)));
 
     private static WebApplication BuildApplication(
         RecordingRepository repository,
@@ -272,12 +265,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         builder.Services.AddPlatformAuthorization();
         builder.Services.AddSingleton(Plan);
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddScoped<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>(services =>
-        {
-            var unused = new UnusedDataScope();
-            return new ICP.Platform.Modules.Authorization.Services.DataExecutionAccess(Plan,
-                services.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), unused, unused);
-        });
+        builder.Services.AddScoped<ICP.Platform.Authorization.Contracts.IDataExecutionAccess, ICP.Platform.Modules.Authorization.Services.DataExecutionAccess>();
         builder.Services.AddAuthorization(options => options.AddPolicy(DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
         builder.Services.AddSingleton<IFeatureDecisionSource, DeclaredFeatureDecisionSource>();
         builder.Services.AddControllers()
@@ -287,7 +275,9 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
                 manager.FeatureProviders.Add(new ObjectAuthorizationControllerFeatureProvider()));
         builder.Services.AddSingleton<IRuntimeWorkloadService>(new RuntimeWorkloadService(TimeProvider.System));
         builder.Services.AddStandardCrudKernel();
-        builder.Services.AddSingleton<IStandardCrudRepository>(repository);
+        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var model = new ICP.Platform.Modules.Example.Persistence.Descriptors.ExampleModelMetadataProvider().GetDefinitions().Single();
+        FieldHttpEfRepository.Configure(builder.Services, Plan, descriptor, model, repository, "example-api-test-subject");
         builder.Services.AddSingleton<IPlatformQueryExecutor, UnusedQueryExecutor>();
         if (registerAuditProvider)
         {
@@ -296,9 +286,10 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         }
         builder.Services.AddSingleton<IIdentityAccountDirectory, EmptyIdentityAccountDirectory>();
         builder.Services.AddSingleton<IStandardCrudDisplayValueResolver, ExampleRecordDisplayValueResolver>();
-        builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
+        builder.Services.AddStandardCrudResource(descriptor);
 
         var app = builder.Build();
+        repository.Attach(app.Services);
         app.Use(async (context, next) =>
         {
             context.User = new ClaimsPrincipal(new ClaimsIdentity(
@@ -307,8 +298,8 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
             await next();
         });
         app.UseAuthorization();
-        app.MapStandardCrudResources();
         app.MapControllers();
+        app.MapStandardCrudResources();
         FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources,
             Points.Where(point => point.ModuleId == "Example").ToArray(),
             app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
@@ -322,7 +313,8 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
             // 此小型 Host 只装配 Example 与通用对象执行端；其他授权页面各有独立模块夹具。
             foreach (var controller in feature.Controllers.Where(controller =>
                 controller.Assembly == typeof(DataScopeObjectsController).Assembly
-                && controller.AsType() != typeof(DataScopeObjectsController)).ToArray())
+                && controller.AsType() != typeof(DataScopeObjectsController)
+                && controller.AsType() != typeof(DataScopeObjectInspectionsController)).ToArray())
             {
                 feature.Controllers.Remove(controller);
             }
@@ -369,83 +361,5 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         public EntityAuditStamp GetCurrent() => new(actorId, occurredAtUtc);
     }
 
-    private sealed class RecordingRepository : IStandardCrudRepository
-    {
-        public List<Dictionary<string, object?>> Rows { get; } = [];
-
-        public int UpdateCallCount { get; private set; }
-
-        public Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(
-            StandardCrudDescriptor descriptor,
-            string id,
-            CancellationToken cancellationToken = default)
-        {
-            var row = Rows.SingleOrDefault(candidate =>
-                string.Equals(candidate[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
-            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(row);
-        }
-
-        public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
-            StandardCrudDescriptor descriptor,
-            StandardCrudListQuery query,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<bool> ExistsAsync(
-            StandardCrudDescriptor descriptor,
-            StandardCrudUniqueConstraint constraint,
-            IReadOnlyDictionary<string, object?> equalityValues,
-            string? excludedId = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(false);
-
-        public Task<IReadOnlyDictionary<string, object?>> CreateAsync(
-            StandardCrudDescriptor descriptor,
-            IReadOnlyDictionary<string, object?> values,
-            CancellationToken cancellationToken = default)
-        {
-            var row = new Dictionary<string, object?>(values, StringComparer.Ordinal)
-            {
-                [descriptor.IdField] = $"ExampleRecord_{Guid.NewGuid():N}"
-            };
-            Rows.Add(row);
-            return Task.FromResult<IReadOnlyDictionary<string, object?>>(row);
-        }
-
-        public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
-            StandardCrudDescriptor descriptor,
-            string id,
-            IReadOnlyDictionary<string, object?> values,
-            CancellationToken cancellationToken = default)
-        {
-            var row = Rows.SingleOrDefault(candidate =>
-                string.Equals(candidate[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
-            if (row is null)
-            {
-                return Task.FromResult<IReadOnlyDictionary<string, object?>?>(null);
-            }
-
-            UpdateCallCount++;
-            foreach (var pair in values)
-            {
-                row[pair.Key] = pair.Value;
-            }
-
-            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(row);
-        }
-
-        public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
-            StandardCrudDescriptor descriptor,
-            string id,
-            IReadOnlyDictionary<string, object?> values,
-            long expectedRevision,
-            CancellationToken cancellationToken = default) =>
-            UpdateAsync(descriptor, id, values, cancellationToken);
-
-        public Task<bool> DeleteAsync(
-            StandardCrudDescriptor descriptor,
-            string id,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-    }
+    private sealed class RecordingRepository : FieldHttpEfRepository { }
 }

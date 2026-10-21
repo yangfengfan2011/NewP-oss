@@ -47,14 +47,14 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
     public void StandardDataReadBindings_UseDeclaredEntityAndExistingEditPosition()
     {
         var descriptor = BuildDescriptor();
-        Assert.Equal("Partner.AssetCatalog.Asset.update", descriptor.DataExecutions["read"]);
-        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == descriptor.DataExecutions["read"] && item.ActionKey == "edit");
+        Assert.Equal("Partner.AssetCatalog.Asset.read", descriptor.DataExecutions["read"]);
+        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == descriptor.DataExecutions["read"] && item.Surface == "read");
         Assert.Equal(new[] { Point("edit").Position }, read.FeaturePositions);
-        Assert.Equal("rowActions", read.Surface);
-        Assert.Equal("edit", read.ActionKey);
-        Assert.Equal("standardCrud.update", read.Provider);
-        var required = Assert.Single(read.Requirements!, requirement => requirement.Stage == "prepare");
-        Assert.Equal(("target", "prepare", "object"), (required.Role, required.Stage, required.Shape));
+        Assert.Equal("read", read.Surface);
+        Assert.Equal("", read.ActionKey);
+        Assert.Equal("standardCrud.read", read.Provider);
+        var required = Assert.Single(read.Requirements!, requirement => requirement.Stage == "read");
+        Assert.Equal(("target", "read", "object"), (required.Role, required.Stage, required.Shape));
         Assert.Equal(new[] { "read" }, Assert.Single(required.AnyOf));
         var action = Assert.Single(_plan.DataActionCatalog, action => action.Key == "read");
         Assert.NotEqual("Partner.AssetCatalog", action.ModuleId);
@@ -72,12 +72,12 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         var repository = new RecordingRepository();
         var instant = new DateTime(2026, 9, 4, 7, 24, 26, DateTimeKind.Utc).AddTicks(5023291);
         repository.Rows.Add(new Dictionary<string, object?> { ["EID"] = "Asset_1", ["Name"] = "Asset", ["SerialNo"] = "001", ["CreatedAt"] = instant, ["UpdatedAt"] = instant });
-        await using var app = BuildApplication(repository, auditProjection: true);
+        await using var app = BuildApplication(repository);
         await app.StartAsync();
         using var client = app.GetTestClient();
         // 未声明Detail View时，详情仍由已有edit预取声明消费，不产生新入口。
-        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.update"
-            && item.FeaturePositions.Contains(Point("edit").Position));
+        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.read"
+            && item.Surface == "read" && item.FeaturePositions.Contains(Point("edit").Position));
         using (var missing = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, "/api/standard/partner-asset-catalog/assets/Asset_1"))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         using var response = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, "/api/standard/partner-asset-catalog/assets/Asset_1", dataAccess: read);
@@ -103,9 +103,11 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
             "/api/standard/partner-asset-catalog/assets", new { Name = "真实模板候选", SerialNo = "RETIRE321" });
         Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         Assert.Equal(0, repository.CreateCallCount);
-        var create = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.create");
-        var update = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.update"
+        var create = Assert.Single(_plan.ActionDataAccessCatalog, item => item.BusinessBinding == "Partner.AssetCatalog.Asset.create");
+        var update = Assert.Single(_plan.ActionDataAccessCatalog, item => item.BusinessBinding == "Partner.AssetCatalog.Asset.update"
             && item.FeaturePositions.Contains(Point("edit").Position));
+        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.read"
+            && item.Surface == "read" && item.FeaturePositions.Contains(Point("edit").Position));
         using (var swapped = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets", new { Name = "真实模板候选" }, dataAccess: update))
             Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
@@ -118,7 +120,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
             Assert.Equal(HttpStatusCode.BadRequest, missingRead.StatusCode);
         using (var wrongRead = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, path, dataAccess: create))
             Assert.Equal(HttpStatusCode.BadRequest, wrongRead.StatusCode);
-        using (var prepare = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, path, dataAccess: update))
+        using (var prepare = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, path, dataAccess: read))
             Assert.Equal(HttpStatusCode.OK, prepare.StatusCode);
         using (var missingSubmit = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put, path, new { Name = "未声明" }))
             Assert.Equal(HttpStatusCode.BadRequest, missingSubmit.StatusCode);
@@ -130,27 +132,25 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
     // 字段测试沿真实producer选择对应写来源，不让字段失败被缺声明400遮蔽。
     private Task<HttpResponseMessage> WriteAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object body) =>
         FeatureHttpTestRequests.SendAsync(client, point, method, path, body, dataAccess:
-            Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset." + (point.Key == "create" ? "create" : "update")
+            Assert.Single(_plan.ActionDataAccessCatalog, item => item.BusinessBinding == point.BehaviorKey
                 && item.FeaturePositions.Contains(point.Position)));
     [Fact]
     [Trait("Category", "ModuleMetadataConsumer")]
     public void InstalledProjection_ExistingAuthorizeHasItsOwnProviderBinding()
     {
         BuildDescriptor();
-        var source = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Provider == "authorization.object.manage");
+        var source = Assert.Single(_plan.ActionDataAccessCatalog, item => item.BusinessBinding == "Partner.AssetCatalog.Asset.authorize");
         Assert.Equal("authorize", source.ActionKey);
         Assert.Equal("featureActions", source.Surface);
         Assert.Equal(new[] { Point("authorize").Position }, source.FeaturePositions);
-        Assert.Equal(new[] { "read", "authorize" }, Assert.Single(Assert.Single(source.Requirements!, role => role.Stage == "submit").AnyOf));
+        Assert.Equal("Asset", Assert.Single(source.GetObjectRequirements()).Object);
+        Assert.Equal(new[] { "authorize" }, Assert.Single(source.GetObjectRequirements()).Actions);
     }
-    private sealed class Presentation : ICP.Platform.Presentation.IRequestPresentationContextAccessor
-    {
-        public ICP.Platform.Presentation.RequestPresentationContext? Current => new("zh-CN", "Asia/Taipei");
-    }
-    private readonly string _packageRoot = Path.Combine(
+    private readonly string _fixtureRoot = Path.Combine(
         Path.GetTempPath(),
         "newp-standard-data-required-api-tests",
         Guid.NewGuid().ToString("N"));
+    private string _packageRoot => Path.Combine(_fixtureRoot, "modules", "Partner.AssetCatalog");
 
     [Fact]
     public async Task CreateApi_RejectsMissingNullOrBlankRequiredValueWithoutWriting()
@@ -240,13 +240,13 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
 
     public void Dispose()
     {
-        if (Directory.Exists(_packageRoot))
+        if (Directory.Exists(_fixtureRoot))
         {
-            Directory.Delete(_packageRoot, recursive: true);
+            Directory.Delete(_fixtureRoot, recursive: true);
         }
     }
 
-    private WebApplication BuildApplication(RecordingRepository repository, bool auditProjection = false)
+    private WebApplication BuildApplication(RecordingRepository repository)
     {
         var descriptor = BuildDescriptor();
         var builder = WebApplication.CreateBuilder();
@@ -256,14 +256,15 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         builder.Services.AddPlatformAuthorization();
         builder.Services.AddSingleton(_plan);
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddSingleton<IDataScopeReadPlanProvider, FixtureReadPlan>();
-        builder.Services.AddScoped<IDataExecutionAccess>(services => ActivatorUtilities.CreateInstance<DataExecutionAccess>(services,
-            _plan, services.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
-            new PackageDecisions(), new PackageDecisions()));
+        builder.Services.AddScoped<IDataExecutionAccess, DataExecutionAccess>();
         builder.Services.AddAuthorization(options => options.AddPolicy(DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
         builder.Services.AddSingleton<IFeatureDecisionSource>(new DeclaredFeatures(_points));
         builder.Services.AddStandardCrudKernel();
-        builder.Services.AddSingleton<IStandardCrudRepository>(repository);
+        var model = new ICP.Platform.Modeling.Projection.ModelMetadataProjector().Project(
+            new ICP.Platform.Modeling.Metadata.JsonModelMetadataDocumentLoader().LoadFromFile(
+                Path.Combine(_packageRoot, "metadata", "models", "Asset.model.json"))) with { OwnerModuleId = descriptor.ModuleId };
+        FieldHttpEfRepository.Configure(builder.Services, _plan, descriptor, model, repository, "standard-data-api-test-subject");
+        builder.Services.AddSingleton<ICP.Platform.Persistence.Auditing.IEntityAuditStampProvider, FieldAuditStamp>();
         builder.Services.AddSingleton<IPlatformQueryExecutor, UnusedQueryExecutor>();
         builder.Services.AddStandardCrudResource(descriptor);
         // 与既有Example夹具相同，接入真实通用对象授权Controller，消费新增的资源功能声明。
@@ -272,18 +273,8 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
             manager.ApplicationParts.Clear();
             manager.FeatureProviders.Add(new ObjectAuthorizationControllerFeatureProvider());
         });
-        if (auditProjection)
-        {
-            var model = new ICP.Platform.Modeling.Projection.ModelMetadataProjector().Project(new ICP.Platform.Modeling.Metadata.ModelMetadataDocument
-            {
-                ModuleId = descriptor.ModuleId,
-                Model = new ICP.Platform.Modeling.Metadata.ModelMetadataModel { Name = descriptor.ModelName, Kind = "Entity" }
-            }) with { OwnerModuleId = descriptor.ModuleId };
-            builder.Services.AddSingleton(new ICP.Platform.Persistence.Planning.CompiledPersistencePlan("candidate", "snapshot", "hash", default, "digest", [], [model], []));
-            builder.Services.AddSingleton<ICP.Platform.Presentation.ITemporalDisplayProjectionExecutor>(new ICP.Platform.Presentation.TemporalDisplayProjectionExecutor(new Presentation(), new ICP.Platform.Presentation.TemporalDisplayFormatter()));
-        }
-
         var app = builder.Build();
+        repository.Attach(app.Services);
         app.Use(async (context, next) =>
         {
             context.User = new ClaimsPrincipal(new ClaimsIdentity(
@@ -292,8 +283,8 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
             await next();
         });
         app.UseAuthorization();
-        app.MapStandardCrudResources();
         app.MapControllers();
+        app.MapStandardCrudResources();
         FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, _points,
             app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
         return app;
@@ -408,7 +399,8 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         File.WriteAllText(Path.Combine(_packageRoot, "metadata", "models", "Asset.model.json"), new JsonObject
         {
             ["schemaVersion"] = "1.0", ["type"] = "model",
-            ["Asset"] = new JsonObject { ["kind"] = "Entity", ["fields"] = new JsonArray() }
+            ["Asset"] = new JsonObject { ["kind"] = "Entity", ["fields"] = JsonSerializer.SerializeToNode(blueprint.StandardData!.Resources.Single().Fields.Select(field =>
+                new { name = field.Name, storage = new { type = field.Type == "boolean" ? "bool" : field.Type, nullable = !field.Required } })) }
         }.ToJsonString(options));
         File.WriteAllText(Path.Combine(_packageRoot, "plugin.json"), JsonSerializer.Serialize(manifest, options));
         File.WriteAllText(
@@ -436,23 +428,6 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
     }
 
     // 既有内存fixture只验证字段及绑定形状；真实权限由完整Host/SQL消费者证明。
-    private sealed class FixtureReadPlan : IDataScopeReadPlanProvider
-    {
-        public Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken token = default)
-        {
-            Assert.Equal("Partner.AssetCatalog.Asset", resourceKey);
-            token.ThrowIfCancellationRequested();
-            return Task.FromResult(new DataScopeReadPlan(null));
-        }
-    }
-
-    private sealed class PackageDecisions : IDataScopeObjectAccess, IDataScopeObjectDecisionProvider
-    {
-        public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default) => Task.FromResult(true);
-        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string action, CancellationToken token = default) => Task.FromResult(true);
-        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string action, CancellationToken token = default) => Task.FromResult(true);
-    }
-
     private sealed class UnusedQueryExecutor : IPlatformQueryExecutor
     {
         public Task<PlatformQueryResult> QueryAsync(
@@ -462,86 +437,10 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
             throw new NotSupportedException();
     }
 
-    private sealed class RecordingRepository : IStandardCrudRepository
+    private sealed class FieldAuditStamp : ICP.Platform.Persistence.Auditing.IEntityAuditStampProvider
     {
-        public List<Dictionary<string, object?>> Rows { get; } = [];
-
-        public int CreateCallCount { get; private set; }
-
-        public int UpdateCallCount { get; private set; }
-
-        public Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(
-            StandardCrudDescriptor descriptor,
-            string id,
-            CancellationToken cancellationToken = default)
-        {
-            var row = Rows.SingleOrDefault(candidate =>
-                string.Equals(candidate[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
-            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(row);
-        }
-
-        public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
-            StandardCrudDescriptor descriptor,
-            StandardCrudListQuery query,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<bool> ExistsAsync(
-            StandardCrudDescriptor descriptor,
-            StandardCrudUniqueConstraint constraint,
-            IReadOnlyDictionary<string, object?> equalityValues,
-            string? excludedId = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(false);
-
-        public Task<IReadOnlyDictionary<string, object?>> CreateAsync(
-            StandardCrudDescriptor descriptor,
-            IReadOnlyDictionary<string, object?> values,
-            CancellationToken cancellationToken = default)
-        {
-            CreateCallCount++;
-            var row = new Dictionary<string, object?>(values, StringComparer.Ordinal)
-            {
-                [descriptor.IdField] = $"Asset_{Guid.NewGuid():N}"
-            };
-            Rows.Add(row);
-            return Task.FromResult<IReadOnlyDictionary<string, object?>>(row);
-        }
-
-        public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
-            StandardCrudDescriptor descriptor,
-            string id,
-            IReadOnlyDictionary<string, object?> values,
-            CancellationToken cancellationToken = default)
-        {
-            var row = Rows.SingleOrDefault(candidate =>
-                string.Equals(candidate[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
-            if (row is null)
-            {
-                return Task.FromResult<IReadOnlyDictionary<string, object?>?>(null);
-            }
-
-            UpdateCallCount++;
-            foreach (var pair in values)
-            {
-                row[pair.Key] = pair.Value;
-            }
-
-            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(row);
-        }
-
-        public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
-            StandardCrudDescriptor descriptor,
-            string id,
-            IReadOnlyDictionary<string, object?> values,
-            long expectedRevision,
-            CancellationToken cancellationToken = default) =>
-            UpdateAsync(descriptor, id, values, cancellationToken);
-
-        public Task<bool> DeleteAsync(
-            StandardCrudDescriptor descriptor,
-            string id,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public ICP.Platform.Persistence.Auditing.EntityAuditStamp GetCurrent() => new("standard-data-api-test-subject",
+            new DateTime(2026, 9, 4, 7, 24, 26, DateTimeKind.Utc).AddTicks(5023291));
     }
+    private sealed class RecordingRepository : FieldHttpEfRepository { }
 }

@@ -9,6 +9,7 @@ import { workspaceClipboard } from '../workspaceClipboard';
 import dictionary from '../../metadata/dictionaries/Workspace.dic.json';
 
 import compiled from '../../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
+const resultDeclaration = compiled.declarations.find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === 'resolveObjectCopy')!;
 const declaration = compiled.declarations.find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy')!;
 
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: vi.fn() }));
@@ -36,11 +37,13 @@ it.each([false, true])('recovers without replay and never lets a stale read over
   try {
     const view = <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]}
       catalogs={{ zhs: Object.fromEntries(Object.entries(dictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value.zhs])) }}>
-      <WorkspaceObjectCopyRecovery instance={instance} featurePosition="result-feature" action={{ key: 'resolveObjectCopy', labelKey: 'Workspace.CopyResolve' }}
+      <WorkspaceObjectCopyRecovery instance={instance} featurePosition="result-feature" action={{ key: 'resolveObjectCopy', labelKey: 'Workspace.CopyResolve', buttonId: resultDeclaration.id }} buttonId={resultDeclaration.id}
         value={undefined} onChange={change} onDraftStateChange={draftState} />
     </LocalizationProvider>;
     await act(async () => root.render(strict ? <StrictMode>{view}</StrictMode> : view));
     expect(element.textContent).toContain('也可能已中断');
+    expect(new Headers(vi.mocked(platformFetch).mock.lastCall![1]?.headers).get('X-NewP-Button')).toBe(resultDeclaration.id);
+    expect(new Headers(vi.mocked(platformFetch).mock.lastCall![1]?.headers).has('X-NewP-Data-Declaration')).toBe(false);
     expect(draftState).toHaveBeenLastCalledWith({ dirty: false, ready: false });
     vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('read failed'));
     await act(async () => [...element.querySelectorAll('button')].find(button => button.textContent === '核对副本结果')!.click());
@@ -55,6 +58,7 @@ it.each([false, true])('recovers without replay and never lets a stale read over
       expect(draftState).toHaveBeenLastCalledWith({ dirty: false, ready: true });
     }
     expect(platformFetch).toHaveBeenLastCalledWith('/api/workspace/content/objects/copy/cancel', expect.objectContaining({ headers: expect.objectContaining({ 'X-NewP-Feature': 'paste-feature' }) }));
+    expect(new Headers(vi.mocked(platformFetch).mock.lastCall![1]?.headers).has('X-NewP-Button')).toBe(false);
     expect(vi.mocked(platformFetch).mock.calls.filter(([url]) => String(url).endsWith('/objects/copy'))).toHaveLength(1);
   } finally { await act(async () => root.unmount()); element.remove(); vi.resetAllMocks(); }
 });

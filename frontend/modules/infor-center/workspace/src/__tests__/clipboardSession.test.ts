@@ -21,7 +21,7 @@ it('recovers a lost object-copy receipt by reading its operation and never repea
   await expect(session.pasteObjectCopy(draft, { ECODE: 'REPLAY', ENAME: 'Must not write' }, target, 'object-copy', 'part-source')).rejects.toThrow();
   expect(platformFetch).toHaveBeenCalledTimes(3);
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'committed', succeeded: true })));
-  expect(await session.resolveObjectCopy()).toEqual({ state: 'committed', succeeded: true });
+  expect(await session.resolveObjectCopy(false, 'result-feature', 'result-button')).toEqual({ state: 'committed', succeeded: true });
   expect(platformFetch).toHaveBeenLastCalledWith('/api/workspace/content/objects/copy/result', expect.objectContaining({ body: JSON.stringify({ operationId: 'operation' }) }));
   expect(session.getSnapshot().phase).toBe('idle');
   expect(session.getSnapshot().clipboard?.linkIds).toEqual(['part']);
@@ -76,7 +76,7 @@ it('allows one Document and keeps an interrupted preparation locked until contro
   vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('lost while preparing'));
   await expect(session.pasteObjectCopy(draft, { ECODE: 'NEW', ENAME: 'Document' }, target, 'object-copy', declaration.id)).rejects.toThrow();
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'preparing', succeeded: false })));
-  expect((await session.resolveObjectCopy()).state).toBe('preparing');
+  expect((await session.resolveObjectCopy(false, 'result-feature', 'result-button')).state).toBe('preparing');
   expect(session.canResolveObjectCopy()).toBe(true);
   expect(session.canCopyObject()).toBe(false);
   const count = vi.mocked(platformFetch).mock.calls.length;

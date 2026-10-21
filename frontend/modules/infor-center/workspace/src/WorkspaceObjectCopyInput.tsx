@@ -10,7 +10,7 @@ const noSubscription = () => () => undefined;
 const noSnapshot = () => undefined;
 
 /** 来源和目标属于打开时的确认；重读明确更新预填，用户已改值始终由本地草稿保留。 */
-export default function WorkspaceObjectCopyInput({ instance, queryScope, featurePosition, dataAccess, value, onChange, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
+export default function WorkspaceObjectCopyInput({ instance, queryScope, featurePosition, action, buttonId, value, onChange, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
   const { t } = useLocalization();
   const callbacks = useRef({ onChange, onDraftStateChange }); callbacks.current = { onChange, onDraftStateChange };
   const active = instance?.active;
@@ -30,18 +30,18 @@ export default function WorkspaceObjectCopyInput({ instance, queryScope, feature
   const values = current?.values ?? {};
   latestValues.current = values;
   const targetKey = JSON.stringify(workspacePosition(queryScope));
-  const declarationId = dataAccess?.id;
+  const currentButton = buttonId && buttonId === action.buttonId ? buttonId : undefined;
   const expired = failure || !!draft && (draft.closed || !instance?.active || state?.clipboard !== draft.source);
   useEffect(() => {
     const controller = new AbortController();
     if (!session) { setFailure(true); return () => controller.abort(); }
     let opened: ObjectCopyDraft;
-    try { opened = session.prepareObjectCopy(JSON.parse(targetKey), featurePosition, declarationId); }
+    try { opened = session.prepareObjectCopy(JSON.parse(targetKey), featurePosition, currentButton); }
     catch { setFailure(true); return () => controller.abort(); }
     currentDraft.current = opened;
     setDraft(opened); setPreparation(undefined); setFailure(false); setCancelState(undefined);
     void session.readObjectCopyInput(opened, controller.signal).then(result => {
-      const context = JSON.stringify([targetKey, featurePosition, declarationId]);
+      const context = JSON.stringify([targetKey, featurePosition, currentButton]);
       const previous = baselineContext.current === context && baselineSource.current === opened.source ? baseline.current : undefined;
       const merge = (initial: Record<string, unknown>, before?: Record<string, unknown>, current?: Record<string, unknown>) =>
         before && current ? Object.fromEntries(Object.entries(initial).map(([key, value]) => [key, current[key] !== before[key] ? current[key] : value])) : initial;
@@ -54,7 +54,7 @@ export default function WorkspaceObjectCopyInput({ instance, queryScope, feature
       setPreparation(result); callbacks.current.onChange({ draft: opened, values: next });
     }).catch(() => { if (!controller.signal.aborted) setFailure(true); });
     return () => { controller.abort(); opened.closed = true; if (currentDraft.current === opened) currentDraft.current = undefined; };
-  }, [session, targetKey, featurePosition, declarationId, reread]);
+  }, [session, targetKey, featurePosition, currentButton, reread]);
   const rows = values.items as ObjectCopyValuesRow[] | undefined;
   const dirty = !!preparation && JSON.stringify(values) !== JSON.stringify(preparation.values);
   const ready = !!draft && !!preparation && !expired && !draft.requiresReconfirmation && cancelState !== 'requested' && state?.phase === 'idle' && !submitting

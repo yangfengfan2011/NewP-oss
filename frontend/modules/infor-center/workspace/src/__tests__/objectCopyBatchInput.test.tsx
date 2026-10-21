@@ -30,7 +30,7 @@ it('confirms every Document row, preserves row values and locates a later-row co
     const [ready, setReady] = useState(false);
     const catalogs = { zhs: Object.fromEntries([...Object.entries(workspaceDictionary.Workspace).map(([key, entry]) => [`Workspace.${key}`, entry.zhs]), ...Object.entries(documentDictionary.Document).map(([key, entry]) => [`Document.${key}`, entry.zhs])]) };
     return <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
-      <WorkspaceObjectCopyInput instance={currentInstance} action={{ key: 'pasteObjectCopy', labelKey: 'Workspace.PasteObjectCopy' }} dataAccess={declaration} featurePosition="copy" queryScope={{ ...target, linkIds: JSON.stringify(target.linkIds) }} value={value} onChange={change} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
+      <WorkspaceObjectCopyInput instance={currentInstance} action={{ key: 'pasteObjectCopy', labelKey: 'Workspace.PasteObjectCopy', buttonId: declaration.id }} buttonId={declaration.id} dataAccess={declaration} featurePosition="copy" queryScope={{ ...target, linkIds: JSON.stringify(target.linkIds) }} value={value} onChange={change} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
       <button disabled={!ready} onClick={() => { pending = session.pasteObjectCopy(draft.draft, draft.values, target, 'copy', declaration.id).catch(error => error); }}>提交集合</button>
     </LocalizationProvider>;
   }
@@ -50,6 +50,8 @@ it('confirms every Document row, preserves row values and locates a later-row co
     await act(async () => { [...element.querySelectorAll('button')].find(button => button.textContent === '提交集合')!.click(); await pending; });
     expect(element.textContent).toContain('第二行编码已存在'); expect(inputs()[0].value).toBe('NEW-A'); expect(inputs()[2].value).toBe('NEW-B'); expect(inputs()[3].value).toBe('用户修改 B');
     const submitted = JSON.parse(String(vi.mocked(platformFetch).mock.calls[vi.mocked(platformFetch).mock.calls.length - 1][1]!.body)) as { values: unknown };
+    expect(new Headers(vi.mocked(platformFetch).mock.lastCall![1]?.headers).get('X-NewP-Button')).toBe(declaration.id);
+    expect(new Headers(vi.mocked(platformFetch).mock.lastCall![1]?.headers).has('X-NewP-Data-Declaration')).toBe(false);
     expect(submitted.values).toEqual({ items: [{ sourceLinkId: 'a', values: { ECODE: 'NEW-A', ENAME: '来源 a', Description: '说明' } }, { sourceLinkId: 'b', values: { ECODE: 'NEW-B', ENAME: '用户修改 B', Description: '说明' } }] });
     expect(vi.mocked(platformFetch).mock.calls.filter(([url]) => String(url).endsWith('/objects/copy'))).toHaveLength(1);
     const oldDraft = draft!; const otherEntries = new Map<symbol, unknown>();

@@ -122,17 +122,17 @@ const resource: StandardCrudResourceRegistration = {
     authorizeContent: context => authorization(context).actionHandlers.authorize(context),
     authorize: Object.assign((context: StandardCrudActionContext) => context.action?.inputKey === 'batchAuthorization' ? saveBatch(context) : authorization(context).actionHandlers.authorize(context),
       { isCorrectableInputError: batchOutcomeUnknown }),
-    pasteObjectCopy: Object.assign(async ({ instance, input, queryScope, featurePosition, action }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+    pasteObjectCopy: Object.assign(async ({ instance, input, queryScope, featurePosition, action, buttonId }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const value = input as { draft?: ObjectCopyDraft; values?: Record<string, unknown> } | undefined;
       if (!value?.draft || !value.values) throw new StandardCrudRequestError('Workspace.CopyInputExpired', 409, {}, { code: 'Workspace.CopyInputExpired' });
-      const receipt = await clipboard(instance).pasteObjectCopy(value.draft, value.values, workspacePosition(queryScope), featurePosition, action?.dataAccess?.id);
+      const receipt = await clipboard(instance).pasteObjectCopy(value.draft, value.values, workspacePosition(queryScope), featurePosition, currentButtonId(buttonId, action));
       return { operation: 'action' as const, payload: { kind: 'workspace.objectCopy', receipt, rows: value.values.items as ObjectCopyValuesRow[] | undefined }, change: { operation: 'create' as const, id: '' }, notice: { reasonKey: 'Workspace.ObjectCopied' } };
     }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError
       && (['Part.CodeDuplicated', 'Document.CodeDuplicated', 'StandardCrud.PersistenceConflict', 'Workspace.CopySourceChanged', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '')
         || failure.status >= 400 && failure.status < 500 && Object.keys(failure.fieldErrors).some(key => key.startsWith('items.'))) }),
-    resolveObjectCopy: async ({ instance, featurePosition, input }) => {
+    resolveObjectCopy: async ({ instance, featurePosition, input, action, buttonId }) => {
       const recovered = input as ObjectCopyReceipt | undefined;
-      const receipt = recovered?.state === 'committed' || recovered?.state === 'cancelled' ? recovered : await clipboard(instance).resolveObjectCopy(false, featurePosition);
+      const receipt = recovered?.state === 'committed' || recovered?.state === 'cancelled' ? recovered : await clipboard(instance).resolveObjectCopy(false, featurePosition, currentButtonId(buttonId, action));
       return { operation: 'action', payload: { kind: 'workspace.objectCopy', receipt }, ...(receipt.succeeded ? { change: { operation: 'create' as const, id: '' } } : { noChange: true as const }),
         notice: { reasonKey: receipt.succeeded ? 'Workspace.ObjectCopied' : receipt.state === 'cancelled' ? 'Workspace.CopyCancelled' : 'Workspace.CopyNotCommitted' } };
     },

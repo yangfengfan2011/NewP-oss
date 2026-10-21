@@ -36,12 +36,12 @@ async function mount(preparation?: Promise<Response>, modelKey = 'Part') {
   let draft: { draft: ObjectCopyDraft; values: Record<string, unknown> } | undefined;
   let submission: Promise<unknown> | undefined;
   const draftState = vi.fn();
-  function Harness({ scope = target, binding = declaration }: { scope?: Record<string, unknown>; binding?: ActionDataAccessRequirement }) {
+  function Harness({ scope = target, binding = declaration, identity = binding?.id }: { scope?: Record<string, unknown>; binding?: ActionDataAccessRequirement; identity?: string | null }) {
     const [value, change] = useState<unknown>(); draft = value as typeof draft;
     const [ready, setReady] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     return <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
-      <WorkspaceObjectCopyInput instance={instance} action={{ key: 'pasteObjectCopy', labelKey: 'Workspace.PasteObjectCopy' }}
+      <WorkspaceObjectCopyInput instance={instance} action={{ key: 'pasteObjectCopy', labelKey: 'Workspace.PasteObjectCopy', buttonId: binding?.id }} buttonId={identity ?? undefined}
         featurePosition="object-copy" dataAccess={binding} queryScope={scope} value={value} onChange={change} submitting={submitting} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
       <button disabled={!ready} onClick={() => { setSubmitting(true); submission = session.pasteObjectCopy(draft!.draft, draft!.values, { ...source, linkIds: ['target'] }, 'object-copy', binding?.id).catch(failure => failure).finally(() => setSubmitting(false)); }}>提交</button>
     </LocalizationProvider>;
@@ -190,4 +190,13 @@ it('aborts the old preparation and discards its draft when the bound declaration
   expect(old.draft.closed).toBe(true);
   expect(view.draft().values.ECODE).toBe('');
   await expect(view.session.pasteObjectCopy(old.draft, old.values, { ...source, linkIds: ['target'] }, 'object-copy', declaration.id)).rejects.toThrow();
+});
+
+it.each([null, 'borrowed-button'])('refuses a missing or crossed current input identity (%s) without a new preparation', async identity => {
+  const view = await mount();
+  const count = vi.mocked(platformFetch).mock.calls.length;
+  await act(async () => view.root.render(<view.Harness identity={identity} />));
+  expect(view.element.textContent).toContain('来源、目标或账号已变化');
+  expect(view.draftState).toHaveBeenLastCalledWith({ dirty: false, ready: false });
+  expect(platformFetch).toHaveBeenCalledTimes(count);
 });

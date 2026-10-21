@@ -14,7 +14,8 @@ public class DataScopeRuleCache(IServiceScopeFactory scopes) : NamedCache<DataSc
 {
     internal const string NodeModel = "DataScopeRuleNode";
     internal const string SubjectModel = "DataScopeRuleSubject";
-    public override string Name => "Authorization.DataScopeRules";
+    internal const string CacheName = "Authorization.DataScopeRules";
+    public override string Name => CacheName;
 
     /// <inheritdoc/>
     protected override long CountRecords(DataScopeRuleSnapshot snapshot) => snapshot.RecordCount;

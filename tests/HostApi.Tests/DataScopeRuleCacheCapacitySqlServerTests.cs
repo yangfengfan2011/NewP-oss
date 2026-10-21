@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
+using ICP.Platform.Modules.Authorization.Caching;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -34,8 +35,9 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         var evidencePath = Path.Combine(directory, $"{phase}-{nodes}.jsonl");
         var started = Stopwatch.StartNew();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
-            services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(commands)), includeWorkspace: true);
-        Emit(new { phase = "host-start-empty", milliseconds = started.Elapsed.TotalMilliseconds });
+            RegisterRuleNaturalCosts(services, commands), includeWorkspace: true);
+        Emit(new { phase = "host-start-empty", milliseconds = started.Elapsed.TotalMilliseconds,
+            fullCacheLoadMilliseconds = fixture.Services.GetRequiredService<DataScopeRuleCache>().LastMaintenanceDuration?.TotalMilliseconds });
         using var preparationAdmin = await fixture.LoginAdministratorAsync();
         var admin = preparationAdmin;
         await InitializeAsync(fixture, admin);
@@ -58,6 +60,11 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         }
         // 相同正式Host重启区分完整初载和首次请求；不把准备阶段或请求分配量称为缓存驻留。
         await CaptureAsync("host-restart-with-rules", 0, 0, async _ => await fixture.RestartWithReadActionAsync(true));
+        var loaded = fixture.Services.GetRequiredService<DataScopeRuleCache>();
+        Assert.Equal(nodes * 11L, loaded.RecordCount);
+        Assert.NotNull(loaded.LastMaintenanceDuration);
+        Emit(new { phase = "cache-full-load", milliseconds = loaded.LastMaintenanceDuration.Value.TotalMilliseconds,
+            records = loaded.RecordCount, memoryScope = "各阶段内存为整个测试进程观察值，含fixture/旧新Host和client，不是精确缓存对象驻留" });
         using var restartedAdmin = fixture.CreateClient();
         using var restartedOrdinary = fixture.CreateClient();
         await ReconnectAsync(restartedAdmin, "admin");
@@ -74,6 +81,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         if (entryProbe)
         {
             await ReadAsync(1);
+            await VerifyRuleObservationAffinityAsync(fixture);
             await CaptureAsync("maintenance", 1, 1, _ => SaveAsync(roots[0] with { Enabled = false }));
             await SaveAsync(roots[0]);
             await ReadAsync(0);
@@ -127,6 +135,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
 
         async Task CaptureAsync(string measurement, int concurrency, int count, Func<int, Task> action)
         {
+            fixture.Services.GetRequiredService<RuleNaturalPublicationCosts>().Samples.Clear();
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
             var retainedBefore = GC.GetTotalMemory(false);
             var allocatedBefore = GC.GetTotalAllocatedBytes(true);
@@ -146,17 +155,26 @@ public sealed partial class DataScopePermissionCostSqlServerTests
             finally { commands.End(); }
             elapsed.Stop();
             var allocated = GC.GetTotalAllocatedBytes(true) - allocatedBefore;
+            var naturalPublication = await Task.WhenAll(fixture.Services.GetRequiredService<RuleNaturalPublicationCosts>().Samples.ToArray());
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
             Array.Sort(latencies);
             var statements = commands.Items.ToArray();
+            var ruleCommands = statements.Count(item => item.Sql.Contains("[DataScopeRuleNode]", StringComparison.Ordinal)
+                || item.Sql.Contains("[DataScopeRuleSubject]", StringComparison.Ordinal));
+            if (measurement is "first-request" or "steady") Assert.Equal(0, ruleCommands);
+            if (measurement is "maintenance" or "reads-during-save")
+            {
+                Assert.Single(naturalPublication);
+                Assert.All(naturalPublication, sample => Assert.NotNull(sample.CommitToPublicationMilliseconds));
+            }
             Emit(new { phase = measurement, concurrency, requests = count, elapsedMilliseconds = elapsed.Elapsed.TotalMilliseconds,
                 requestsPerSecond = count / elapsed.Elapsed.TotalSeconds,
                 p50 = latencies[(latencies.Length - 1) / 2], p95 = latencies[(int)((latencies.Length - 1) * .95)], p99 = latencies[(int)((latencies.Length - 1) * .99)],
                 allocatedBytes = allocated, retainedManagedBytesBefore = retainedBefore, retainedManagedBytesAfter = GC.GetTotalMemory(false),
                 processWorkingSetBytes = Process.GetCurrentProcess().WorkingSet64,
-                sqlCommands = statements.Length, ruleTableCommands = statements.Count(item => item.Sql.Contains("[DataScopeRuleNode]", StringComparison.Ordinal)
-                    || item.Sql.Contains("[DataScopeRuleSubject]", StringComparison.Ordinal)),
+                sqlCommands = statements.Length, ruleTableCommands = ruleCommands,
                 sqlExecuteMilliseconds = statements.Sum(item => item.ExecuteMilliseconds),
+                naturalPublication,
                 sql = statements.GroupBy(item => item.Sql).Select(group => new { statement = group.Key, count = group.Count() }) });
         }
 

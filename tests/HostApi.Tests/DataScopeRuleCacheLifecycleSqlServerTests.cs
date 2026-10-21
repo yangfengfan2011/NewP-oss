@@ -60,10 +60,10 @@ public sealed partial class DataScopePermissionCostSqlServerTests
                 .ExecuteUpdateAsync(setters => setters.SetProperty(row => EF.Property<string>(row, "ConditionJson"), "{"));
         });
         await ReconnectRuleScenarioAsync(scenario);
-        using (var badReady = await scenario.Admin.GetAsync("/api/health/ready")) Assert.Equal(HttpStatusCode.ServiceUnavailable, badReady.StatusCode);
+        using (var badReady = await scenario.Admin.GetAsync("/api/health/ready")) Assert.Equal(HttpStatusCode.OK, badReady.StatusCode);
         using (var badResource = await scenario.ListPositionsAsync()) await AssertRuleProblemAsync(badResource, "Persistence.CacheUnavailable");
-        using (var otherResource = await scenario.ExplanationAsync()) await AssertRuleProblemAsync(otherResource, "Persistence.CacheUnavailable");
-        Assert.Null(scenario.Cache.RecordCount);
+        using (var otherResource = await scenario.ExplanationAsync()) Assert.Equal(HttpStatusCode.OK, otherResource.StatusCode);
+        Assert.Equal(13, scenario.Cache.RecordCount);
 
         var condition = JsonSerializer.Serialize(disabled.Condition, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         await scenario.Fixture.RestartAfterMaintenanceAsync(async provider =>

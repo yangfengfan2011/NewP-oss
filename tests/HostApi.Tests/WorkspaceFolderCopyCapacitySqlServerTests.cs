@@ -31,8 +31,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/document-uploads") { Content = multipart };
             var createDocument = Point(fixture, "workspace.folder.createDocument");
             request.Headers.Add("X-NewP-Feature", createDocument.Position);
-            request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture)
-                .Declaration("workspace.content.createDocument", createDocument).Id);
+            request.Headers.Add("X-NewP-Button", new FeatureHttpTestRequests(fixture)
+                .Declaration(createDocument.BehaviorKey, createDocument).Id);
             using var response = await admin.SendAsync(request); Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var uploadId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("uploadId").GetString();
             await Command(fixture, admin, "workspace.folder.createDocument", "/api/workspace/content/documents", new { position = source, values, uploads = new { mainUploadId = uploadId, attachmentUploadIds = Array.Empty<string>() } });

@@ -38,7 +38,7 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
         foreach (var (kind, model, action) in Targets)
         {
             var create = Point(fixture, "workspace.folder." + action);
-            var declaration = new FeatureHttpTestRequests(fixture).Declaration(model == "Part" ? create.BehaviorKey : "workspace.content.createDocument", create);
+            var declaration = new FeatureHttpTestRequests(fixture).Declaration(create.BehaviorKey, create);
             var url = "/api/workspace/content/" + kind;
             using var denied = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Post, url,
                 new { position, values = new { ECODE = "DENIED", ENAME = "错误功能位置" } });
@@ -91,7 +91,7 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
         {
             var create = Point(fixture, "workspace.folder." + action);
             var declaration = new FeatureHttpTestRequests(fixture).Declaration(
-                model == "Part" ? create.BehaviorKey : "workspace.content.createDocument", create);
+                create.BehaviorKey, create);
             var url = "/api/workspace/content/" + kind;
             var body = new { position, values = new { ECODE = "ATOMIC", ENAME = "不能留下孤立对象" } };
             decisions.AllowParent = false;

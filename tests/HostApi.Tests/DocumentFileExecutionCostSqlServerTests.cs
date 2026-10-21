@@ -72,7 +72,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests(ITestOutputHelper
             {
                 var feature = content ? download : read;
                 var binding = baseline ? null : Assert.Single(plan.ActionDataAccessCatalog, item =>
-                    item.Execution == (content ? "document.files.download" : "document.document.read") && item.FeaturePositions.Contains(feature.Position));
+                    (content ? item.BusinessBinding == "document.document.download" : item.Execution == "document.document.read" && item.BusinessBinding is null) && item.FeaturePositions.Contains(feature.Position));
                 var path = $"/api/document/documents/{document.DocumentId}/files" + (content ? $"/{document.MainLinkId}/content" : "");
                 // 暖请求只完成当前actor/功能装载；准备、暖请求和诊断重放不计入正式请求。
                 using (var warm = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Get, path, dataAccess: binding))

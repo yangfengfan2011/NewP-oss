@@ -746,7 +746,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
     {
         var feature = Point(fixture, behavior);
         var execution = behavior switch { "workspace.folder.create" => "workspace.folder.create",
-            "workspace.folder.createPart" => "workspace.folder.createPart", "workspace.folder.createDocument" => "workspace.content.createDocument", _ => null };
+            "workspace.folder.createPart" => "workspace.folder.createPart", "workspace.folder.createDocument" => "workspace.folder.createDocument", _ => null };
         var declaration = behavior == "workspace.folder.deleteObjects"
             ? new FeatureHttpTestRequests(fixture).Declaration(behavior, feature)
             : execution is not null

@@ -64,7 +64,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var part = await Target("Part", partValues.ECODE);
         JsonElement staged = default;
         await Measure("document-stage", 1, 0, async () => staged = await Stage(docValues));
-        await Measure("document-create", 1, 1, () => Send(createDocument, "workspace.content.createDocument", HttpMethod.Post,
+        await Measure("document-create", 1, 1, () => Send(createDocument, "workspace.folder.createDocument", HttpMethod.Post,
             "/api/workspace/content/documents", new { position = parent, values = docValues,
                 uploads = new { mainUploadId = staged.GetProperty("uploadId").GetString()! } }));
         var document = await Target("Document", docValues.ECODE);
@@ -78,7 +78,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         // 两对象成本使用同一普通创建主体；准备期另建真实Document主文件，所有目标均有两个入向引用。
         var mixedValues = new { ECODE = "COST315-MIXED-DOC", ENAME = "双对象Document" };
         var mixedStage = await Stage(mixedValues);
-        await Send(createDocument, "workspace.content.createDocument", HttpMethod.Post, "/api/workspace/content/documents",
+        await Send(createDocument, "workspace.folder.createDocument", HttpMethod.Post, "/api/workspace/content/documents",
             new { position = parent, values = mixedValues, uploads = new { mainUploadId = mixedStage.GetProperty("uploadId").GetString()! } });
         var mixedDocument = await Target("Document", mixedValues.ECODE);
         await AddOtherReference("Part", part.Id); await AddOtherReference("Document", mixedDocument.Id);
@@ -103,8 +103,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         {
             using var request = DocumentFilesSqlServerHttpApiTests.UploadRequest(fixture, parent, values,
                 new ByteArrayContent([0x25, 0x50, 0x44, 0x46, 0x31]), "cost315.pdf");
-            if (Declaration("workspace.content.createDocument", createDocument) is { } declaration)
-                request.Headers.Add("X-NewP-Data-Declaration", declaration.Id);
+            if (Declaration("workspace.folder.createDocument", createDocument) is { } declaration)
+                request.Headers.Add(declaration.BusinessBinding is null ? "X-NewP-Data-Declaration" : "X-NewP-Button", declaration.Id);
             using var response = await ordinary.SendAsync(request);
             Assert.True(response.StatusCode == HttpStatusCode.OK, "document-stage: HTTP " + (int)response.StatusCode);
             return JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsByteArrayAsync());

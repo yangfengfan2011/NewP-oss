@@ -411,12 +411,9 @@ public sealed partial class WorkspaceObjectMutationSqlServerHttpApiTests
     private static Task<HttpResponseMessage> SendAsync(BusinessAuditHostFixture fixture, HttpClient client, string action, HttpMethod method, string path, object body)
     {
         var feature = Point(fixture, action);
-        if (action is "create" or "createPart" or "edit" or "delete" or "deleteObjects")
+        if (action is "create" or "createPart" or "createDocument" or "edit" or "delete" or "deleteObjects")
             return new FeatureHttpTestRequests(fixture).SendButtonAsync(client, feature, method, path, body);
-        var execution = action == "createDocument" ? "workspace.content.createDocument" : null;
-        var declaration = execution is null ? WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, feature)
-            : Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
-                item => item.Execution == execution && item.FeaturePositions.Contains(feature.Position));
+        var declaration = WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, feature);
         return FeatureHttpTestRequests.SendAsync(client, feature, method, path, body, declaration);
     }
     private static async Task<Position> RootAsync(BusinessAuditHostFixture fixture, HttpClient admin)

@@ -159,7 +159,7 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
         if (model != "WorkspaceFolder") values["ECODE"] = name;
         var feature = Point(fixture, "workspace.folder." + action);
         var declaration = new FeatureHttpTestRequests(fixture).Declaration(
-            model == "Document" ? "workspace.content.createDocument" : feature.BehaviorKey, feature);
+            feature.BehaviorKey, feature);
         using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post,
             "/api/workspace/content/" + kind, new { position, values }, declaration);
         await ReadOkAsync(response);

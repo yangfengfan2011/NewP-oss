@@ -110,7 +110,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
             "workspace-doc315", "组合图文档普通主体", entry, create, read);
         using var ordinary = actor.Client;
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.createDocument"
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.createDocument"
             && item.FeaturePositions.Contains(create.Position));
         var crossed = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.createPart");
         var values = new { ECODE = "WORKSPACE-DOC-315", ENAME = "带文件且创建后不可读" };
@@ -119,7 +119,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         {
             using var request = DocumentFilesSqlServerHttpApiTests.UploadRequest(fixture, position, values,
                 new ByteArrayContent([0x25, 0x50, 0x44, 0x46]), "source315.pdf");
-            if (source is not null) request.Headers.Add("X-NewP-Data-Declaration", source);
+            if (source is not null) request.Headers.Add("X-NewP-Button", source);
             using var rejected = await ordinary.SendAsync(request);
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
             Assert.Equal(beforeStage, await ObjectSnapshot(fixture));
@@ -129,7 +129,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         using (var request = DocumentFilesSqlServerHttpApiTests.UploadRequest(fixture, position, values,
             new ByteArrayContent([0x25, 0x50, 0x44, 0x46]), "source315.pdf"))
         {
-            request.Headers.Add("X-NewP-Data-Declaration", declaration.Id);
+            request.Headers.Add("X-NewP-Button", declaration.Id);
             using var staged = await ordinary.SendAsync(request);
             Assert.Equal(HttpStatusCode.OK, staged.StatusCode);
             uploadId = JsonSerializer.Deserialize<JsonElement>(await staged.Content.ReadAsStringAsync()).GetProperty("uploadId").GetString()!;

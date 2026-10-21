@@ -403,9 +403,7 @@ public sealed class StandardCrudService : IStandardCrudService
     // 仅已登记的入口生成本次目标绑定；正式来源仍由统一执行器核对原请求声明。
     private ObjectOperationWriteSource EntryWriteSource(StandardCrudDescriptor descriptor, string operation, string? id)
     {
-        var writeOperation = operation is "enable" or "disable" ? "update" : operation;
-        if (descriptor.DataExecutions.TryGetValue(writeOperation, out var execution))
-            return new ObjectOperationWriteSource.Declared(new(new(execution, "standardCrud." + writeOperation, "submit"), descriptor.ResourceKey, id));
+        StandardCrudDescriptorValidator.ValidateReadSources(descriptor);
         return operation is "create" or "update" or "delete" or "enable" or "disable"
             ? new ObjectOperationWriteSource.Button((_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED"))
                 .Bind(descriptor.ResourceKey, descriptor.ModelName, operation, id))

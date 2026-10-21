@@ -31,34 +31,21 @@ internal sealed class StandardCrudTestAccess(IDataScopeObjectDecisionProvider? d
         decisions?.IsCandidateAllowedAsync(resourceKey, candidate, actionKey, token) ?? Task.FromResult(true);
 
     internal static IReadOnlyDictionary<string, string> Bindings(string resource) =>
-        new[] { "create", "update", "delete", "read", "list", "options", "export" }
+        new[] { "read", "list", "options", "export" }
             .ToDictionary(operation => operation, operation => resource + "." + operation);
-
-    internal static ObjectOperationWriteSource Source(StandardCrudDescriptor descriptor, string operation = "create", string? id = null) =>
-        new ObjectOperationWriteSource.Declared(new(new(descriptor.DataExecutions[operation], "standardCrud." + operation, "submit"), descriptor.ResourceKey, id));
 
     public void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey)
     {
         if (bindings.Count == 0 || bindings.Any(binding => binding is null)) throw new InvalidOperationException("Test source required.");
     }
 
-    public DataExecutionBindingReference BindResourceEndpoint(string resourceKey) => new(resourceKey + ".authorization.manage", "authorization.object.manage", "prepare");
     public Task<DataScopeReadPlan> GetQueryReadPlanAsync(DataExecutionQueryContext context, string resourceKey, CancellationToken token = default) =>
         reads?.GetReadPlanAsync(resourceKey, token) ?? Task.FromResult(new DataScopeReadPlan(null));
     public Task<DataScopeReadPlan> GetObjectReadPlanAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey, string role, string id, CancellationToken token = default) =>
         reads?.GetReadPlanAsync(resourceKey, token) ?? Task.FromResult(new DataScopeReadPlan(null));
 
-    public Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey, string role,
-        IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => Candidate(resourceKey, candidate, token);
-    public Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionWriteContext context, string resourceKey, string role,
-        IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => Candidate(resourceKey, candidate, token);
-    private async Task<DataExecutionDecision> Candidate(string resource, IReadOnlyDictionary<string, object?> candidate, CancellationToken token) =>
-        decisions is null || await decisions.IsCandidateAllowedAsync(resource, candidate, "create", token) ? DataExecutionDecision.Allowed : DataExecutionDecision.Denied;
-
     public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey, string role, string id, CancellationToken token = default) =>
         Existing(binding, resourceKey, id, token);
-    public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionWriteContext context, string role, DataExecutionWriteFacts before, CancellationToken token = default) =>
-        Existing(context.Binding, before.ResourceKey, before.ObjectId, token);
     public Task<DataExecutionDecision> EvaluateObjectFromBindingsAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resource, string role, string id, CancellationToken token = default) =>
         Existing(bindings.Single(), resource, id, token);
     public async IAsyncEnumerable<DataExecutionTargetDecision> EvaluateObjectsAsync(DataExecutionBindingReference binding, string role,
@@ -73,7 +60,6 @@ internal sealed class StandardCrudTestAccess(IDataScopeObjectDecisionProvider? d
     {
         if (objects is not null && !await objects.IsReadableAsync(resource, id, token)
             || objects is null && decisions is not null && !await decisions.IsAllowedAsync(resource, id, "read", token)) return DataExecutionDecision.NotFound;
-        var action = binding.Provider switch { "standardCrud.update" => "edit", "standardCrud.delete" => "delete", "authorization.object.manage" => "authorize", _ => null };
-        return action is null || decisions is null || await decisions.IsAllowedAsync(resource, id, action, token) ? DataExecutionDecision.Allowed : DataExecutionDecision.Denied;
+        return DataExecutionDecision.Allowed;
     }
 }

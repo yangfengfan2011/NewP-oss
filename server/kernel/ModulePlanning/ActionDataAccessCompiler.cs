@@ -15,7 +15,6 @@ public sealed record ActionDataAccessDeclaration(string ModuleId, string ViewKey
     public string? BusinessBinding { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ButtonObjectRequirement>? ObjectRequirements { get; init; }
-    public IReadOnlyList<string> AdditionalActions { get; init; } = [];
     /// <summary>输入仅引用已有读取身份；实际要求仍属于来源合同，保存沿本按钮自身要求。</summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? InputReadSourceKey { get; init; }
@@ -71,7 +70,8 @@ public static partial class ActionDataAccessCompiler
                     || string.IsNullOrWhiteSpace(declaration.ActionKey) || declaration.Execution.Length != 0
                     || declaration.Resources.Distinct(StringComparer.Ordinal).Count() != declaration.Resources.Count
                     || declaration.Resources.Any(resource => !resources.Contains(resource))
-                    || declaration.AdditionalActions.Count != 0 || string.IsNullOrWhiteSpace(declaration.BusinessBinding)
+                    || string.IsNullOrWhiteSpace(declaration.BusinessBinding)
+                    || declaration.Surface is not ("pageActions" or "rowActions" or "featureActions" or "outputActions" or "detailContributions" or "export")
                     || declaration.BusinessBinding != feature.BehaviorKey && !(feature.Kind == "action"
                         && declaration.Surface is "pageActions" or "rowActions")
                     || (objects is null
@@ -89,7 +89,8 @@ public static partial class ActionDataAccessCompiler
                 continue;
             }
             if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
-                || declaration.ObjectRequirements is not null || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "lookupBindings")
+                || declaration.Object is not null || declaration.ObjectRequirements is not null || declaration.InputReadSourceKey is not null
+                || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "lookupBindings")
                 || declaration.Surface != "read" && string.IsNullOrWhiteSpace(declaration.ActionKey)
                 || declaration.Actions.Distinct(StringComparer.Ordinal).Count() != declaration.Actions.Count
                 || declaration.Actions.Any(key => !actions.Any(action => action.Key == key))
@@ -104,7 +105,6 @@ public static partial class ActionDataAccessCompiler
                 || contract.Requirements.Any(requirement => !requirement.Resources.Any(resource => declaration.Resources.Contains(resource))))
                 throw new InvalidOperationException("DATA_EXECUTION_BINDING_INVALID");
             if (declaration.Actions.Count != 0
-                || declaration.AdditionalActions.Any(action => !contract.AllowedAdditionalActions.Contains(action))
                 || !contract.FeatureBehaviors.Any(behavior => behavior == feature.BehaviorKey || feature.ReadBehaviors.Contains(behavior)))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
         }
@@ -129,13 +129,12 @@ public static partial class ActionDataAccessCompiler
             }
             var contract = contracts[first.Execution];
             if (group.Any(entry => entry.declaration.Execution != first.Execution
-                || !entry.declaration.Actions.SequenceEqual(first.Actions) || !entry.declaration.Resources.SequenceEqual(first.Resources)
-                || !entry.declaration.AdditionalActions.SequenceEqual(first.AdditionalActions)))
+                || !entry.declaration.Actions.SequenceEqual(first.Actions) || !entry.declaration.Resources.SequenceEqual(first.Resources)))
                 throw new InvalidOperationException("ACTION_DATA_ACCESS_IDENTITY_CONFLICT");
             return new ActionDataAccessRequirement(first.Id, first.ModuleId, first.ViewKey, first.Surface, first.ActionKey,
                 first.Execution, first.Resources, contract.Requirements.SelectMany(requirement =>
                     requirement.AnyOf.Concat(requirement.ResourceAnyOf?.Values.SelectMany(branches => branches) ?? []))
-                    .SelectMany(branch => branch).Concat(first.AdditionalActions).Distinct(StringComparer.Ordinal).ToArray(),
+                    .SelectMany(branch => branch).Distinct(StringComparer.Ordinal).ToArray(),
                 group.Select(entry => positions[(entry.feature.ModuleId,
                     entry.feature.ReferenceKey ?? entry.feature.Key)].Position).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray())
             {
@@ -143,8 +142,7 @@ public static partial class ActionDataAccessCompiler
                 ProviderModuleId = contract.ProviderModuleId,
                 Requirements = contract.Requirements.Select(requirement => requirement with
                 { Resources = requirement.Resources.Where(first.Resources.Contains).ToArray(),
-                    ResourceAnyOf = requirement.ResourceAnyOf?.Where(item => first.Resources.Contains(item.Key)).ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal),
-                    AnyOf = requirement.AnyOf.Select(branch => (IReadOnlyList<string>)branch.Concat(first.AdditionalActions).Distinct(StringComparer.Ordinal).ToArray()).ToArray() }).ToArray()
+                    ResourceAnyOf = requirement.ResourceAnyOf?.Where(item => first.Resources.Contains(item.Key)).ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal) }).ToArray()
             };
         }).OrderBy(requirement => requirement.Id, StringComparer.Ordinal).ToArray();
     }

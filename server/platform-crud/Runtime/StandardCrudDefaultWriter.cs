@@ -23,7 +23,6 @@ public sealed class StandardCrudDefaultWriter
     private readonly IReadOnlyDictionary<string, IStandardCrudUpdateRecorder> _updateRecorders;
     private readonly IPlatformTransactionExecutor? _transactionExecutor;
     private readonly StandardCrudWriteRules _rules;
-    private readonly IDataExecutionAccess _executions;
     private readonly IPlatformObjectIdGenerator? _objectIds;
     private readonly ICP.Platform.Crud.Ownership.EntityOwnershipValues? _ownership;
     private readonly ICP.Platform.Crud.Ownership.EntityOwnershipAudit? _ownershipAudit;
@@ -31,7 +30,6 @@ public sealed class StandardCrudDefaultWriter
 
     /// <summary>组合默认写入依赖；事务与审计仍复用平台已有 owner，不依赖查询或展示服务。</summary>
     public StandardCrudDefaultWriter(
-        IDataExecutionAccess executions,
         IStandardCrudRepository repository,
         IEnumerable<IStandardCrudValidator> validators,
         IEnumerable<IStandardCrudDeleteGuard> deleteGuards,
@@ -54,7 +52,6 @@ public sealed class StandardCrudDefaultWriter
         _updateRecorders = (updateRecorders ?? []).ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _transactionExecutor = transactionExecutor;
         _rules = new StandardCrudWriteRules(repository, validators, temporalInputNormalizer, auditValueProvider);
-        _executions = executions ?? throw new ArgumentNullException(nameof(executions));
         _objectIds = objectIds;
         _ownership = ownership;
         _ownershipAudit = ownershipAudit;
@@ -74,9 +71,7 @@ public sealed class StandardCrudDefaultWriter
                 token => CreateAsync(descriptor, values, source, token).AsTask(),
                 cancellationToken);
         AssertWriteSource(descriptor, "create", null, source);
-        var preparation = source is ObjectOperationWriteSource.Button or ObjectOperationWriteSource.CreateContinuation
-            ? await PrepareCreateCandidateCoreAsync(descriptor, values, cancellationToken)
-            : await PrepareCreateCandidateAsync(descriptor, values, source, cancellationToken);
+        var preparation = await PrepareCreateCandidateCoreAsync(descriptor, values, cancellationToken);
         if (!preparation.Succeeded) return preparation;
         var candidate = preparation.Detail!.Fields;
         if (source is ObjectOperationWriteSource.CreateContinuation continuation)
@@ -143,7 +138,7 @@ public sealed class StandardCrudDefaultWriter
         });
     }
 
-    /// <summary>准备正式创建候选及可信归属审计；旧声明消费原create要求，显式内部来源不附加动作下限，不登记对象或开启事务。</summary>
+    /// <summary>准备正式创建候选及可信审计，按当前按钮要求检查；显式内部来源不附加动作下限，不登记对象或开启事务。</summary>
     /// <remarks>内部候选包含本次服务端身份，仅供业务预检；不能公开它或把成功当作后续提交的凭证。</remarks>
     public async Task<StandardCrudMutationResult> PrepareCreateCandidateAsync(StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken cancellationToken = default)
@@ -157,9 +152,6 @@ public sealed class StandardCrudDefaultWriter
         if (source is ObjectOperationWriteSource.Button button)
             return await (_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED")).ExecuteAsync(button.Context,
                 new ButtonCreationTarget(descriptor.ResourceKey, descriptor.ModelName, candidate), _ => Task.FromResult(preparation), cancellationToken);
-        if (source is ObjectOperationWriteSource.Declared declared && await _executions.EvaluateCandidateAsync(declared.Context, descriptor.ResourceKey,
-            "candidate", candidate, cancellationToken) != DataExecutionDecision.Allowed)
-            return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
         return preparation;
     }
 
@@ -256,9 +248,6 @@ public sealed class StandardCrudDefaultWriter
                 new ButtonExecutionTarget(descriptor.ResourceKey, descriptor.ModelName, id, existing),
                 token => UpdateAuthorizedCoreAsync(descriptor, id, values, existing, participant, recorder, token), cancellationToken);
         }
-        var scopeError = await CheckExistingScopeAsync(descriptor, id, "edit", existing, source, cancellationToken);
-        if (scopeError is not null) return StandardCrudMutationResult.Failure(scopeError);
-
         return await UpdateAuthorizedCoreAsync(descriptor, id, values, existing, participant, recorder, cancellationToken);
     }
 
@@ -342,8 +331,7 @@ public sealed class StandardCrudDefaultWriter
         }
         var existing = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
         if (existing is null) return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-        var scopeError = await CheckExistingScopeAsync(descriptor, id, "delete", existing, source, cancellationToken);
-        return scopeError is not null ? StandardCrudMutationResult.Failure(scopeError) : await DeleteAuthorizedCoreAsync(descriptor, id, cancellationToken);
+        return await DeleteAuthorizedCoreAsync(descriptor, id, cancellationToken);
     }
 
     // 当前实际目标已经完成原事实判权；条件删除、模块守卫及审计/cache事务继续由原owner执行。
@@ -441,17 +429,6 @@ public sealed class StandardCrudDefaultWriter
         public StandardCrudMutationResult Result { get; } = result;
     }
 
-    // 已存在目标先判最终读取，再判动作；关闭动作不能吞掉仍启用的读取依赖。
-    private async Task<StandardCrudError?> CheckExistingScopeAsync(StandardCrudDescriptor descriptor, string id,
-        string action, IReadOnlyDictionary<string, object?> existing, ObjectOperationWriteSource? source, CancellationToken token)
-    {
-        if (source is ObjectOperationWriteSource.Internal) return null;
-        var declared = (ObjectOperationWriteSource.Declared)source!;
-        var result = await _executions.EvaluateObjectAsync(declared.Context, "target",
-            new DataExecutionWriteFacts(descriptor.ResourceKey, id, existing), token);
-        return result == DataExecutionDecision.Allowed ? null : result == DataExecutionDecision.NotFound ? NotFound(descriptor, id) : ScopeDenied(descriptor);
-    }
-
     // 来源只能是本次正式写；启停复用update核心，但随后仍按其原入口重新绑定并检查同一目标。
     private void AssertWriteSource(StandardCrudDescriptor descriptor, string operation, string? id, ObjectOperationWriteSource? source)
     {
@@ -476,28 +453,12 @@ public sealed class StandardCrudDefaultWriter
             if (operation is not ("create" or "update" or "delete") || button.Context.ResourceKey != descriptor.ResourceKey || button.Context.ObjectName != descriptor.ModelName
                 || button.Context.ObjectId != id || !(button.Context.BusinessBinding == descriptor.ResourceKey + "." + operation
                     || operation == "update" && (button.Context.BusinessBinding == descriptor.ResourceKey + ".enable"
-                        || button.Context.BusinessBinding == descriptor.ResourceKey + ".disable"))
-                || descriptor.DataExecutions.ContainsKey(operation))
+                        || button.Context.BusinessBinding == descriptor.ResourceKey + ".disable")))
                 throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
             return;
         }
-        if (source is not ObjectOperationWriteSource.Declared declared || declared.Context is null)
-            throw new ActionDataAccessException(400, "ActionDataAccess.WriteContextRequired");
-        var context = declared.Context;
-        if (context.ResourceKey != descriptor.ResourceKey || context.ObjectId != id
-            || context.Binding.Provider != "standardCrud." + operation || context.Binding.Stage != "submit"
-            || context.Internal is null && (!descriptor.DataExecutions.TryGetValue(operation, out var key) || context.Binding.Execution != key))
-            throw new ActionDataAccessException(400, "ActionDataAccess.WriteBindingInvalid");
+        throw new ActionDataAccessException(400, "ActionDataAccess.WriteContextRequired");
     }
-
-    // 功能入口资格由端点独立检查；这里仅报告数据动作明确拒绝。
-    private static StandardCrudError ScopeDenied(StandardCrudDescriptor descriptor) => new()
-    {
-        StatusCode = 403,
-        Code = "DataScope.ActionDenied",
-        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的数据动作未获允许。",
-        ReasonKey = "dataScope.actionDenied"
-    };
 
     // revision 可能来自 EF long、测试数值或 System.Text.Json；这里只接受可无损转换的非负整数。
     private static bool TryReadRevision(

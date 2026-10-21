@@ -67,14 +67,14 @@ public sealed class PartHistoryDataAccessTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PartHistory_RejectsCallerReadAndUnapprovedAdditionalActions(bool additional)
+    public void PartHistory_RejectsUnknownActionsAndRetiredExecution(bool additional)
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
         var owner = Array.FindIndex(candidates, item => item.ModuleId == "Part");
         var features = candidates[owner].Features.ToArray();
         var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.BusinessBinding == "part.part.history"));
         features[index] = features[index] with { DataAccess = features[index].DataAccess.Select(item => item.BusinessBinding != "part.part.history" ? item
-            : additional ? item with { AdditionalActions = ["edit"] } : item with { Actions = ["unknown"] }).ToArray() };
+            : additional ? item with { Execution = "retired.execution" } : item with { Actions = ["unknown"] }).ToArray() };
         candidates[owner] = candidates[owner] with { Features = features };
         Assert.False(new CanonicalModulePlanCompiler().Compile("part-history-invalid-input", candidates).IsSuccess);
     }

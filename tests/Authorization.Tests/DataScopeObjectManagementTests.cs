@@ -5,6 +5,8 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
+using ICP.Platform.Modules.Authorization.Controllers;
+using Microsoft.AspNetCore.Mvc;
 using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Persistence.EfCore;
@@ -22,7 +24,7 @@ public sealed class DataScopeObjectManagementTests
         using var fixture = new Fixture();
         fixture.Features.Decision = PermissionDecision.Denied;
 
-        var result = await fixture.Management.GetAsync("authorization.role", "target", default);
+        var result = await fixture.GetAsync("authorization.role", "Role_target", default);
 
         Assert.Equal(DataScopeObjectStatus.Forbidden, result.Status);
         Assert.Null(result.Value);
@@ -56,7 +58,7 @@ public sealed class DataScopeObjectManagementTests
         Assert.All(fixture.Decisions.Calls, call =>
         {
             Assert.Equal("authorization.role", call.Resource);
-            Assert.Equal("target", call.Object);
+            Assert.Equal("Role_target", call.Object);
         });
         Assert.Empty(fixture.Directory.Searches);
     }
@@ -96,7 +98,7 @@ public sealed class DataScopeObjectManagementTests
     {
         using var fixture = new Fixture();
         fixture.Directory.Page = new([new("candidate", "候选")], true, [new("current", "已有")]);
-        var result = await fixture.Management.SubjectsAsync("authorization.role", "target", "user", "search", 2, ["current"], default);
+        var result = await fixture.SubjectsAsync("authorization.role", "Role_target", "user", "search", 2, ["current"], default);
 
         Assert.Equal(DataScopeObjectStatus.Succeeded, result.Status);
         Assert.Same(fixture.Directory.Page, result.Value);
@@ -110,17 +112,17 @@ public sealed class DataScopeObjectManagementTests
     public async Task SubjectsValidationIsTranslatedButExplanationDirectoryFaultIsNot()
     {
         using var fixture = new Fixture();
-        var invalid = await fixture.Management.SubjectsAsync("authorization.role", "target", "user", null, 0, [], default);
+        var invalid = await fixture.SubjectsAsync("authorization.role", "Role_target", "user", null, 0, [], default);
         Assert.Equal(DataScopeObjectStatus.InvalidInput, invalid.Status);
         Assert.Equal("主体目录页码无效。", invalid.ValidationMessage);
         var failure = new RolePermissionValidationException("directory unavailable");
         fixture.Directory.Failure = failure;
 
-        var result = await fixture.Management.SubjectsAsync("authorization.role", "target", "user", null, 1, [], default);
+        var result = await fixture.SubjectsAsync("authorization.role", "Role_target", "user", null, 1, [], default);
         Assert.Equal(DataScopeObjectStatus.InvalidInput, result.Status);
         Assert.Equal(failure.Message, result.ValidationMessage);
         Assert.Same(failure, await Assert.ThrowsAsync<RolePermissionValidationException>(() =>
-            fixture.Management.ExplainAsync("authorization.role", "target", "operator", default)));
+            fixture.ExplainAsync("authorization.role", "Role_target", "operator", default)));
     }
 
     [Theory]
@@ -129,7 +131,7 @@ public sealed class DataScopeObjectManagementTests
     public async Task ExplainDefaultsToOperatorAndMissingAccountStopsBeforeDecision(string? accountId, string expected)
     {
         using var fixture = new Fixture();
-        var result = await fixture.Management.ExplainAsync("authorization.role", "target", accountId, default);
+        var result = await fixture.ExplainAsync("authorization.role", "Role_target", accountId, default);
 
         Assert.Equal(DataScopeObjectStatus.NotFound, result.Status);
         Assert.Null(result.Value);
@@ -144,7 +146,7 @@ public sealed class DataScopeObjectManagementTests
         foreach (var account in new[] { " ", new string('a', 129) })
         {
             using var fixture = new Fixture();
-            var result = await fixture.Management.ExplainAsync("authorization.role", "target", account, default);
+            var result = await fixture.ExplainAsync("authorization.role", "Role_target", account, default);
             Assert.Equal(DataScopeObjectStatus.InvalidInput, result.Status);
             Assert.Null(result.ValidationMessage);
             Assert.Empty(fixture.Directory.Searches);
@@ -156,8 +158,8 @@ public sealed class DataScopeObjectManagementTests
     public async Task CatalogAndIndependentEligibilityExposeNoObjectConfiguration()
     {
         using var fixture = new Fixture();
-        Assert.Equal(DataScopeObjectEligibility.Allowed, await fixture.Management.CheckAsync("authorization.role", "target", default));
-        var result = await fixture.Management.CatalogAsync("authorization.role", "target", default);
+        Assert.Equal(DataScopeObjectEligibility.Allowed, await fixture.CheckAsync("authorization.role", "Role_target", default));
+        var result = await fixture.CatalogAsync("authorization.role", "Role_target", default);
 
         Assert.Equal(DataScopeObjectStatus.Succeeded, result.Status);
         Assert.Equal(new[] { "creator", "user" }, result.Value!.SubjectTypes.Select(type => type.Key).Order(StringComparer.Ordinal));
@@ -167,11 +169,11 @@ public sealed class DataScopeObjectManagementTests
 
     private static async Task<DataScopeObjectResult> Invoke(Fixture fixture, string operation, CancellationToken token = default) => operation switch
     {
-        "get" => await fixture.Management.GetAsync("authorization.role", "target", token),
-        "save" => await fixture.Management.SaveAsync("authorization.role", "target", new("other.resource", "other-target", []), token),
-        "catalog" => await fixture.Management.CatalogAsync("authorization.role", "target", token),
-        "subjects" => await fixture.Management.SubjectsAsync("authorization.role", "target", "missing", null, 0, [], token),
-        "explain" => await fixture.Management.ExplainAsync("authorization.role", "target", " ", token),
+        "get" => await fixture.GetAsync("authorization.role", "Role_target", token),
+        "save" => await fixture.SaveAsync("authorization.role", "Role_target", new("other.resource", "other-target", []), token),
+        "catalog" => await fixture.CatalogAsync("authorization.role", "Role_target", token),
+        "subjects" => await fixture.SubjectsAsync("authorization.role", "Role_target", "missing", null, 0, [], token),
+        "explain" => await fixture.ExplainAsync("authorization.role", "Role_target", " ", token),
         _ => throw new ArgumentOutOfRangeException(nameof(operation))
     };
 
@@ -192,6 +194,13 @@ public sealed class DataScopeObjectManagementTests
 
         internal Fixture()
         {
+            db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Role")).Add(new()
+            {
+                ["EID"] = "Role_target", ["ECODE"] = "target", ["ENAME"] = "Target", ["Description"] = null,
+                ["IsEnabled"] = true, ["IsBuiltIn"] = false, ["CreatedAt"] = DateTime.UnixEpoch,
+                ["CreatedBy"] = "operator", ["UpdatedAt"] = null, ["UpdatedBy"] = null
+            });
+            db.SaveChanges();
             var identities = new DataScopeIdentities([Directory]);
             var module = new CanonicalModulePlanModule("Authorization", "1.0", "授权", null, "", null, null,
                 null, null, "", [], [], [], [], [], new("test", "test", "/"))
@@ -202,10 +211,84 @@ public sealed class DataScopeObjectManagementTests
             var catalog = new DataScopeCatalog(new StandardCrudResourceRegistry([RoleReadResource.Create()]), plan, db, identities);
             Http.Request.Headers["X-NewP-Feature"] = plan.FeatureCatalog[0].Position;
             var grants = new DataScopeObjectGrants(db, null!, catalog, identities, null!, null!);
-            Management = new(new ICP.Platform.Testing.StandardCrudTestAccess(Decisions), catalog, plan, Features, Decisions, grants, identities, new HttpContextAccessor { HttpContext = Http }, null!, null!, null!);
+            Management = new(new ObjectActions(Decisions), catalog, plan, Features, Decisions, grants, identities, new HttpContextAccessor { HttpContext = Http }, null!, null!, null!);
+        }
+
+        // 本类验证当前业务处理器的顺序与错误契约；HTTP按钮身份由真实HostApi用例覆盖。
+        private async Task<DataScopeObjectResult<T>> ReadAsync<T>(DataScopeObjectReadInput input, CancellationToken token)
+        {
+            if (await Management.CheckFeatureAsync(input.ResourceKey, token) != DataScopeObjectEligibility.Allowed)
+                return new(DataScopeObjectStatus.Forbidden);
+            var handler = (IDataScopeObjectReadHandler)Management;
+            try
+            {
+                var result = await handler.WithinBoundaryAsync(input, "authorize", (state, cancellation) =>
+                {
+                    var target = Assert.IsType<ButtonExecutionTarget>(handler.Target(state));
+                    Assert.Equal(input.ResourceKey, target.ResourceKey);
+                    Assert.Equal(input.ObjectId, target.ObjectId);
+                    return handler.ExecuteAsync(state, cancellation);
+                }, token);
+                var status = result.Status switch
+                {
+                    DataScopeAuthorizationStatus.Succeeded => DataScopeObjectStatus.Succeeded,
+                    DataScopeAuthorizationStatus.Forbidden => DataScopeObjectStatus.Forbidden,
+                    DataScopeAuthorizationStatus.NotFound => DataScopeObjectStatus.NotFound,
+                    DataScopeAuthorizationStatus.InvalidInput => DataScopeObjectStatus.InvalidInput,
+                    _ => throw new ArgumentOutOfRangeException(nameof(result))
+                };
+                return new(status, result.Value is null ? default : (T)result.Value, result.Error?.Message);
+            }
+            catch (ActionDataAccessException error) when (error.Status is 403 or 404)
+            {
+                return new(error.Status == 404 ? DataScopeObjectStatus.NotFound : DataScopeObjectStatus.Forbidden);
+            }
+        }
+
+        internal Task<DataScopeObjectResult<object>> GetAsync(string resource, string id, CancellationToken token) =>
+            ReadAsync<object>(new(resource, id, "configuration"), token);
+        internal Task<DataScopeObjectResult<DataScopeObjectCatalog>> CatalogAsync(string resource, string id, CancellationToken token) =>
+            ReadAsync<DataScopeObjectCatalog>(new(resource, id, "catalog"), token);
+        internal Task<DataScopeObjectResult<DataScopeSubjectPage>> SubjectsAsync(string resource, string id, string type,
+            string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token) =>
+            ReadAsync<DataScopeSubjectPage>(new(resource, id, "subjects", type, query, page, currentIds), token);
+        internal Task<DataScopeObjectResult<DataScopeExplanationDto>> ExplainAsync(string resource, string id,
+            string? account, CancellationToken token) =>
+            ReadAsync<DataScopeExplanationDto>(new(resource, id, "explanation", AccountId: account), token);
+        internal async Task<DataScopeObjectEligibility> CheckAsync(string resource, string id, CancellationToken token) =>
+            (await ReadAsync<object>(new(resource, id, "eligibility"), token)).Status switch
+            {
+                DataScopeObjectStatus.Succeeded => DataScopeObjectEligibility.Allowed,
+                DataScopeObjectStatus.NotFound => DataScopeObjectEligibility.NotFound,
+                _ => DataScopeObjectEligibility.Forbidden
+            };
+        internal async Task<DataScopeObjectResult> SaveAsync(string resource, string id, DataScopeObjectDto input, CancellationToken token)
+        {
+            var controller = new DataScopeObjectsController(Management, new NeverExecute());
+            Assert.IsType<ForbidResult>(await controller.Save(resource, id, input, token));
+            return new(DataScopeObjectStatus.Forbidden);
         }
 
         public void Dispose() => db.Dispose();
+    }
+
+    private sealed class NeverExecute : IButtonBusinessExecutor
+    {
+        public Task<TResult> ExecuteAsync<TInput, TState, TResult>(IButtonBusinessHandler<TInput, TState, TResult> handler,
+            TInput input, CancellationToken cancellationToken = default) => throw new InvalidOperationException("拒绝后不得进入按钮执行器。");
+    }
+
+    private sealed class ObjectActions(ObjectDecisions decisions) : IObjectActionAccess
+    {
+        public async Task<DataExecutionDecision> CheckAsync(string objectName, string objectId, IReadOnlyList<string> actions,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal("Role", objectName);
+            foreach (var action in actions)
+                if (!await decisions.IsAllowedAsync("authorization.role", objectId, action, cancellationToken))
+                    return action == "read" ? DataExecutionDecision.NotFound : DataExecutionDecision.Denied;
+            return DataExecutionDecision.Allowed;
+        }
     }
 
     private sealed class FeatureSource : IFeatureDecisionSource

@@ -9,7 +9,7 @@ public sealed partial class DataScopeObjectManagement
         Func<DataScopeObjectSaveState, CancellationToken, Task<DataScopeAuthorizationResult>> execute, CancellationToken token)
     {
         var entered = false;
-        var result = await SaveConfigurationAsync(input.ResourceKey, input.ObjectId, input.Configuration, token, null,
+        var result = await SaveConfigurationAsync(input.ResourceKey, input.ObjectId, input.Configuration, token,
             async (targets, save, cancellation) =>
             {
                 var target = targets.Single();

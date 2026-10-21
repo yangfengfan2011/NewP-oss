@@ -461,7 +461,7 @@ public sealed class PersonStandardCrudResourceTests
         public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action, string? targetId,
             IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken token = default)
         {
-            Assert.IsType<ObjectOperationWriteSource.Declared>(source);
+            Assert.IsType<ObjectOperationWriteSource.Button>(source);
             return ExecuteAsync(objectKey, action, targetId, values, token);
         }
         public Task<StandardCrudMutationResult> ExecuteAsync(

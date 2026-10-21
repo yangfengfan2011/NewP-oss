@@ -15,8 +15,8 @@ public sealed class CollectionExecutionProviderTests
         Assert.Equal("Authorization", resolved.ProviderModuleId);
         var role = Assert.Single(resolved.Requirements);
         Assert.Equal(new[] { "folder", "part" }, role.Resources);
-        Assert.Equal(new[] { "read", "authorize" }, Assert.Single(role.AnyOf));
-        Assert.Equal(("objects", 0, (int?)null), (role.Shape, role.MinimumCount, role.MaximumCount));
+        Assert.Equal(new[] { "read" }, Assert.Single(role.AnyOf));
+        Assert.Equal(("object", 1, (int?)1), (role.Shape, role.MinimumCount, role.MaximumCount));
     }
 
     [Theory]
@@ -36,11 +36,11 @@ public sealed class CollectionExecutionProviderTests
 
     private static IReadOnlyList<DataExecutionContract> Read(string properties)
     {
-        using var capsule = JsonDocument.Parse("""{"dataExecutions":[{"key":"workspace.permissions","moduleId":"Workspace","provider":"authorization.collection.manage","boundary":"entry","featureBehaviors":["workspace.folder.authorize"],"""
+        using var capsule = JsonDocument.Parse("""{"dataExecutions":[{"key":"workspace.permissions","moduleId":"Workspace","provider":"authorization.collection.view","boundary":"entry","featureBehaviors":["workspace.folder.authorize"],"""
             + properties + "}]}");
         return DataExecutionContracts.Read(capsule.RootElement, "Workspace");
     }
 
-    private static DataExecutionProviderContract Provider(string binding) => new("authorization.collection.manage", "Authorization", "authorization.backend", binding,
-        [new("target", "prepare", "objects", ["$resource"], [["read", "authorize"]], 0, null)]);
+    private static DataExecutionProviderContract Provider(string binding) => new("authorization.collection.view", "Authorization", "authorization.backend", binding,
+        [new("view", "prepare", "object", ["$resource"], [["read"]])]);
 }

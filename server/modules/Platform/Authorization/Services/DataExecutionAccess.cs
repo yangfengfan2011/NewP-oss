@@ -141,39 +141,11 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
     }
 
     /// <inheritdoc/>
-    public DataExecutionBindingReference BindResourceEndpoint(string resourceKey)
-    {
-        var context = http.HttpContext ?? throw new ActionDataAccessException(400, "ActionDataAccess.ContextRequired");
-        var owner = context.GetEndpoint()?.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
-        var endpoints = context.GetEndpoint()?.Metadata.GetOrderedMetadata<DataExecutionEndpointAttribute>() ?? [];
-        var resource = resources?.Resources.SingleOrDefault(resource => resource.ResourceKey == resourceKey) ?? throw new InvalidOperationException("DATA_EXECUTION_RESOURCE_CATALOG_REQUIRED");
-        var providers = plan.Modules.SelectMany(module => module.DataExecutionProviders).ToArray();
-        if (owner?.Count != 1 || endpoints.Count == 0 || endpoints.Any(endpoint => !providers.Any(provider =>
-            provider.Key == endpoint.Provider && provider.ModuleId == owner[0].ModuleId)))
-            throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
-        var ids = context.Request.Headers["X-NewP-Data-Declaration"];
-        var requirement = ids.Count == 1 ? plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Id == ids[0]) : null;
-        var selected = endpoints.SingleOrDefault(endpoint => endpoint.Provider == requirement?.Provider);
-        if (selected is null || requirement is null) throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
-        var binding = new DataExecutionBindingReference(requirement.Execution, selected.Provider, selected.Stage);
-        Resolve([binding], resourceKey);
-        return binding;
-    }
-
-    /// <inheritdoc/>
     public async Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey,
         string role, string objectId, CancellationToken cancellationToken = default)
     {
         var requirement = Role(Resolve([binding], resourceKey), binding, role, "object");
         return await EvaluateObjectRequirementAsync(requirement, resourceKey, objectId, cancellationToken);
-    }
-
-    /// <inheritdoc/>
-    public async Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey,
-        string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken cancellationToken = default)
-    {
-        var requirement = Role(Resolve([binding], resourceKey), binding, role, "candidate");
-        return await EvaluateCandidateRequirementAsync(requirement, resourceKey, candidate, cancellationToken);
     }
 
     // 执行提供者由真实执行端限定；即使引用同一模块其他合法声明也不能串用。
@@ -211,9 +183,6 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
             var feature = context.GetEndpoint()?.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>();
             var endpointBehaviors = context.GetEndpoint()?.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()
                 .Select(binding => binding.BehaviorKey).Distinct(StringComparer.Ordinal).ToArray() ?? [];
-            var generic = owners[0].ModuleId == requirement.ProviderModuleId && feature?.Count == 1
-                && plan.FeatureCatalog.Any(point => point.Position == position[0]
-                && point.ModuleId == resource.ModuleId && point.BehaviorKey == resourceKey + "." + feature[0].ActionKey);
             var inputRead = endpointBehaviors.Length == 1 && IsDeclaredInputReadSource(requirement, contract, endpointBehaviors[0], position[0]!);
             var ownEndpoint = feature?.Count == 0 && owners[0].ModuleId == requirement.ModuleId && endpointBehaviors.Length == 1
                 && (contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal) || inputRead)
@@ -223,13 +192,10 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
                 && (contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal) || inputRead)
                 && plan.FeatureCatalog.Any(point => point.Position == position[0] && point.ModuleId == requirement.ModuleId
                     && (point.BehaviorKey == endpointBehaviors[0] || point.ReadBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)));
-            var providerEntry = generic && resource.ModuleId == requirement.ModuleId && feature![0].ActionKey == "authorize"
-                && context.GetEndpoint()!.Metadata.GetOrderedMetadata<DataExecutionEndpointAttribute>().Any(endpoint => endpoint.Provider == requirement.Provider
-                    && bindings.Any(binding => binding.Provider == endpoint.Provider && binding.Stage == endpoint.Stage));
-            var executionOwner = provider?.ConsumerBinding == "execution-owner" && (ownerEntry || providerEntry)
+            var executionOwner = provider?.ConsumerBinding == "execution-owner" && ownerEntry
                 && requirement.Resources.All(key => resourceCatalog.SingleOrDefault(candidate => candidate.ResourceKey == key) is { } target
                     && ModuleDependencyPolicy.Allows(plan, requirement.ModuleId, target.ModuleId));
-            if (!executionOwner && (provider?.ConsumerBinding != "resource-owner" || resource.ModuleId != requirement.ModuleId || !generic && !ownEndpoint))
+            if (!executionOwner && (provider?.ConsumerBinding != "resource-owner" || resource.ModuleId != requirement.ModuleId || !ownEndpoint))
                 throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
         }
         return requirement;

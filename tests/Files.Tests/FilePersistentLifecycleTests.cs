@@ -659,7 +659,8 @@ public sealed class FilePersistentLifecycleTests
         public bool Unavailable { get; set; }
         public EntityAuditStamp GetCurrent() => Unavailable ? throw new EntityAuditStampUnavailableException() : new("actor", clock.GetUtcNow().UtcDateTime);
     }
-    private static FileOwnerCreationContext TestCreationContext => new(new(new("fixture.create", "standardCrud.create", "submit"), "fixture.owner", null), "fixture-target");
+    private sealed record FixtureCreationContext : FileOwnerOperationContext;
+    private static FixtureCreationContext TestCreationContext => new();
     private static FileOwnerReleaseContext TestReleaseContext => new("fixture.owner", "fixture-target");
     private static FileOwnerExecutionContext TestReadContext => new(new("fixture.read", "fixture.backend", "read"), "fixture.owner", "fixture-target");
 

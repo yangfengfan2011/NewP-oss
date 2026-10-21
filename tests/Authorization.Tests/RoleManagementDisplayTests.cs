@@ -66,10 +66,10 @@ public sealed class RoleManagementDisplayTests
         db.ChangeTracker.Clear();
         var names = new Names();
         var writeRepository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), db, new PlatformObjectIdGenerator());
-        var service = new StandardCrudService(
+        var service = ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             new EfPlatformQueryExecutor(db),
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [new RoleReadResource()],
             new DisplayValueProjection(
                 [],

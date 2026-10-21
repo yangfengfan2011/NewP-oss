@@ -220,26 +220,12 @@ public sealed class DocumentFileExecutionScopeTests
     }
     [Theory]
     [InlineData("missing")]
-    [InlineData("resource")]
-    [InlineData("source-target")]
-    [InlineData("stage")]
-    [InlineData("caller")]
-    [InlineData("member")]
+    [InlineData("read")]
     [InlineData("object")]
     public async Task Confirm_RejectsCrossedSourceBeforeInspectingCreationFacts(string problem)
     {
-        var source = new DataExecutionWriteContext(new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
-        { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CreateWithFilesAsync)) };
-        source = problem switch
-        {
-            "resource" => source with { ResourceKey = "part.part" },
-            "source-target" => source with { ObjectId = "document-one" },
-            "stage" => source with { Binding = source.Binding with { Stage = "prepare" } },
-            "caller" => source with { Internal = source.Internal! with { Caller = typeof(DocumentFileExecutionScopeTests) } },
-            "member" => source with { Internal = source.Internal! with { Member = nameof(DocumentFiles.ReadAsync) } },
-            _ => source
-        };
-        FileOwnerOperationContext? context = problem == "missing" ? null : new FileOwnerCreationContext(source, problem == "object" ? "" : "document-one");
+        FileOwnerOperationContext? context = problem == "missing" ? null : new FileOwnerExecutionContext(
+            DocumentFiles.FileReadBinding, "document.document", problem == "object" ? "" : "document-one");
         var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!, null!, new DocumentFileCopyScope(null!, new HttpContextAccessor()));
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, "link-one"), "file-one", null,
             FileOwnerOperation.Confirm, context, default));

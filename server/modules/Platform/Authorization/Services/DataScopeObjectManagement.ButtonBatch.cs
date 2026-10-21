@@ -9,7 +9,7 @@ public sealed partial class DataScopeObjectManagement
         Func<DataScopeBatchSaveState, CancellationToken, Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>>> execute, CancellationToken token)
     {
         var entered = false;
-        var result = await WriteAsync(input.Targets, (ordered, cancellation) => PrepareBatchAsync(ordered, input.Configuration, cancellation), token, null,
+        var result = await WriteAsync(input.Targets, (ordered, cancellation) => PrepareBatchAsync(ordered, input.Configuration, cancellation), token,
             async (targets, save, cancellation) =>
             {
                 var targetSet = await ReadButtonTargetsAsync(targets, cancellation);
@@ -50,7 +50,7 @@ public sealed partial class DataScopeObjectManagement
         return await transactions.ExecuteAsync<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>>(async cancellation =>
         {
             var ordered = OrderTargets(input.Targets);
-            var status = await LockAndCheckTargetsAsync(ordered, cancellation, null);
+            var status = await LockAndCheckTargetsAsync(ordered, cancellation);
             if (status != DataScopeObjectStatus.Succeeded) ThrowBatchBoundaryFailure(status);
             return await execute(new BatchReadState(ordered, await ReadButtonTargetsAsync(ordered, cancellation)), cancellation);
         }, token);

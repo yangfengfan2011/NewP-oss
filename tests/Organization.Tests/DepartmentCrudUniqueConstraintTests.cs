@@ -70,10 +70,10 @@ public sealed class DepartmentCrudUniqueConstraintTests
         Assert.Equal("Department_Current", check.ExcludedId);
     }
 
-    private static StandardCrudService CreateService(IStandardCrudRepository repository) => new StandardCrudService(
+    private static StandardCrudService CreateService(IStandardCrudRepository repository) => ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             null!,
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], auditValueProvider: new EntityAuditValueProvider(new FixedAuditStampProvider()), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], auditValueProvider: new EntityAuditValueProvider(new FixedAuditStampProvider()), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
             [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());

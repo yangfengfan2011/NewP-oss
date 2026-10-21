@@ -28,9 +28,9 @@ public sealed class StandardCrudServiceWriteTests
         Assert.Null(result.Detail);
         Assert.Equal(1, repository.CreateCallCount);
         Assert.Equal(1, observation.Reads);
-        Assert.Throws<ArgumentNullException>(() => new StandardCrudService(
+        Assert.Throws<ArgumentNullException>(() => ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository, EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], []),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], []),
             [], new DisplayValueProjection([]), [], null!));
     }
 
@@ -73,7 +73,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "旧姓名"
             }
@@ -83,12 +83,12 @@ public sealed class StandardCrudServiceWriteTests
 
         var result = await service.UpdateAsync(
             Descriptor(),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "新姓名" });
 
         Assert.True(result.Succeeded);
         Assert.Equal(1, operations.Executions);
-        Assert.Equal("person-1", operations.LastTargetId);
+        Assert.Equal("Person_1", operations.LastTargetId);
         Assert.Equal("新姓名", operations.LastValues!["ENAME"]);
         Assert.Null(repository.LastUpdatedValues);
     }
@@ -100,7 +100,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "张三"
             }
@@ -110,13 +110,13 @@ public sealed class StandardCrudServiceWriteTests
 
         var result = await service.DeleteAsync(
             Descriptor(StandardCrudDeletePolicy.Conditional),
-            "person-1");
+            "Person_1");
 
         Assert.True(result.Succeeded);
         Assert.Equal(1, operations.Executions);
-        Assert.Equal("person-1", operations.LastTargetId);
+        Assert.Equal("Person_1", operations.LastTargetId);
         Assert.Empty(operations.LastValues!);
-        Assert.NotNull(await repository.GetByIdAsync(Descriptor(), "person-1"));
+        Assert.NotNull(await repository.GetByIdAsync(Descriptor(), "Person_1"));
     }
 
     [Fact]
@@ -127,10 +127,10 @@ public sealed class StandardCrudServiceWriteTests
             new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")),
             "Asia/Shanghai",
             TimeProvider.System);
-        var service = new StandardCrudService(
+        var service = ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], temporalInputNormalizer: normalizer, objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], temporalInputNormalizer: normalizer, objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
             [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
@@ -167,24 +167,25 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
-    public async Task UpdateAsync_WhenForeignKeyConstraintWinsDeleteFirstRace_ReturnsStablePersistenceConflict()
+    public async Task InternalUpdate_WhenForeignKeyConstraintWinsDeleteFirstRace_ReturnsStablePersistenceConflict()
     {
         var repository = new RecordingMutationStandardCrudRepository(
             [new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "张三",
                 ["IsEnabled"] = true,
                 ["Revision"] = 1L
             }],
             failUpdateWithKnownConstraintConflict: true);
-        var service = Service(repository);
-
-        var result = await service.UpdateAsync(
-            Descriptor(concurrencyRevisionField: "Revision"),
-            "person-1",
-            new Dictionary<string, object?> { ["ENAME"] = "李四", ["Revision"] = 1L });
+        // 即时保存分支只由显式内部来源使用；正式按钮的participant只登记变化，Flush冲突另由真实事务测试覆盖。
+        var transaction = new ICP.Platform.Testing.StandardCrudFieldFixture.FieldTransaction();
+        var writer = new StandardCrudDefaultWriter(repository, [], [], transactionExecutor: transaction);
+        var descriptor = Descriptor(concurrencyRevisionField: "Revision");
+        var source = new ObjectOperationWriteSource.Internal(descriptor.ResourceKey, descriptor.ModelName, ObjectOperationAction.Update, "Person_1");
+        var result = await transaction.ExecuteAsync(token => writer.UpdateAsync(descriptor, "Person_1",
+            new Dictionary<string, object?> { ["ENAME"] = "李四", ["Revision"] = 1L }, source, token));
 
         Assert.False(result.Succeeded);
         Assert.Equal(409, result.Error?.StatusCode);
@@ -208,7 +209,7 @@ public sealed class StandardCrudServiceWriteTests
         var repository = new RecordingMutationStandardCrudRepository([]);
         var service = Service(repository);
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(Descriptor() with { RequiresUpdateRecord = true },
-            "person", new Dictionary<string, object?> { ["ENAME"] = "新姓名" }));
+            "Person_missing", new Dictionary<string, object?> { ["ENAME"] = "新姓名" }));
         Assert.Null(repository.LastUpdatedValues);
     }
 
@@ -234,7 +235,7 @@ public sealed class StandardCrudServiceWriteTests
         var service = Service(new RecordingMutationStandardCrudRepository(
             [new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "张三",
                 ["IsEnabled"] = true
@@ -243,7 +244,7 @@ public sealed class StandardCrudServiceWriteTests
 
         var exception = await Assert.ThrowsAsync<DbUpdateException>(() => service.UpdateAsync(
             Descriptor(),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "李四" }));
 
         Assert.Equal("provider-detail", exception.Message);
@@ -522,7 +523,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "原姓名",
                 ["CompanyId"] = "company-1",
@@ -535,7 +536,7 @@ public sealed class StandardCrudServiceWriteTests
 
         var result = await service.UpdateAsync(
             descriptor,
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?>
             {
                 ["ENAME"] = "客户端伪造姓名",
@@ -547,7 +548,7 @@ public sealed class StandardCrudServiceWriteTests
             $"canonical display companion 当前被静默忽略并返回成功；仓储更新调用数：{repository.UpdateCallCount}。");
         Assert.Equal(0, repository.UpdateCallCount);
         AssertDisplayValueFieldReadOnlyError(result);
-        var current = await repository.GetByIdAsync(descriptor, "person-1");
+        var current = await repository.GetByIdAsync(descriptor, "Person_1");
         Assert.Equal("原姓名", current!["ENAME"]);
         Assert.Equal("company-1", current["CompanyId"]);
     }
@@ -559,7 +560,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["ENAME"] = "原姓名",
                 ["UpdatedBy"] = "trusted-subject"
             }
@@ -592,7 +593,7 @@ public sealed class StandardCrudServiceWriteTests
 
         var result = await service.UpdateAsync(
             descriptor,
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?>
             {
                 ["ENAME"] = "新姓名",
@@ -602,7 +603,7 @@ public sealed class StandardCrudServiceWriteTests
         Assert.False(result.Succeeded);
         Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", result.Error!.Code);
         Assert.Equal(0, repository.UpdateCallCount);
-        var current = await repository.GetByIdAsync(descriptor, "person-1");
+        var current = await repository.GetByIdAsync(descriptor, "Person_1");
         Assert.Equal("原姓名", current!["ENAME"]);
         Assert.Equal("trusted-subject", current["UpdatedBy"]);
     }
@@ -616,7 +617,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["ENAME"] = "原姓名",
                 ["CreatedBy"] = "creator",
                 ["CreatedAt"] = createdAt,
@@ -652,7 +653,7 @@ public sealed class StandardCrudServiceWriteTests
 
         var result = await service.UpdateAsync(
             descriptor,
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "新姓名" });
 
         Assert.True(result.Succeeded);
@@ -669,7 +670,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["ENAME"] = "原姓名",
                 ["UpdatedBy"] = "creator",
                 ["UpdatedAt"] = new DateTime(2026, 8, 27, 9, 0, 0, DateTimeKind.Utc)
@@ -699,13 +700,13 @@ public sealed class StandardCrudServiceWriteTests
 
         var result = await service.UpdateAsync(
             descriptor,
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "新姓名" });
 
         Assert.False(result.Succeeded);
         Assert.Equal("StandardCrud.ServerOwnedValueUnavailable", result.Error!.Code);
         Assert.Equal(0, repository.UpdateCallCount);
-        var current = await repository.GetByIdAsync(descriptor, "person-1");
+        var current = await repository.GetByIdAsync(descriptor, "Person_1");
         Assert.Equal("原姓名", current!["ENAME"]);
     }
 
@@ -717,7 +718,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "原姓名",
                 ["CompanyId"] = "company-1",
@@ -730,7 +731,7 @@ public sealed class StandardCrudServiceWriteTests
 
         var result = await service.UpdateAsync(
             descriptor,
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?>
             {
                 ["ENAME"] = "新姓名",
@@ -769,7 +770,7 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
@@ -787,7 +788,7 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new RecordingExistsStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
@@ -861,7 +862,7 @@ public sealed class StandardCrudServiceWriteTests
         var descriptor = CallerOnCreateDescriptor();
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "item-1", ["ECODE"] = "C001", ["ENAME"] = "初始名称" }
+            new Dictionary<string, object?> { ["EID"] = "ImmutableItem_1", ["ECODE"] = "C001", ["ENAME"] = "初始名称" }
         ]);
         var service = Service(repository);
 
@@ -870,7 +871,7 @@ public sealed class StandardCrudServiceWriteTests
             new Dictionary<string, object?> { ["ECODE"] = "C002", ["ENAME"] = "新建名称" });
         var updated = await service.UpdateAsync(
             descriptor,
-            "item-1",
+            "ImmutableItem_1",
             new Dictionary<string, object?> { ["ECODE"] = "C999", ["ENAME"] = "更新名称" });
 
         Assert.True(created.Succeeded);
@@ -879,7 +880,7 @@ public sealed class StandardCrudServiceWriteTests
         Assert.Equal(400, updated.Error!.StatusCode);
         Assert.Equal("StandardCrud.ImmutableFieldReadOnly", updated.Error.Code);
         Assert.Equal("ECODE", Assert.Single(updated.Error.FieldErrors).Field);
-        Assert.Equal("C001", (await repository.GetByIdAsync(descriptor, "item-1"))!["ECODE"]);
+        Assert.Equal("C001", (await repository.GetByIdAsync(descriptor, "ImmutableItem_1"))!["ECODE"]);
     }
 
     [Fact]
@@ -888,17 +889,17 @@ public sealed class StandardCrudServiceWriteTests
         var descriptor = ShortTextDescriptor();
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "position-1", ["ENAME"] = "初始岗位", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Position_1", ["ENAME"] = "初始岗位", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
         var first = await service.UpdateAsync(
             descriptor,
-            "position-1",
+            "Position_1",
             new Dictionary<string, object?> { ["ENAME"] = "第一次更新", ["IsEnabled"] = false });
         var second = await service.UpdateAsync(
             descriptor,
-            "position-1",
+            "Position_1",
             new Dictionary<string, object?> { ["ENAME"] = "第二次更新", ["IsEnabled"] = true });
 
         Assert.True(first.Succeeded);
@@ -920,13 +921,13 @@ public sealed class StandardCrudServiceWriteTests
         var descriptor = ShortTextDescriptor();
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "position-1", ["ENAME"] = "初始岗位", ["Description"] = null, ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Position_1", ["ENAME"] = "初始岗位", ["Description"] = null, ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             descriptor,
-            "position-1",
+            "Position_1",
             new Dictionary<string, object?> { [field] = value });
 
         Assert.False(result.Succeeded);
@@ -957,13 +958,13 @@ public sealed class StandardCrudServiceWriteTests
         var descriptor = ShortTextDescriptor();
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "position-1", ["ENAME"] = "初始岗位", ["Description"] = null, ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Position_1", ["ENAME"] = "初始岗位", ["Description"] = null, ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             descriptor,
-            "position-1",
+            "Position_1",
             new Dictionary<string, object?> { ["ENAME"] = null });
 
         Assert.False(result.Succeeded);
@@ -1051,20 +1052,20 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             DescriptorWithRequiredFields(),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["IsEnabled"] = false });
 
         Assert.False(result.Succeeded);
         Assert.Equal(409, result.Error!.StatusCode);
         Assert.Equal("StandardCrud.StorageInvariantViolation", result.Error.Code);
         Assert.Equal("standardCrud.storageInvariantViolation", result.Error.ReasonKey);
-        var current = await repository.GetByIdAsync(DescriptorWithRequiredFields(), "person-1");
+        var current = await repository.GetByIdAsync(DescriptorWithRequiredFields(), "Person_1");
         Assert.True((bool)current!["IsEnabled"]!);
     }
 
@@ -1073,13 +1074,13 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             DescriptorWithRequiredFields(),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = null });
 
         Assert.False(result.Succeeded);
@@ -1124,20 +1125,20 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
+                ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
             }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             Descriptor(concurrencyRevisionField: "Revision"),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "过期草稿", ["Revision"] = 3L });
 
         Assert.False(result.Succeeded);
         Assert.Equal(409, result.Error!.StatusCode);
         Assert.Equal("StandardCrud.ConcurrencyConflict", result.Error.Code);
-        var current = await repository.GetByIdAsync(Descriptor(concurrencyRevisionField: "Revision"), "person-1");
+        var current = await repository.GetByIdAsync(Descriptor(concurrencyRevisionField: "Revision"), "Person_1");
         Assert.Equal("服务器姓名", current!["ENAME"]);
         Assert.Equal(4L, current["Revision"]);
     }
@@ -1149,14 +1150,14 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
+                ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
             }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             Descriptor(concurrencyRevisionField: "Revision"),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "新姓名", ["Revision"] = 4m });
 
         Assert.True(result.Succeeded);
@@ -1171,14 +1172,14 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
+                ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
             }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             Descriptor(concurrencyRevisionField: "Revision"),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "无版本草稿" });
 
         Assert.False(result.Succeeded);
@@ -1192,9 +1193,9 @@ public sealed class StandardCrudServiceWriteTests
     public async Task EnableAsync_ChangesOnlyDeclaredStateField(bool initial)
     {
         var repository = new InMemoryStandardCrudRepository([
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "原名称", ["IsEnabled"] = initial }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "原名称", ["IsEnabled"] = initial }
         ]);
-        var result = await Service(repository).EnableAsync(Descriptor(), "person-1");
+        var result = await Service(repository).EnableAsync(Descriptor(), "Person_1");
         Assert.True(result.Succeeded);
         Assert.True((bool)result.Detail!.Fields["IsEnabled"]!);
         Assert.Equal("原名称", result.Detail.Fields["ENAME"]);
@@ -1205,11 +1206,11 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
-        var result = await service.DisableAsync(Descriptor(), "person-1");
+        var result = await service.DisableAsync(Descriptor(), "Person_1");
 
         Assert.True(result.Succeeded);
         Assert.False((bool)result.Detail!.Fields["IsEnabled"]!);
@@ -1223,7 +1224,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "张三",
                 ["CompanyId"] = "company-1",
@@ -1234,7 +1235,7 @@ public sealed class StandardCrudServiceWriteTests
         ]);
         var service = Service(repository, [new FixedPersonDisplayValueResolver()]);
 
-        var result = await service.DisableAsync(descriptor, "person-1");
+        var result = await service.DisableAsync(descriptor, "Person_1");
 
         Assert.True(result.Succeeded);
         Assert.False((bool)result.Detail!.Fields["IsEnabled"]!);
@@ -1251,7 +1252,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "张三",
                 ["IsEnabled"] = true,
@@ -1262,7 +1263,7 @@ public sealed class StandardCrudServiceWriteTests
 
         var result = await service.UpdateAsync(
             Descriptor(includeUpdatedAt: true),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "张三-更新" });
 
         Assert.True(result.Succeeded);
@@ -1276,7 +1277,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "person-1",
+                ["EID"] = "Person_1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "张三",
                 ["IsEnabled"] = true,
@@ -1285,7 +1286,7 @@ public sealed class StandardCrudServiceWriteTests
         ]);
         var service = Service(repository);
 
-        var result = await service.DisableAsync(Descriptor(includeUpdatedAt: true), "person-1");
+        var result = await service.DisableAsync(Descriptor(includeUpdatedAt: true), "Person_1");
 
         Assert.True(result.Succeeded);
         Assert.IsType<DateTime>(result.Detail!.Fields["UpdatedAt"]);
@@ -1296,14 +1297,14 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true },
-            new Dictionary<string, object?> { ["EID"] = "person-2", ["PersonNo"] = "P002", ["ENAME"] = "李四", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true },
+            new Dictionary<string, object?> { ["EID"] = "Person_2", ["PersonNo"] = "P002", ["ENAME"] = "李四", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             DescriptorWithUniqueConstraint(),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "张三-更新" });
 
         Assert.True(result.Succeeded);
@@ -1315,17 +1316,17 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new RecordingExistsStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             DescriptorWithUniqueConstraint(),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["ENAME"] = "张三-更新" });
 
         Assert.True(result.Succeeded);
-        Assert.Equal("person-1", repository.LastExcludedId);
+        Assert.Equal("Person_1", repository.LastExcludedId);
         Assert.NotNull(repository.LastExistsValues);
         Assert.Equal("P001", repository.LastExistsValues!["PersonNo"]);
     }
@@ -1335,14 +1336,14 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true },
-            new Dictionary<string, object?> { ["EID"] = "person-2", ["PersonNo"] = "P002", ["ENAME"] = "李四", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true },
+            new Dictionary<string, object?> { ["EID"] = "Person_2", ["PersonNo"] = "P002", ["ENAME"] = "李四", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
             DescriptorWithUniqueConstraint(includePersonNoInUpdate: true),
-            "person-1",
+            "Person_1",
             new Dictionary<string, object?> { ["PersonNo"] = "p002", ["ENAME"] = "张三-更新" });
 
         Assert.False(result.Succeeded);
@@ -1354,11 +1355,11 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
         ]);
         var service = Service(repository);
 
-        var result = await service.DisableAsync(Descriptor(includeEnabledInUpdateFields: false), "person-1");
+        var result = await service.DisableAsync(Descriptor(includeEnabledInUpdateFields: false), "Person_1");
 
         Assert.False(result.Succeeded);
         Assert.Equal("StandardCrud.EnabledFieldNotWritable", result.Error!.Code);
@@ -1367,9 +1368,9 @@ public sealed class StandardCrudServiceWriteTests
     [Fact]
     public async Task DeleteAsync_WhenConditionalWithoutGuard_FailsClosed()
     {
-        var service = Service(new InMemoryStandardCrudRepository([new Dictionary<string, object?> { ["EID"] = "person-1", ["ENAME"] = "存在目标" }]));
+        var service = Service(new InMemoryStandardCrudRepository([new Dictionary<string, object?> { ["EID"] = "Person_1", ["ENAME"] = "存在目标" }]));
 
-        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
+        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "Person_1");
 
         Assert.False(result.Succeeded);
         Assert.Equal("StandardCrud.DeleteGuardMissing", result.Error!.Code);
@@ -1380,30 +1381,30 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
-        var service = new StandardCrudService(
+        var service = ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [new AllowingDeleteGuard()], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [new AllowingDeleteGuard()], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
             [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
-        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
+        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "Person_1");
 
         Assert.False(result.Succeeded);
         Assert.Equal(409, result.Error!.StatusCode);
         Assert.Equal("StandardCrud.ConditionalDeleteExecutorMissing", result.Error.Code);
-        Assert.NotNull(await repository.GetByIdAsync(Descriptor(), "person-1"));
+        Assert.NotNull(await repository.GetByIdAsync(Descriptor(), "Person_1"));
     }
 
     [Fact]
     public async Task DeleteAsync_WhenAuditablePolicyHasNoAuditKernel_FailsClosed()
     {
-        var service = Service(new InMemoryStandardCrudRepository([new Dictionary<string, object?> { ["EID"] = "person-1", ["ENAME"] = "存在目标" }]));
+        var service = Service(new InMemoryStandardCrudRepository([new Dictionary<string, object?> { ["EID"] = "Person_1", ["ENAME"] = "存在目标" }]));
 
-        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Auditable), "person-1");
+        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Auditable), "Person_1");
 
         Assert.False(result.Succeeded);
         Assert.Equal("StandardCrud.AuditableDeleteNotSupported", result.Error!.Code);
@@ -1414,18 +1415,18 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
         var executor = new BlockingDeleteGuard();
-        var service = new StandardCrudService(
+        var service = ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [executor], conditionalDeleteExecutors: [executor], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [executor], conditionalDeleteExecutors: [executor], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
             [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
-        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
+        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "Person_1");
 
         Assert.False(result.Succeeded);
         Assert.Equal(409, result.Error!.StatusCode);
@@ -1437,22 +1438,22 @@ public sealed class StandardCrudServiceWriteTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
+            new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
         var executor = new RecordingConditionalDeleteExecutor();
-        var service = new StandardCrudService(
+        var service = ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [executor], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [executor], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([]),
             [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());
 
-        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "person-1");
+        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "Person_1");
 
         Assert.True(result.Succeeded);
         Assert.Equal(0, executor.CallCount);
-        var repeated = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "person-1");
+        var repeated = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "Person_1");
         Assert.False(repeated.Succeeded);
         Assert.Equal(404, repeated.Error?.StatusCode);
     }
@@ -1465,10 +1466,10 @@ public sealed class StandardCrudServiceWriteTests
         ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? observation = null)
     {
         repository ??= new InMemoryStandardCrudRepository([]);
-        return new StandardCrudService(
+        return ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, repository,
             EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: auditStampProvider is null ? null : new EntityAuditValueProvider(auditStampProvider), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: auditStampProvider is null ? null : new EntityAuditValueProvider(auditStampProvider), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(displayValueResolvers ?? []),
             [],
@@ -2045,7 +2046,7 @@ public sealed class StandardCrudServiceWriteTests
         public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action, string? targetId,
             IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken token = default)
         {
-            Assert.IsType<ObjectOperationWriteSource.Declared>(source);
+            Assert.IsType<ObjectOperationWriteSource.Button>(source);
             return ExecuteAsync(objectKey, action, targetId, values, token);
         }
         public Task<StandardCrudMutationResult> ExecuteAsync(

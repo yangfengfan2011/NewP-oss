@@ -71,8 +71,6 @@ public partial interface IDataExecutionAccess
     /// <summary>固定API在原对象裁决点消费本次角色要求，来源不能作为普通entry缺声明的回退。</summary>
     Task<DataExecutionTargetDecision> EvaluateApiObjectAsync(DataExecutionApiObjectExecutionContext context, string role,
         DataExecutionTargetInput target, CancellationToken cancellationToken = default);
-    /// <summary>通用端点由真实metadata及资源owner选择受控绑定；缺少或串用来源均拒绝。</summary>
-    DataExecutionBindingReference BindResourceEndpoint(string resourceKey);
     /// <summary>完整角色先核基数，再按输入顺序裁决；每次枚举均使用当前阶段事实。</summary>
     IAsyncEnumerable<DataExecutionTargetDecision> EvaluateObjectsAsync(DataExecutionBindingReference binding, string role,
         IReadOnlyList<DataExecutionTargetInput> targets, CancellationToken cancellationToken = default);
@@ -82,15 +80,4 @@ public partial interface IDataExecutionAccess
     /// <summary>真实端点限定有限来源，单目标在原阶段消费匹配来源的角色；不接受客户端角色或允许结果。</summary>
     Task<DataExecutionDecision> EvaluateObjectFromBindingsAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey,
         string role, string objectId, CancellationToken cancellationToken = default);
-    /// <summary>对服务端归一化后的真实候选执行候选角色要求，不读取不存在的对象。</summary>
-    Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey,
-        string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken cancellationToken = default);
-    /// <summary>在候选补齐身份、归属和审计字段后消费本次写绑定，不要求新对象已可读。</summary>
-    Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionWriteContext source, string resourceKey, string role,
-        IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default);
-
-    /// <summary>在原旧值保护位置核对单次写来源与实际目标，再按有效要求执行现有对象裁决。</summary>
-    Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionWriteContext source, string role,
-        DataExecutionWriteFacts before, CancellationToken token = default);
-
 }

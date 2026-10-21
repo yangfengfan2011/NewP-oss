@@ -661,9 +661,9 @@
   ],
   "nativeCatalog": {
     "schemaVersion": "1.0",
-    "snapshotId": "52c13edf6f8167cb2c647d31e9aca1321dddd4114098b2b888e08baee1872741",
+    "snapshotId": "2752ba3a5d3a5af41f66e0a2a08c09d59a6c8b672baf219223c571db24bcefe1",
     "compilerContractVersion": "1.0",
-    "planHash": "52c13edf6f8167cb2c647d31e9aca1321dddd4114098b2b888e08baee1872741",
+    "planHash": "2752ba3a5d3a5af41f66e0a2a08c09d59a6c8b672baf219223c571db24bcefe1",
     "compositionGraph": [
       {
         "moduleId": "Audit",
@@ -823,7 +823,7 @@
       "frontend": "/plugins/frontend-plugin-manifest.json",
       "metadata": "/plugins/metadata-runtime-manifest.json",
       "localization": "/plugins/localization-manifest.json",
-      "projectionHash": "52c13edf6f8167cb2c647d31e9aca1321dddd4114098b2b888e08baee1872741"
+      "projectionHash": "2752ba3a5d3a5af41f66e0a2a08c09d59a6c8b672baf219223c571db24bcefe1"
     },
     "modules": [
       {

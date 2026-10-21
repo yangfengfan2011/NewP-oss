@@ -155,7 +155,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
             [
                 new Dictionary<string, object?>
                 {
-                    ["EID"] = "record-1",
+                    ["EID"] = "ExampleRecord_1",
                     ["ECODE"] = "R001",
                     ["ENAME"] = "旧名称",
                     ["ReviewerUserEID"] = "User_A",
@@ -171,7 +171,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
 
         var result = await service.UpdateAsync(
             descriptor,
-            "record-1",
+            "ExampleRecord_1",
             new Dictionary<string, object?>
             {
                 ["ENAME"] = "新名称",
@@ -220,7 +220,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
         [
             new Dictionary<string, object?>
             {
-                ["EID"] = "record-2",
+                ["EID"] = "ExampleRecord_2",
                 ["ECODE"] = "R002",
                 ["ENAME"] = "记录二",
                 ["RecordSource"] = "Legacy"
@@ -230,7 +230,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
 
         var result = await service.UpdateAsync(
             descriptor,
-            "record-2",
+            "ExampleRecord_2",
             new Dictionary<string, object?> { ["RecordSource"] = "   " });
 
         Assert.False(result.Succeeded);
@@ -274,11 +274,11 @@ public sealed class ExampleRecordStandardCrudServiceTests
         IStandardCrudRepository repository,
         IPlatformQueryExecutor executor,
         RecordingAccountDirectory directory) =>
-        new StandardCrudService(
+        ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new QueryFixture(), new QueryFixture(),
             repository,
             executor,
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System)), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System)), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(
                 [new ExampleRecordDisplayValueResolver(directory)],
@@ -302,15 +302,11 @@ public sealed class ExampleRecordStandardCrudServiceTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<DataExecutionTargetDecision> EvaluateApiObjectAsync(DataExecutionApiObjectExecutionContext context, string role,
             DataExecutionTargetInput target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public DataExecutionBindingReference BindResourceEndpoint(string resourceKey) => throw new NotSupportedException();
+
         public IAsyncEnumerable<DataExecutionTargetDecision> EvaluateObjectsAsync(DataExecutionBindingReference binding, string role,
             IReadOnlyList<DataExecutionTargetInput> targets, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<DataExecutionDecision> EvaluateObjectFromBindingsAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey,
             string role, string objectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionWriteContext source, string resourceKey, string role,
-            IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => throw new NotSupportedException();
-        public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionWriteContext source, string role,
-            DataExecutionWriteFacts before, CancellationToken token = default) => throw new NotSupportedException();
         public Task<DataExecutionTargetDecision> EvaluateInternalObjectAsync(DataExecutionInternalBinding binding, string role,
             DataExecutionTargetInput target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
@@ -327,7 +323,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
             string role, string objectId, CancellationToken token = default) => Task.FromResult(new DataScopeReadPlan(null));
         public void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey) => throw new NotSupportedException();
             public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey, string role, string objectId, CancellationToken token = default) => throw new NotSupportedException();
-        public Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey, string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => throw new NotSupportedException();
+
     }
 
     private sealed class NoPresentationContext : ICP.Platform.Presentation.IRequestPresentationContextAccessor

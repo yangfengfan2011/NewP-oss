@@ -14,7 +14,7 @@ namespace ICP.Platform.Crud.Extensions;
 public sealed record StandardCrudDataExecutionEndpoint(string ResourceKey, string Operation,
     IReadOnlyList<DataExecutionBindingReference> Bindings);
 
-/// <summary>服务端具体执行登记决定迁移路径；请求不能通过缺失或新增声明改变路由。</summary>
+/// <summary>标准写绑定实际按钮，读取保留独立来源；请求不能通过缺失身份改变路由。</summary>
 public static class StandardCrudDataExecutions
 {
     /// <summary>核对实际标准执行与新按钮处理器绑定；活动对象按钮缺真实端点或处理器注册时拒绝启动。</summary>
@@ -62,17 +62,11 @@ public static class StandardCrudDataExecutions
                 throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_ENDPOINT_MISSING");
     }
 
-    /// <summary>详情允许自身完整读取或已登记更新的准备阶段；调用方不能通过声明缺失切换旧路径。</summary>
+    /// <summary>详情与编辑准备只消费独立的正式读取来源。</summary>
     public static IReadOnlyList<DataExecutionBindingReference> DetailReadBindings(StandardCrudDescriptor descriptor)
     {
         if (!descriptor.DataExecutions.TryGetValue("read", out var read)) return [];
-        // 包未声明独立详情时，read映射必须显式引用本资源update，不能从缺失映射推断。
-        if (descriptor.DataExecutions.TryGetValue("update", out var preparation) && read == preparation)
-            return [new(read, "standardCrud.update", "prepare")];
-        var bindings = new List<DataExecutionBindingReference> { new(read, "standardCrud.read", "read") };
-        if (descriptor.DataExecutions.TryGetValue("update", out var update))
-            bindings.Add(new(update, "standardCrud.update", "prepare"));
-        return bindings;
+        return [new(read, "standardCrud.read", "read")];
     }
 
     /// <summary>将绑定固定到真实端点，并在业务执行前验证声明身份；正式写入仍在原有事务内复核要求。</summary>
@@ -85,12 +79,12 @@ public static class StandardCrudDataExecutions
             "options" => StandardCrudOperation.Options, "export" => StandardCrudOperation.Export, _ => (StandardCrudOperation?)null };
         // 关闭URL的DenyAll保持原样；内部合同不能为它增加入口声明或启用能力。
         if (capability is not null && !descriptor.Authorization!.FeatureOperations.Contains(capability.Value)) return endpoint;
-        var executionOperation = operation is "enable" or "disable" ? "update" : operation;
-        if (!descriptor.DataExecutions.TryGetValue(executionOperation, out var execution))
+        StandardCrudDescriptorValidator.ValidateReadSources(descriptor);
+        if (operation is "create" or "update" or "delete" or "enable" or "disable")
         {
             var buttons = services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog
                 .Where(item => item.BusinessBinding == descriptor.ResourceKey + "." + operation).ToArray();
-            if (operation is not ("create" or "update" or "delete" or "enable" or "disable") || buttons.Length == 0 || buttons.Any(item => item.ModuleId != descriptor.ModuleId
+            if (buttons.Length == 0 || buttons.Any(item => item.ModuleId != descriptor.ModuleId
                 || item.GetObjectRequirements().Count > 0 && !item.GetObjectRequirements().Any(requirement =>
                     requirement.Object == descriptor.ModelName && requirement.ResourceKey == descriptor.ResourceKey)))
                 throw new InvalidOperationException("STANDARD_CRUD_BUTTON_BINDING_INVALID");
@@ -112,20 +106,21 @@ public static class StandardCrudDataExecutions
             });
             return endpoint;
         }
+        if (!descriptor.DataExecutions.TryGetValue(operation, out var execution))
+            throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_BINDING_INVALID");
         var plan = services.GetRequiredService<CanonicalModulePlan>();
         var contract = plan.Modules.SelectMany(module => module.DataExecutions).SingleOrDefault(item => item.Key == execution);
-        var prepareOnly = operation == "read" && descriptor.DataExecutions.TryGetValue("update", out var update) && execution == update;
-        var provider = "standardCrud." + (prepareOnly ? "update" : executionOperation);
+        var provider = "standardCrud." + operation;
         if (contract is null || contract.Boundary != "entry" || contract.ModuleId != descriptor.ModuleId || contract.Provider != provider
             || !contract.Requirements.All(requirement => requirement.Resources.SequenceEqual([descriptor.ResourceKey]))
             || !plan.ActionDataAccessCatalog.Any(requirement => requirement.Execution == execution
                 || operation == "export" && requirement.BusinessBinding == execution && requirement.Surface == "export"))
             throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_BINDING_INVALID");
-        var bindings = new List<DataExecutionBindingReference> { new(execution, provider, operation is "read" or "list" or "export" or "options" ? "read" : "submit") };
+        var bindings = new List<DataExecutionBindingReference> { new(execution, provider, "read") };
         if (operation == "read") bindings = DetailReadBindings(descriptor).ToList();
         endpoint.WithMetadata(new StandardCrudDataExecutionEndpoint(descriptor.ResourceKey, operation, bindings));
         // 端点按活动声明固定按钮路径，同时保留原查询合同登记；缺失HTTP身份不能回退旧入口。
-        if (operation == "export" && plan.ActionDataAccessCatalog.Any(item => item.BusinessBinding == execution && item.Surface == "export"))
+        if (operation == "export")
         {
             endpoint.WithMetadata(new ButtonBusinessHandlerAttribute(typeof(StandardCrudExportHandler)));
             endpoint.AddEndpointFilter(async (context, next) =>
@@ -157,5 +152,6 @@ public static class StandardCrudDataExecutions
             }
         });
         return endpoint;
+
     }
 }

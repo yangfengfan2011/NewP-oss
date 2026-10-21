@@ -23,7 +23,7 @@ public sealed class StandardCrudStateButtonTests
         var repository = new Repository(transaction);
         var buttons = new Buttons(transaction, enabled ? "enable" : "disable", denied);
         var access = new ICP.Platform.Testing.StandardCrudTestAccess();
-        var writer = new StandardCrudDefaultWriter(access, repository, [], [], transactionExecutor: transaction, buttons: buttons);
+        var writer = new StandardCrudDefaultWriter(repository, [], [], transactionExecutor: transaction, buttons: buttons);
         var service = new StandardCrudService(access, null, repository, null!, writer, [], new DisplayValueProjection([]), [], access, buttons: buttons);
         var descriptor = new StandardCrudDescriptor
         {

@@ -7,6 +7,21 @@ namespace ICP.Platform.Crud.Tests;
 
 public sealed class StandardCrudDescriptorTests
 {
+    [Theory]
+    [InlineData("create")]
+    [InlineData("update")]
+    [InlineData("delete")]
+    [InlineData("enable")]
+    [InlineData("disable")]
+    public void Validate_RejectsRetiredWriteMapsAndKeepsIndependentReadSources(string operation)
+    {
+        var descriptor = DescriptorWithUniqueConstraints();
+        var reads = new Dictionary<string, string> { ["read"] = "organization.person.read", ["list"] = "organization.person.list" };
+        StandardCrudDescriptorValidator.Validate(descriptor with { DataExecutions = reads });
+        var old = descriptor with { DataExecutions = new Dictionary<string, string>(reads) { [operation] = "organization.person." + operation } };
+        Assert.Equal("STANDARD_CRUD_RETIRED_WRITE_EXECUTION", Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(old)).Message);
+    }
+
     [Fact]
     public void Validate_WhenDetailFieldsMissId_ThrowsStableMessage()
     {

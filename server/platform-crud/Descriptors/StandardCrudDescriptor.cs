@@ -6,6 +6,7 @@ namespace ICP.Platform.Crud.Descriptors;
 public sealed record StandardCrudDescriptor
 {
     /// <summary>具体执行的正式绑定；缺少映射不能选择其他路径。</summary>
+    /// <summary>独立列表、对象、候选及查询导出的来源；公开写入仅绑定真实按钮。</summary>
     public IReadOnlyDictionary<string, string> DataExecutions { get; init; } = new Dictionary<string, string>();
 
     /// <summary>创建必须登记业务事实；缺少资源登记实现或事务参与能力时失败关闭。</summary>

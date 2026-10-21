@@ -30,11 +30,8 @@ public sealed class EntityAuditProjectionTests
         var models = OrganizationModelDefinitions.All.Where(model => model.Name is "Company" or "Position")
             .Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
         var plan = new CompiledPersistencePlan("candidate", "snapshot", "hash", default, "digest", [], models, []);
-        // 本用例直接验证公共审计赋值与投影，显式使用测试自己的旧协议来源；
-        // 岗位新按钮、事务与HTTP接线由PositionButtonExecutionSqlServerTests覆盖，不在内存数据库补造HTTP上下文。
-        var auditResources = new[] { CompanyCrudDescriptorFactory.Create(), PositionCrudDescriptorFactory.Create() }
-            .Select(descriptor => descriptor with { DataExecutions = new Dictionary<string, string>(descriptor.DataExecutions)
-                { ["update"] = "tests.auditProjection." + descriptor.ResourceKey + ".update" } });
+        // 本用例使用显式无对象要求的字段按钮，保留真实审计赋值与EF投影；HTTP权限由SQL用例覆盖。
+        var auditResources = new[] { CompanyCrudDescriptorFactory.Create(), PositionCrudDescriptorFactory.Create() };
         var registry = new StandardCrudResourceRegistry(auditResources, plan);
         var stamp = new FixedStamp();
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -42,10 +39,10 @@ public sealed class EntityAuditProjectionTests
         await using var context = new EfPlatformDbContext(options, plan, new EntityAuditValueProvider(stamp));
         var directory = new Names();
         var writeRepository = new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), context, new PlatformObjectIdGenerator());
-        IStandardCrudService service = new StandardCrudService(
+        IStandardCrudService service = ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, writeRepository,
             new EfPlatformQueryExecutor(context),
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], auditValueProvider: new EntityAuditValueProvider(stamp), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), writeRepository, [], [], auditValueProvider: new EntityAuditValueProvider(stamp), objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection(
                 [],

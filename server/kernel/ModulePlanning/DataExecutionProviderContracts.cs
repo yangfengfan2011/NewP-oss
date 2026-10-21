@@ -36,7 +36,7 @@ public static class DataExecutionProviders
                 return execution;
             }
             if (provider is null) throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_UNKNOWN");
-            if (execution.Requirements.Count != 0 || execution.AllowedAdditionalActions.Count != 0
+            if (execution.Requirements.Count != 0
                 || execution.ProviderModuleId is not null || execution.Branches.Count != 0
                 || provider.ConsumerBinding switch
                 {

@@ -24,10 +24,10 @@ internal static class IdentityCrudQueryTestFactory
         IStandardCrudRepository crudRepository = context is null
             ? new AccountReadRepository(repository)
             : new EfStandardCrudRepository(new ICP.Platform.Testing.StandardCrudTestAccess(), context, new PlatformObjectIdGenerator());
-        var crud = new StandardCrudService(
+        var crud = ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, crudRepository,
             executor,
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), crudRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), crudRepository, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [new IdentityAccountCrudResource()],
             new DisplayValueProjection(
                 [],

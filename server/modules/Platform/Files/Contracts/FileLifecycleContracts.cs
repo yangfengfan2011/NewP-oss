@@ -4,8 +4,6 @@ namespace ICP.Platform.Modules.Files.Contracts;
 
 /// <summary>业务拥有者选定的正式执行来源；文件引用不能充当授权目标。</summary>
 public abstract record FileOwnerOperationContext;
-/// <summary>候选创建后的实际新对象；首次确认还必须匹配owner同事务的真实Added关联证明。</summary>
-public sealed record FileOwnerCreationContext(DataExecutionWriteContext Source, string ObjectId) : FileOwnerOperationContext;
 /// <summary>原删除流程选定的真实对象；policy在自己的锁内读取阶段独立执行固定Release要求。</summary>
 public sealed record FileOwnerReleaseContext(string ResourceKey, string ObjectId) : FileOwnerOperationContext;
 /// <summary>由业务owner选定的正式读取/下载执行、资源与真实对象；Files不接受客户端关联替代目标。</summary>

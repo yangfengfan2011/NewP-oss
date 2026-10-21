@@ -4,6 +4,13 @@ namespace ICP.Platform.Crud.Runtime;
 
 public static class StandardCrudDescriptorValidator
 {
+    // descriptor只保留独立读取映射；注册、路由和直接服务调用共用同一退休边界。
+    internal static void ValidateReadSources(StandardCrudDescriptor descriptor)
+    {
+        if (descriptor.DataExecutions.Keys.Any(key => key is not ("list" or "read" or "options" or "export")))
+            throw new InvalidOperationException("STANDARD_CRUD_RETIRED_WRITE_EXECUTION");
+    }
+
     /// <summary>
     /// 校验标准 CRUD 描述符的静态边界，失败信息作为测试基线保持稳定。
     /// </summary>
@@ -15,6 +22,7 @@ public static class StandardCrudDescriptorValidator
         Require(descriptor.Route, nameof(descriptor.Route), descriptor.ResourceKey);
         Require(descriptor.IdField, nameof(descriptor.IdField), descriptor.ResourceKey);
         Require(descriptor.DisplayField, nameof(descriptor.DisplayField), descriptor.ResourceKey);
+        ValidateReadSources(descriptor);
 
         if (!descriptor.FieldSet.DetailFields.Contains(descriptor.IdField, StringComparer.Ordinal))
         {

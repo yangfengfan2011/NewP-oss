@@ -17,5 +17,7 @@
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'PlatformCrud.Tests' Or '$(MSBuildProjectName)' == 'HostApi.Tests' Or '$(MSBuildProjectName)' == 'Example.Tests' Or '$(MSBuildProjectName)' == 'Organization.Tests' Or '$(MSBuildProjectName)' == 'Identity.Tests' Or '$(MSBuildProjectName)' == 'Authorization.Tests'">
     <Compile Include="$(MSBuildThisFileDirectory)TestSupport\Authorization\StandardCrudTestAccess.cs"
              Link="TestSupport\Authorization\StandardCrudTestAccess.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport\Authorization\StandardCrudFieldFixture.cs"
+             Link="TestSupport\Authorization\StandardCrudFieldFixture.cs" />
   </ItemGroup>
 </Project>

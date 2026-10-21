@@ -24,9 +24,9 @@ public static partial class ActionDataAccessCompiler
                     throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID");
                 var source = pages.Length != 0 ? pages[0] : new ActionDataAccessDeclaration(button.ModuleId, key, "read", "", key,
                     querySource!.Requirements[0].Resources, []);
-                if (source.BusinessBinding is not null || source.AdditionalActions.Count != 0
+                if (source.BusinessBinding is not null
                     || !contracts.TryGetValue(source.Execution, out var contract) || contract.ModuleId != button.ModuleId
-                    || contract.Boundary != "entry" || contract.Branches.Count != 0 || contract.AllowedAdditionalActions.Count != 0
+                    || contract.Boundary != "entry" || contract.Branches.Count != 0
                     || contract.Requirements.Count == 0 || contract.Requirements.Any(requirement => requirement.Stage == "submit"
                         || requirement.AnyOf.Count != 1 || !requirement.AnyOf[0].SequenceEqual(["read"])
                         || requirement.ResourceAnyOf is not null)
@@ -56,6 +56,5 @@ public static partial class ActionDataAccessCompiler
     private static bool SameReadSource(ActionDataAccessDeclaration left, ActionDataAccessDeclaration right) =>
         left.Id == right.Id && left.Execution == right.Execution && left.BusinessBinding == right.BusinessBinding
         && left.Object == right.Object && SameObjects(left.ObjectRequirements, right.ObjectRequirements)
-        && left.Resources.SequenceEqual(right.Resources) && left.Actions.SequenceEqual(right.Actions)
-        && left.AdditionalActions.SequenceEqual(right.AdditionalActions);
+        && left.Resources.SequenceEqual(right.Resources) && left.Actions.SequenceEqual(right.Actions);
 }

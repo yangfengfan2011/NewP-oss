@@ -163,9 +163,7 @@ public sealed class PartWriteExecutionSqlServerTests
         try
         {
             var executor = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
-            var key = "part.part.internal.create";
-            var retired = new ObjectOperationWriteSource.Declared(new(new(key, "standardCrud.create", "submit"), "part.part", null)
-            { Internal = new(key, "standardCrud.create", typeof(ICP.Platform.Modules.Part.PartCopyBehavior), "ExecuteAsync") });
+            ObjectOperationWriteSource? retired = null;
             var input = new Dictionary<string, object?> { ["ECODE"] = "PART-SOURCE-INTERNAL", ["ENAME"] = "可信内部候选" };
             Assert.Equal(400, (await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", ObjectOperationAction.Create, null, input, retired))).Status);
             var source = new ObjectOperationWriteSource.Internal("part.part", "Part", ObjectOperationAction.Create, null);
@@ -202,7 +200,7 @@ public sealed class PartWriteExecutionSqlServerTests
         finally { accessor.HttpContext = previous; }
     }
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "已退役Part声明写来源不能回退为显式内部授权，拒绝保留实体与审计")]
-    public async Task RetiredDeclaredWrites_RejectInsteadOfFallingBackToInternalAuthority()
+    public async Task MissingWriteSources_RejectInsteadOfFallingBackToInternalAuthority()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includePart: true);
         using var admin = await fixture.LoginAdministratorAsync();
@@ -232,7 +230,7 @@ public sealed class PartWriteExecutionSqlServerTests
         var previous = accessor.HttpContext;
         accessor.HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "part-internal-write-denials")) };
-        using var trace = new Activity(nameof(RetiredDeclaredWrites_RejectInsteadOfFallingBackToInternalAuthority)).Start();
+        using var trace = new Activity(nameof(MissingWriteSources_RejectInsteadOfFallingBackToInternalAuthority)).Start();
         try
         {
             var executor = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
@@ -243,9 +241,7 @@ public sealed class PartWriteExecutionSqlServerTests
                 ("read", "update"), ("read", "delete"), ("edit", "update"), ("delete", "delete")
             })
             {
-                var key = "part.part." + operation;
-                var source = new ObjectOperationWriteSource.Declared(new(new(key, "standardCrud." + operation, "submit"), "part.part", ids[denied])
-                { Internal = new(key, "standardCrud." + operation, typeof(WorkspaceContents), "MutateObjectsAsync") });
+                ObjectOperationWriteSource? source = null;
                 var action = operation == "update" ? ObjectOperationAction.Update : ObjectOperationAction.Delete;
                 var error = await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", action, ids[denied],
                     new Dictionary<string, object?> { ["ENAME"] = "不得生效" }, source));

@@ -3,6 +3,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.ObjectIds;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.Tests.Support;
 using ICP.Platform.Persistence.Abstractions;
@@ -14,6 +15,7 @@ namespace ICP.Platform.Crud.Tests;
 /// <summary>上传准入复用创建候选规则时，不能登记业务行或取得写事务。</summary>
 public sealed class StandardCrudCreatePreparationTests
 {
+    private ICP.Platform.Testing.StandardCrudFieldFixture.FieldButtons? buttons;
     [Fact]
     public async Task PrepareCreateCandidate_AppliesTrustedAuditAndCompleteCreateDecisionWithoutRegisteringOrStartingTransaction()
     {
@@ -22,7 +24,7 @@ public sealed class StandardCrudCreatePreparationTests
         var decision = new CandidateDecision();
         var ids = new CandidateIds();
         var writer = Writer(repository, transaction, decision, ids);
-        var result = await writer.PrepareCreateCandidateAsync(Descriptor(), new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "准入候选" }, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()));
+        var result = await writer.PrepareCreateCandidateAsync(Descriptor(), new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "准入候选" }, source: Source(Descriptor()));
         Assert.True(result.Succeeded);
         Assert.Equal(1, repository.UniqueChecks);
         Assert.Equal(1, decision.CandidateChecks);
@@ -50,7 +52,7 @@ public sealed class StandardCrudCreatePreparationTests
         var decision = new CandidateDecision();
         var ids = new CandidateIds();
         var result = await Writer(repository, transaction, decision, ids).PrepareCreateCandidateAsync(Descriptor(),
-            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选", ["CreatedBy"] = "forged" }, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()));
+            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选", ["CreatedBy"] = "forged" }, source: Source(Descriptor()));
         Assert.False(result.Succeeded);
         Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", result.Error!.Code);
         Assert.Equal(0, repository.UniqueChecks);
@@ -69,17 +71,16 @@ public sealed class StandardCrudCreatePreparationTests
         var decision = new CandidateDecision();
         var ids = new CandidateIds();
         var writer = Writer(repository, transaction, decision, ids);
-        var duplicate = await writer.PrepareCreateCandidateAsync(Descriptor(), new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选" }, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()));
+        var duplicate = await writer.PrepareCreateCandidateAsync(Descriptor(), new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "候选" }, source: Source(Descriptor()));
         Assert.False(duplicate.Succeeded);
         Assert.Equal("Person.NumberDuplicated", duplicate.Error!.Code);
         Assert.Equal(0, decision.CandidateChecks);
         Assert.Equal(0, ids.Calls);
         var validValues = new Dictionary<string, object?> { ["PersonNo"] = "P002", ["ENAME"] = "合法候选" };
-        Assert.True((await writer.PrepareCreateCandidateAsync(Descriptor(), validValues, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()))).Succeeded);
+        Assert.True((await writer.PrepareCreateCandidateAsync(Descriptor(), validValues, source: Source(Descriptor()))).Succeeded);
         decision.Allow = false;
-        var revoked = await writer.PrepareCreateCandidateAsync(Descriptor(), validValues, source: ICP.Platform.Testing.StandardCrudTestAccess.Source(Descriptor()));
-        Assert.False(revoked.Succeeded);
-        Assert.Equal("DataScope.ActionDenied", revoked.Error!.Code);
+        var revoked = await Assert.ThrowsAsync<ActionDataAccessException>(() => writer.PrepareCreateCandidateAsync(Descriptor(), validValues, source: Source(Descriptor())));
+        Assert.Equal("DataScope.ActionDenied", revoked.Code);
         Assert.Equal(2, decision.CandidateChecks);
         Assert.Equal(0, transaction.Executions);
         Assert.Equal(0, transaction.Flushes);
@@ -119,10 +120,8 @@ public sealed class StandardCrudCreatePreparationTests
         Assert.Equal(1, repository.UniqueChecks);
         Assert.Equal(0, decision.CandidateChecks);
         Assert.Equal(1, ids.Calls);
-        var denied = await writer.PrepareCreateCandidateAsync(descriptor, input,
-            source: ICP.Platform.Testing.StandardCrudTestAccess.Source(descriptor));
-        Assert.False(denied.Succeeded);
-        Assert.Equal("DataScope.ActionDenied", denied.Error!.Code);
+        var denied = await Assert.ThrowsAsync<ActionDataAccessException>(() => writer.PrepareCreateCandidateAsync(descriptor, input, source: Source(descriptor)));
+        Assert.Equal("DataScope.ActionDenied", denied.Code);
         Assert.Equal(1, decision.CandidateChecks);
         Assert.Equal(2, ids.Calls);
         Assert.NotEqual(facts["EID"], decision.Candidate!["EID"]);
@@ -152,8 +151,14 @@ public sealed class StandardCrudCreatePreparationTests
         Assert.Equal(0, repository.Registrations);
     }
 
-    private static StandardCrudDefaultWriter Writer(PreparationRepository repository, PreparationTransaction transaction, CandidateDecision decision, CandidateIds ids) =>
-        new(new ICP.Platform.Testing.StandardCrudTestAccess(decision), repository, [], [], auditValueProvider: new EntityAuditValueProvider(new Stamp()), transactionExecutor: transaction, objectIds: ids);
+    private StandardCrudDefaultWriter Writer(PreparationRepository repository, PreparationTransaction transaction, CandidateDecision decision, CandidateIds ids)
+    {
+        buttons = new(decision);
+        return new(repository, [], [], auditValueProvider: new EntityAuditValueProvider(new Stamp()), transactionExecutor: transaction, objectIds: ids, buttons: buttons);
+    }
+
+    private ObjectOperationWriteSource Source(StandardCrudDescriptor descriptor) => new ObjectOperationWriteSource.Button(
+        buttons!.Bind(descriptor.ResourceKey, descriptor.ModelName, "create", null));
 
     private static StandardCrudDescriptor Descriptor() => new()
     {

@@ -21,16 +21,3 @@ public sealed record DataScopeBatchConfiguration(string Mode, IReadOnlyList<Data
 
 /// <summary>提交后只返回安全计数，不因自身失权再次读取配置。</summary>
 public sealed record DataScopeBatchAuthorizationReceipt(bool Succeeded, int Targets, int Changed);
-
-/// <summary>真实owner负责功能与完整来源；公共服务在单事务内锁定并重验全部对象再写入。</summary>
-public interface IDataScopeBatchAuthorization
-{
-    /// <summary>真实owner明确提交整批来源；锁定及全组现时资格仍由同一手工授权流程拥有。</summary>
-    Task<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> ReplaceAsync(
-        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataScopeBatchConfiguration input, DataExecutionBindingReference execution,
-        CancellationToken token = default);
-    /// <summary>当前配置核对使用同一正式批来源，不复用之前的允许结果。</summary>
-    Task<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>> ReadCurrentAsync(
-        IReadOnlyList<DataScopeAuthorizationTarget> targets, DataExecutionBindingReference execution,
-        CancellationToken token = default);
-}

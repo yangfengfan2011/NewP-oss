@@ -7,44 +7,17 @@ namespace ICP.Platform.Kernel.Tests;
 [Trait("Category", "ModuleMetadataConsumer")]
 public sealed class OwnershipTransferExecutionContractTests
 {
-    [Fact]
-    public void CentralTransferProviderFixesEditAtPrepareAndSubmitWithTheExistingReadDependency()
-    {
-        var contracts = Read();
-        var contract = Assert.Single(DataExecutionContracts.Compile(contracts, Actions(readRequired: true)).Values);
-        Assert.Equal("entityOwnership.transfer", contract.Provider);
-        Assert.Null(contract.ProviderModuleId);
-        Assert.Equal(new[] { "prepare", "submit" }, contract.Requirements.Select(requirement => requirement.Stage));
-        Assert.All(contract.Requirements, requirement =>
-        {
-            Assert.Equal("target", requirement.Role); Assert.Equal("objects", requirement.Shape);
-            Assert.Equal(new[] { "part.part" }, requirement.Resources);
-            Assert.Equal(new[] { "edit" }, Assert.Single(requirement.AnyOf));
-            Assert.Equal(1, requirement.MinimumCount); Assert.Null(requirement.MaximumCount);
-        });
-    }
+    [Theory]
+    [InlineData("transfer")]
+    [InlineData("initialize")]
+    public void CentralOwnershipWriteContracts_AreRetired(string operation) =>
+        Assert.Throws<InvalidOperationException>(() => Read(operation: operation));
 
     [Fact]
-    public void TransferCannotSilentlyLoseTheGlobalEditReadClosure()
+    public void ActualEditActionKeepsItsExistingReadDependency()
     {
-        Assert.Throws<InvalidOperationException>(() => DataExecutionContracts.Compile(Read(), Actions(readRequired: false)));
-    }
-
-    [Fact]
-    public void InitializationFixesPendingQueryAndTheOriginalReadThenEditRoles()
-    {
-        var contract = Assert.Single(DataExecutionContracts.Compile(Read(operation: "initialize"), Actions(readRequired: true)).Values);
-        Assert.Equal("entityOwnership.initialize", contract.Provider);
-        Assert.Equal(new[] { ("query", "read", "query"), ("visibility", "prepare", "objects"), ("target", "prepare", "objects"),
-            ("visibility", "submit", "objects"), ("target", "submit", "objects") },
-            contract.Requirements.Select(requirement => (requirement.Role, requirement.Stage, requirement.Shape)));
-        Assert.All(contract.Requirements, requirement =>
-        {
-            Assert.Equal(new[] { "part.part" }, requirement.Resources);
-            Assert.Equal(new[] { requirement.Role == "target" ? "edit" : "read" }, Assert.Single(requirement.AnyOf));
-            Assert.Equal(requirement.Role == "query" ? 0 : 1, requirement.MinimumCount);
-            Assert.Null(requirement.MaximumCount);
-        });
+        var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));
+        Assert.True(Assert.Single(candidates.SelectMany(candidate => candidate.DataActions), action => action.Key == "edit").RequiresRead);
     }
 
     [Theory]
@@ -61,7 +34,8 @@ public sealed class OwnershipTransferExecutionContractTests
     [InlineData("initialize")]
     public void CentralOwnershipFloor_RejectsTheOtherProviderModesProjectedResourceSet(string operation)
     {
-        var contract = Assert.Single(Read(operation: operation));
+        var contract = new DataExecutionContract("part.part.legacy", "Part", "entityOwnership." + operation, "entry", ["part.part.transfer"],
+            [new("target", "submit", "objects", ["part.part"], [["edit"]], 1, null)]);
         Assert.Throws<InvalidOperationException>(() => DataExecutionContracts.Compile(
             [contract with { TargetResources = ["part.part"] }], Actions(readRequired: true)));
     }
@@ -135,7 +109,7 @@ public sealed class OwnershipTransferExecutionContractTests
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
         var index = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Part");
         candidates[index] = candidates[index] with { DataExecutions = [.. candidates[index].DataExecutions,
-            Read().Single() with { Provider = "entityOwnership.unregistered" }] };
+            candidates[index].DataExecutions.Single(contract => contract.Provider == "entityOwnership.initialize") with { Key = "part.part.unknown", Provider = "entityOwnership.unregistered" }] };
         Assert.False(new CanonicalModulePlanCompiler().Compile("unregistered-ownership-provider", candidates).IsSuccess);
     }
 

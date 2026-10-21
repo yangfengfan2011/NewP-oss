@@ -150,6 +150,28 @@ public sealed class ObjectAuthorizationButtonSqlServerTests
         using (var borrowed = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, path, dataAccess: read))
             Assert.Equal(HttpStatusCode.BadRequest, borrowed.StatusCode);
         Assert.Equal(before, await SnapshotAsync(fixture, part.Id));
+
+        // 行快捷导航没有业务处理器，其预检从真实目标PageRef引用同一只读来源，使用原浏览功能位置。
+        using var authored = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "modules", "Part", "metadata", "views", "PartList.view.json")));
+        var sourceKey = authored.RootElement.GetProperty("view").GetProperty("rowActions").EnumerateArray()
+            .Single(action => action.GetProperty("key").GetString() == "viewAuthorization").GetProperty("inputReadSourceKey").GetString();
+        var browse = Point(fixture, "part.part.read");
+        var plan = fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>();
+        var rowRead = Assert.Single(plan.ActionDataAccessCatalog, item => item.ViewKey == sourceKey && item.Surface == "read"
+            && item.FeaturePositions.Contains(browse.Position));
+        Assert.Equal(read.Id, rowRead.Id);
+        using (var allowed = await FeatureHttpTestRequests.SendAsync(ordinary, browse, HttpMethod.Get, path + "/catalog", dataAccess: rowRead))
+            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+        using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, browse, HttpMethod.Get, path + "/catalog"))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        var listRead = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "part.part.list");
+        using (var wrongSource = await FeatureHttpTestRequests.SendAsync(ordinary, browse, HttpMethod.Get, path + "/catalog", dataAccess: listRead))
+            Assert.Equal(HttpStatusCode.BadRequest, wrongSource.StatusCode);
+        Assert.Equal(before, await SnapshotAsync(fixture, part.Id));
+        // manage继承browse入口；撤销整个实际grant集合才能移除该PageRef读取功能资格。
+        await http.GrantAsync(admin, actor.RoleId);
+        using (var revoked = await FeatureHttpTestRequests.SendAsync(ordinary, browse, HttpMethod.Get, path + "/catalog", dataAccess: rowRead))
+            Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "批量准备的显式读取引用允许空筛选并保留管理拒绝反馈")]

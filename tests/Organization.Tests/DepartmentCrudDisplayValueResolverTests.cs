@@ -35,10 +35,10 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             "asc",
             ["CompanyId", "CompanyId_DisplayValue", "ParentDepartmentId", "ParentDepartmentId_DisplayValue"],
             descriptor.DisplayValueFields));
-        var service = new StandardCrudService(
+        var service = ICP.Platform.Testing.StandardCrudFieldFixture.Service(
             new ICP.Platform.Testing.StandardCrudTestAccess(), null, null!,
             executor,
-            new StandardCrudDefaultWriter(new ICP.Platform.Testing.StandardCrudTestAccess(), null!, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
+            ICP.Platform.Testing.StandardCrudFieldFixture.Writer(new ICP.Platform.Testing.StandardCrudTestAccess(), null!, [], [], objectIds: new ICP.Platform.Crud.ObjectIds.PlatformObjectIdGenerator()),
             [],
             new DisplayValueProjection([new DepartmentCrudDisplayValueResolver(query, new AllowAllReadableIds())]),
             [], objectScope: new ICP.Platform.Testing.StandardCrudTestAccess());

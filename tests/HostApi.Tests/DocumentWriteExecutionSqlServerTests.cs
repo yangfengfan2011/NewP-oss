@@ -290,9 +290,8 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             var expected = new ConfirmedFileUsage(created.UsageId, created.FileId);
             Assert.Equal(expected, await Confirm(context));
             Assert.Equal(expected, await Confirm(context));
-            var legacy = new FileOwnerCreationContext(new(new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
-            { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CreateWithFilesAsync)) }, created.DocumentId);
-            var crossed = await Assert.ThrowsAsync<FileLifecycleException>(() => Confirm(legacy));
+            var readContext = new FileOwnerExecutionContext(DocumentFiles.FileReadBinding, "document.document", created.DocumentId);
+            var crossed = await Assert.ThrowsAsync<FileLifecycleException>(() => Confirm(readContext));
             Assert.Equal("Document.FileWriteContextInvalid", crossed.Code);
             var wrongContext = await transactions.ExecuteAsync(token =>
             {

@@ -77,7 +77,7 @@ public sealed class DataScopeReadConstraintRegistrationTests
     {
         using var services = Services("valid");
         var requirement = new ActionDataAccessDeclaration("Workspace", "workspace.folder.list", "rowActions", "inspect",
-            "workspace.history.enter", ["workspace.folder"], ["edit"]);
+            "", ["workspace.folder"], ["edit"]) { BusinessBinding = "workspace.folder.inspect", Object = "WorkspaceFolder" };
         var failure = Assert.Throws<InvalidOperationException>(() => Prepare(services, "valid",
             [new("workspace.folder", "Workspace", ["read"])], requirement));
         Assert.Equal("ACTION_DATA_ACCESS_RESOURCE_ACTION_INVALID", failure.Message);
@@ -88,12 +88,12 @@ public sealed class DataScopeReadConstraintRegistrationTests
     [Theory, Trait("Category", "ModuleMetadataConsumer")]
     [InlineData(false)]
     [InlineData(true)]
-    public void Preparation_StructuredRolesValidateOnlyTheCurrentResourceAlternatives(bool invalid)
+    public void Preparation_ReadSourceStructuredRolesValidateOnlyTheCurrentResourceAlternatives(bool invalid)
     {
         using var services = new ServiceCollection().BuildServiceProvider();
         string[] resources = ["workspace.folder", "workspace.other"];
         var contract = new DataExecutionContract("workspace.heterogeneous", "Workspace", "workspace.backend", "entry", ["workspace.folder.read"],
-            [new("targets", "submit", "objects", resources, [["read"]], 1, 5)
+            [new("targets", "read", "objects", resources, [["read"]], 1, 5)
             { ResourceAnyOf = new Dictionary<string, IReadOnlyList<IReadOnlyList<string>>>
                 { [resources[0]] = [["edit"]], [resources[1]] = [[invalid ? "edit" : "delete"]] } }]);
         var module = new CanonicalModulePlanModule("Workspace", "1.1.0", "工作空间", null, "", null, null,
@@ -101,7 +101,7 @@ public sealed class DataScopeReadConstraintRegistrationTests
         {
             DataActions = [new("Workspace", "read", "读取", "data.read"), new("Workspace", "edit", "编辑", "data.edit"), new("Workspace", "delete", "删除", "data.delete")],
             DataExecutions = [contract], Features = [new("Workspace", "read", "navigation", "读取", null, "workspace.folder.read")
-            { DataResources = resources, DataAccess = [new("Workspace", "mixed", "rowActions", "read", contract.Key, resources, [])] }]
+            { DataResources = resources, DataAccess = [new("Workspace", "mixed", "read", "", contract.Key, resources, [])] }]
         };
         var plan = new CanonicalModulePlan("candidate", "1.1.0", "", "", [], [module]);
         var persistence = new CompiledPersistencePlan("candidate", "snapshot", "hash", PersistenceProvider.SqlServer,
@@ -163,10 +163,10 @@ public sealed class DataScopeReadConstraintRegistrationTests
         var module = new CanonicalModulePlanModule("Workspace", "1.1.0", "工作空间", null, "", null, null,
             null, null, "", [], [], [], [], [], new("test", "test", "/"))
             { DataActions = [new("Workspace", "read", "读取", "data.read"), new("Workspace", "edit", "编辑", "data.edit")],
-                DataExecutions = requirement is null ? [] : [new(requirement.Execution, "Workspace", "workspace.backend", "entry", ["workspace.folder.read"],
+                DataExecutions = requirement is null || requirement.BusinessBinding is not null ? [] : [new(requirement.Execution, "Workspace", "workspace.backend", "entry", ["workspace.folder.read"],
                     [new("target", "read", "object", ["workspace.folder"], [requirement.Actions])])],
-                Features = requirement is null ? [] : [new("Workspace", "read", "navigation", "读取", null, "workspace.folder.read")
-                    { DataResources = ["workspace.folder"], DataAccess = [requirement with { Actions = [] }] }] };
+                Features = requirement is null ? [] : [new("Workspace", "read", "navigation", "读取", null, requirement.BusinessBinding ?? "workspace.folder.read")
+                    { DataResources = ["workspace.folder"], DataAccess = [requirement.BusinessBinding is null ? requirement with { Actions = [] } : requirement] }] };
         var modules = new CanonicalModulePlan("candidate", "1.1.0", "", "", [], [module]);
         var models = new WorkspaceModelMetadataProvider().GetDefinitions();
         var persistence = new CompiledPersistencePlan("candidate", "snapshot", "hash", PersistenceProvider.SqlServer,

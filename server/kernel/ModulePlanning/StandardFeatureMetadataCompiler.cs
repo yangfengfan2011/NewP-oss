@@ -332,12 +332,11 @@ public static class StandardFeatureMetadataCompiler
             }
             if (!hasDataAccess) return;
             if (inputReadSource is not null) throw new InvalidOperationException("INPUT_READ_SOURCE_INVALID");
-            if (declared.EnumerateObject().Any(property => property.Name is not ("execution" or "resources" or "additionalActions")))
+            if (declared.EnumerateObject().Any(property => property.Name is not ("execution" or "resources")))
                 throw new InvalidOperationException("ACTION_DATA_ACCESS_DECLARATION_INVALID");
             var declaration = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, Text(declared, "execution"),
                 declared.GetProperty("resources").EnumerateArray().Select(item => item.GetString()!).ToArray(),
-                [])
-            { AdditionalActions = declared.TryGetProperty("additionalActions", out var additional) ? additional.EnumerateArray().Select(item => item.GetString()!).ToArray() : [] };
+                []);
             // 相同 View 可由多个树节点引用到同一功能；相同结构的展开不制造重复声明。
             if (!node.DataAccess.Any(item => item.Id == declaration.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, declaration] };
         }

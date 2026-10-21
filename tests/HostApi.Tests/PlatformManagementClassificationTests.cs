@@ -41,7 +41,6 @@ public sealed class PlatformManagementClassificationTests
             Assert.Equal(behavior, Assert.Single(endpoint.GetCustomAttributes<RequireFeatureAttribute>()).BehaviorKey);
             Assert.Equal(administrator, endpoint.GetCustomAttributes<AuthorizeAttribute>().Any(attribute => attribute.Policy == "AdminOnly"));
             Assert.Empty(endpoint.GetCustomAttributes<StandardCrudDataExecutionAttribute>());
-            Assert.Empty(endpoint.GetCustomAttributes<DataExecutionEndpointAttribute>());
         }
         Assert.Single(typeof(RoleController).GetMethod("DeleteRole")!.GetCustomAttributes<DenyAllAttribute>());
         Assert.Single(typeof(IdentityAccountsController).GetMethod("SetStatus")!.GetCustomAttributes<DenyAllAttribute>());

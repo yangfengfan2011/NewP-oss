@@ -25,9 +25,7 @@ public sealed class ObjectAuthorizationExecutionContractTests
         var read = Assert.Single(view.Requirements!);
         Assert.Equal(("view", "prepare", "object"), (read.Role, read.Stage, read.Shape));
         Assert.Equal(new[] { "read" }, Assert.Single(read.AnyOf));
-        var viewAction = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == view.Execution && item.Surface == "rowActions");
-        Assert.Equal((resource + ".list", "viewAuthorization"), (viewAction.ViewKey, viewAction.ActionKey));
-        Assert.Equal(new[] { readFeature.Position }, viewAction.FeaturePositions);
+        Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.ViewKey == resource + ".list" && item.ActionKey == "viewAuthorization");
         var management = plan.ActionDataAccessCatalog.Where(item => item.BusinessBinding == resource + ".authorize").ToArray();
         Assert.Equal(new[] { "featureActions", "rowActions" }, management.Select(item => item.Surface).Order(StringComparer.Ordinal));
         Assert.Equal(plan.FeatureCatalog.Where(point => point.ModuleId == owner && point.BehaviorKey == resource + ".authorize")
@@ -52,7 +50,7 @@ public sealed class ObjectAuthorizationExecutionContractTests
         var plan = compiled.Plan!;
         var sources = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace"
             && (item.Provider == "authorization.collection.view" || item.BusinessBinding == "workspace.folder.authorize")).ToArray();
-        Assert.Equal(5, sources.Length);
+        Assert.Equal(4, sources.Length);
         Assert.All(sources, source => Assert.Equal(new[] { "workspace.folder", "part.part", "document.document" }, source.Resources));
         var batch = Assert.Single(sources, source => source.ActionKey == "batchAuthorize");
         Assert.Equal(("workspace.folder.list", "pageActions", "batchAuthorize"), (batch.ViewKey, batch.Surface, batch.ActionKey));
@@ -65,7 +63,8 @@ public sealed class ObjectAuthorizationExecutionContractTests
         Assert.Empty(inputPositions.Except(read.FeaturePositions, StringComparer.Ordinal));
         var nonPresented = Assert.Single(sources, source => source.Surface == "featureActions");
         Assert.Empty(nonPresented.FeaturePositions.Intersect(read.FeaturePositions, StringComparer.Ordinal));
-        Assert.Equal(2, sources.Count(source => source.Execution == "workspace.content.authorization.view"));
+        Assert.Single(sources, source => source.Execution == "workspace.content.authorization.view");
+        Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.ModuleId == "Workspace" && item.ActionKey == "viewAuthorization");
         Assert.All(read.Requirements!, role => Assert.Equal(new[] { "read" }, Assert.Single(role.AnyOf)));
         Assert.DoesNotContain(plan.Modules.SelectMany(module => module.DataExecutions), contract =>
             contract.Key is "workspace.content.authorization.manage" or "workspace.content.authorization.batch");

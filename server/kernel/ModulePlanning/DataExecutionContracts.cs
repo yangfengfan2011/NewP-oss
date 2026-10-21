@@ -22,7 +22,6 @@ public sealed record DataExecutionFixedBinding(string Kind, string Identity, str
 public sealed record DataExecutionContract(string Key, string ModuleId, string Provider, string Boundary,
     IReadOnlyList<string> FeatureBehaviors, IReadOnlyList<DataExecutionRequirement> Requirements)
 {
-    public IReadOnlyList<string> AllowedAdditionalActions { get; init; } = [];
     public IReadOnlyList<string> Branches { get; init; } = [];
     public IReadOnlyList<DataExecutionFixedBinding> FixedBindings { get; init; } = [];
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
@@ -51,7 +50,7 @@ public static class DataExecutionContracts
             if (item.GetProperty("provider").GetString() is "entityOwnership.transfer" or "entityOwnership.initialize")
             {
                 var ownershipProvider = item.GetProperty("provider").GetString()!;
-                // 已迁移输入仅保留原query/read来源；旧按钮混合写合同仍按原短声明读取。
+                // 归属维护只保留真实待补齐查询来源；按钮转交和写入不再消费中央固定动作合同。
                 if (ownershipProvider == "entityOwnership.initialize" && item.TryGetProperty("requirements", out _))
                 {
                     var readSource = item.Deserialize<DataExecutionContract>(options)
@@ -60,12 +59,7 @@ public static class DataExecutionContracts
                         throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
                     return readSource;
                 }
-                if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resources"))
-                    || item.GetProperty("moduleId").GetString() != moduleId)
-                    throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
-                return new DataExecutionContract(item.GetProperty("key").GetString()!, moduleId, ownershipProvider,
-                    item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!,
-                    OwnershipRequirements(ownershipProvider, item.GetProperty("resources").Deserialize<string[]>()!));
+                throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
             }
             if (!item.GetProperty("provider").GetString()!.StartsWith("standardCrud.", StringComparison.Ordinal)
                 && (item.TryGetProperty("resourceKey", out _) || item.TryGetProperty("resources", out _)))
@@ -86,7 +80,7 @@ public static class DataExecutionContracts
             {
                 if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey" or "fixedBindings"))
                     || item.GetProperty("moduleId").GetString() != moduleId
-                    || item.TryGetProperty("fixedBindings", out _) && provider is not ("standardCrud.create" or "standardCrud.update" or "standardCrud.delete"))
+                    || item.TryGetProperty("fixedBindings", out _))
                     throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
                 return new DataExecutionContract(item.GetProperty("key").GetString()!, moduleId, provider,
                     item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!,
@@ -131,8 +125,7 @@ public static class DataExecutionContracts
                             || branch.Any(key => key == "read" || !actions.Any(action => action.Key == key)))))
                     || requirement.Shape is "candidate" or "object" && (requirement.MinimumCount != 1 || requirement.MaximumCount != 1)
                     || requirement.AnyOf.Any(branch => branch.Count == 0 || branch.Distinct(StringComparer.Ordinal).Count() != branch.Count
-                        || branch.Any(key => !actions.Any(action => action.Key == key))))
-                || contract.AllowedAdditionalActions.Any(key => !actions.Any(action => action.Key == key)))
+                        || branch.Any(key => !actions.Any(action => action.Key == key)))))
                 throw new InvalidOperationException("DATA_EXECUTION_CONTRACT_INVALID");
             if (contract.Boundary == "entry" && contract.FixedBindings.Count != 0
                 || contract.Boundary != "entry" && (contract.FeatureBehaviors.Count != 0 || contract.FixedBindings.Count == 0)
@@ -146,11 +139,9 @@ public static class DataExecutionContracts
                     || JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(StandardCrudRequirements(contract.Provider, contract.Requirements[0].Resources[0]))))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
             if ((contract.Provider is "entityOwnership.transfer" or "entityOwnership.initialize")
-                && (contract.AllowedAdditionalActions.Count != 0 || contract.Branches.Count != 0
+                && (contract.Branches.Count != 0
                     || contract.TargetResource is not null || contract.TargetResources is not null || contract.ProviderModuleId is not null
-                    || !(contract.Provider == "entityOwnership.initialize" && contract.Boundary == "entry" && IsReadQuery(contract.Requirements))
-                        && JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(OwnershipRequirements(contract.Provider, contract.Requirements[0].Resources))
-                    || !actions.Any(action => action.Key == "edit" && action.RequiresRead)))
+                    || !(contract.Provider == "entityOwnership.initialize" && contract.Boundary == "entry" && IsReadQuery(contract.Requirements))))
                 throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
         }
         return contracts.ToDictionary(contract => contract.Key, StringComparer.Ordinal);
@@ -167,24 +158,6 @@ public static class DataExecutionContracts
         && query.ReadResolverKey is null && query.ResourceAnyOf is null
         && query.AnyOf is [var branch] && branch is not null && branch.SequenceEqual(["read"]);
 
-    // 转交沿原edit读取依赖；维护保留原显式read404、edit403两个位置，不合并或新增读取。
-    private static IReadOnlyList<DataExecutionRequirement> OwnershipRequirements(string provider, IReadOnlyList<string> resources)
-    {
-        if (resources.Count == 0 || resources.Any(string.IsNullOrWhiteSpace) || resources.Distinct(StringComparer.Ordinal).Count() != resources.Count)
-            throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
-        return provider switch
-        {
-            "entityOwnership.transfer" => [new("target", "prepare", "objects", resources, [["edit"]], 1, null),
-                new("target", "submit", "objects", resources, [["edit"]], 1, null)],
-            "entityOwnership.initialize" => [new("query", "read", "query", resources, [["read"]], 0, null),
-                new("visibility", "prepare", "objects", resources, [["read"]], 1, null),
-                new("target", "prepare", "objects", resources, [["edit"]], 1, null),
-                new("visibility", "submit", "objects", resources, [["read"]], 1, null),
-                new("target", "submit", "objects", resources, [["edit"]], 1, null)],
-            _ => throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID")
-        };
-    }
-
     /// <summary>模板与内建读取注册复用同一固定下限，调用方仅提供真实owner、资源和既有list/read操作。</summary>
     public static DataExecutionContract StandardRead(string moduleId, string resource, string operation)
     {
@@ -193,20 +166,9 @@ public static class DataExecutionContracts
         return new(resource + "." + operation, moduleId, provider, "entry", [resource + ".read"], StandardCrudRequirements(provider, resource));
     }
 
-    /// <summary>标准包真实写操作复用同一提供者下限；不生成包未支持的删除或专用命令。</summary>
-    public static DataExecutionContract StandardWrite(string moduleId, string resource, string operation)
-    {
-        if (operation is not ("create" or "update")) throw new ArgumentException("Only existing standard package writes are supported.", nameof(operation));
-        var provider = "standardCrud." + operation;
-        return new(resource + "." + operation, moduleId, provider, "entry",
-            [resource + "." + operation], StandardCrudRequirements(provider, resource));
-    }
-    // 标准CRUD执行提供者只在此定义必要权限；绑定声明没有覆盖它的字段。
+    // 标准读取来源在此保留原SQL权限约束；写入动作只属于实际按钮。
     private static IReadOnlyList<DataExecutionRequirement> StandardCrudRequirements(string provider, string resource) => provider switch
     {
-        "standardCrud.create" => [new("candidate", "submit", "candidate", [resource], [["create"]])],
-        "standardCrud.update" => [new("target", "prepare", "object", [resource], [["read"]]), new("target", "submit", "object", [resource], [["read", "edit"]])],
-        "standardCrud.delete" => [new("target", "submit", "object", [resource], [["read", "delete"]])],
         "standardCrud.read" => [new("target", "read", "object", [resource], [["read"]])],
         "standardCrud.list" => [new("query", "read", "query", [resource], [["read"]], 0, null)],
         "standardCrud.export" => [new("query", "read", "query", [resource], [["read"]], 0, null)],

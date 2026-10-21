@@ -31,7 +31,7 @@
 
 遵循 AGENTS.md、docs/agents/issue-tracker.md 和 docs/verification/quick-verification.md。先核对父子 Issue、评论、原生依赖及现有实现；首次将 HEAD 作为审查 baseline 写入父 Issue 评论，续作沿用该 baseline，并保留已有改动与有效证据。
 
-本次授权按 issue-tracker 的“技能操作映射”选择实施入口：依赖图中存在可独立并行的 child 时，使用 $implement-spec 作为唯一父级编排入口；小任务或紧密相关的串行增量使用 $implement，由同一 owner 持续完成。按本页依赖与资源规则调度：已隔离且启用并行租约的 SQL/API 测试可并行，Native / Acceptance 保持串行，容量测量单独运行。子代理默认使用 GPT-6.1 SOL（model: gpt-6.1-sol）。每次创建时，由主会话按子任务难度显式设置 reasoning_effort，使用 medium 及以上，并简记理由；通过实际创建参数设置，不仅写入任务描述。按 quick-verification 前置关键反例，各 Issue 分别验证和提交，集成并核对完成证据后及时回写、关闭及同步父 Map。
+本次授权按 issue-tracker 的“技能操作映射”选择实施入口：依赖图中存在可独立并行的 child 时，使用 $implement-spec 作为唯一父级编排入口；小任务或紧密相关的串行增量使用 $implement，由同一 owner 持续完成。首次派发与续派时，将 issue-tracker 的“保持 owner 连续”条目落实到给 owner 的任务消息；依赖与资源按该页规则调度：已隔离且启用并行租约的 SQL/API 测试可并行，Native / Acceptance 保持串行，容量测量单独运行。子代理默认使用 GPT-6.1 SOL（model: gpt-6.1-sol）。每次创建时，由主会话按子任务难度显式设置 reasoning_effort，使用 medium 及以上，并简记理由；通过实际创建参数设置，不仅写入任务描述。按 quick-verification 前置关键反例，各 Issue 分别验证和提交，集成并核对完成证据后及时回写、关闭及同步父 Map。
 
 全部 child 完成并集成后，以原 baseline 为 fixed point、父子 Issue 及已确认评论为 Spec，由独立代理并行执行一次 $code-review 的 Standards 与 Spec；implement-spec 的收尾审查计入这一次。自主修复本次引入且有稳定证据的 P0/P1（数据损坏或丢失、权限或安全边界扩大、事务一致性破坏、主路径不可用），以及范围内有规格依据和缺口证据的显式验收遗漏；其他 finding 只记录。按 quick-verification 完成原 owner 返修、原轴聚焦复核，汇总 child 有效证据的覆盖与候选归属；只对真实跨 child 集成缺口新增或补跑最小场景。全仓 lint/build/unit verify 仅按明确交付约定或实际影响执行，不附带整模块或全部验收；覆盖齐备后按授权关闭父 Issue。
 

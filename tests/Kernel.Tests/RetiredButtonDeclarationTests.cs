@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Kernel.ModulePlanning;
 using Xunit;
 
@@ -8,6 +9,21 @@ namespace ICP.Platform.Kernel.Tests;
 [Trait("Category", "ModuleMetadataConsumer")]
 public sealed class RetiredButtonDeclarationTests
 {
+    [Fact]
+    public void InitializationContracts_DoNotExposeRetiredExecutionSourcesOrBindings()
+    {
+        var source = typeof(DataScopeObjectInitializationSource);
+        string[] retiredTypes =
+        [
+            "DataScopeObjectInitializationSource+Declared",
+            "DataScopeObjectInitializationSource+DeclaredFromCreatedParents",
+            "DataScopeObjectInitializationBinding",
+            "DataScopeObjectInitializationCreatedParentsBinding"
+        ];
+        Assert.All(retiredTypes, name => Assert.Null(source.Assembly.GetType($"{source.Namespace}.{name}")));
+        Assert.Null(source.GetProperty("Caller"));
+    }
+
     [Fact]
     public void ReadContract_RejectsTheRetiredButtonAdditionalActionWhitelist()
     {

@@ -25,6 +25,7 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceReorderHandler>();
         services.AddScoped<WorkspaceObjectCopyPreparationHandler>();
         services.AddScoped<WorkspaceObjectCopyHandler>();
+        services.AddScoped<WorkspaceObjectCopyResultHandler>();
         services.AddScoped<WorkspaceRemoveReferencesHandler>();
         services.AddScoped<WorkspaceClipboardSelectionHandler>();
         services.AddScoped<WorkspacePasteReferencesHandler>();

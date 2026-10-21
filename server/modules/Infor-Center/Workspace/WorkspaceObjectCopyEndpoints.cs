@@ -52,7 +52,7 @@ public sealed partial class WorkspaceContentsController
     }
 
     /// <summary>结果读取只核对本主体持久状态，不重放对象写入或泄露不可读结果。</summary>
-    [HttpPost("content/objects/copy/result"), RequireFeature("workspace.folder.resolveObjectCopy")]
+    [HttpPost("content/objects/copy/result"), RequireFeature("workspace.folder.resolveObjectCopy"), ButtonBusinessHandler(typeof(WorkspaceObjectCopyResultHandler))]
     public Task<IResult> ObjectCopyResult(JsonElement input, CancellationToken token) => ReadCopyResult(input, false, token);
 
     /// <summary>取消核对真实提交状态；提交已赢得竞争时继续报告已提交。</summary>
@@ -62,7 +62,12 @@ public sealed partial class WorkspaceContentsController
     // 状态接口复用同一主体验证和严格载荷，任何恢复动作都不会重新创建对象。
     private async Task<IResult> ReadCopyResult(JsonElement input, bool cancel, CancellationToken token)
     {
-        try { return Results.Ok(await contents.ObjectCopyResultAsync(Actor(), ReadCopyOperationInput(input, false), cancel, token)); }
+        try
+        {
+            var operationId = ReadCopyOperationInput(input, false);
+            return Results.Ok(cancel ? await contents.ObjectCopyResultAsync(Actor(), operationId, true, token)
+                : await buttonBusiness.ExecuteAsync(copyResultHandler, new WorkspaceObjectCopyResultInput(Actor(), operationId), token));
+        }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception) { return ReferenceButtonProblem(exception); }
         catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }

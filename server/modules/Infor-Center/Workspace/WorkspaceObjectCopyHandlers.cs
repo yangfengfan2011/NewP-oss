@@ -72,6 +72,23 @@ public sealed class WorkspaceObjectCopyHandler
     public Task<StandardCrudMutationResult> ExecuteAsync(WorkspaceObjectCopyState<StandardCrudMutationResult> state, CancellationToken token) => state.ExecuteAsync(token);
 }
 
+/// <summary>核对只持有认证主体与不透明操作身份，不重新执行复制或返回新对象详情。</summary>
+public sealed record WorkspaceObjectCopyResultInput(string ActorId, string OperationId);
+
+/// <summary>结果核对使用自己无对象要求的正式按钮，原actor-owned记录检查仍由Workspace持有。</summary>
+public sealed class WorkspaceObjectCopyResultHandler(WorkspaceContents contents)
+    : IButtonBusinessHandler<WorkspaceObjectCopyResultInput, WorkspaceObjectCopyResultInput, WorkspaceObjectCopyReceipt>
+{
+    /// <inheritdoc/>
+    public Task<WorkspaceObjectCopyReceipt> WithinBoundaryAsync(WorkspaceObjectCopyResultInput input, string actionKey,
+        Func<WorkspaceObjectCopyResultInput, CancellationToken, Task<WorkspaceObjectCopyReceipt>> execute, CancellationToken token) => execute(input, token);
+    /// <inheritdoc/>
+    public ButtonBusinessTarget? Target(WorkspaceObjectCopyResultInput state) => null;
+    /// <inheritdoc/>
+    public Task<WorkspaceObjectCopyReceipt> ExecuteAsync(WorkspaceObjectCopyResultInput state, CancellationToken token) =>
+        contents.ObjectCopyResultAsync(state.ActorId, state.OperationId, false, token).AsTask();
+}
+
 
 public sealed partial class WorkspaceContents
 {

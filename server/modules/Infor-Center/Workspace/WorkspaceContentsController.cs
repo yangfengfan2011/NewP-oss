@@ -20,7 +20,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler, WorkspaceEditValuesHandler editValuesHandler,
     WorkspacePartCreationHandler partCreationHandler, WorkspaceDocumentCreationHandler documentCreationHandler, WorkspaceFolderCreationHandler folderCreationHandler, WorkspaceRemoveReferencesHandler removeReferencesHandler,
     WorkspaceClipboardSelectionHandler clipboardSelectionHandler, WorkspacePasteReferencesHandler pasteReferencesHandler,
-    ICP.Platform.Authorization.Contracts.IButtonExecutionAccess copyAccess,
+    ICP.Platform.Authorization.Contracts.IButtonExecutionAccess copyAccess, WorkspaceObjectCopyResultHandler copyResultHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)

@@ -12,7 +12,7 @@ Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/n
 
 `ConfirmUsageAsync` 和 `ReleaseUsageAsync` 要求已有平台事务，只登记共享 tracker 的变更，不能自行 Flush、Save 或提交。业务 owner 在确认返回后填齐关联的 UsageId，再由外层统一保存和提交。相同已 confirmed 的活跃目标只返回原使用，不能换目标或复活 released 使用。
 
-业务上下文通过 `FileOwnerOperationContext` 显式交接，不进入上传或业务 Values。首次及幂等 Confirm 使用 `FileOwnerCreationContext`，来源绑定实际候选执行与新对象身份；业务 owner 保留真实创建事务、Added 关联与凭据检查，不给未存在对象增加 read。Release 使用 `FileOwnerReleaseContext` 固定真实资源与对象；owner 在原锁内读取和回链后独立消费自己的有效要求，不能使用创建证明或先前阶段的允许结果。Stage 和 Cancel 仍按原功能入口及 actor/lease 守卫，不增加对象预检。
+业务上下文通过 FileOwnerOperationContext 显式交接，不进入上传或业务 Values。首次及幂等 Confirm 由 Document 私有创建 scope 证明真实候选、原事务和 Added 关联，不接受通用创建声明；未存在对象不增加 read。Release 使用 FileOwnerReleaseContext 固定真实资源与对象，在原锁内读取、回链并独立检查。Stage 和 Cancel 保持原功能、actor/lease 守卫；旧 FileOwnerCreationContext 已无消费者并删除。
 
 ## 独立文件副本
 
@@ -30,7 +30,7 @@ Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/n
 
 Files 不另设暂存集合总量上限；业务 owner 约束整个输入（当前 Document 最多 101 项），完整结果及身份校验占用 O(N) 空间。`MaxReadBatchSize` 限制内部每次数据库读取，不能据此声称整个调用具有固定内存或总工作量上界。
 
-读取和开流接收实际入口的 `FileOwnerExecutionContext`，包含正式绑定、资源与真实对象 EID；FileId、UsageId、LinkId 不能代替授权对象。Document provider 对下载唯一定义 read + download，下层 policy 从自身完整回链与当前读取事实执行同一要求；元数据反馈与正式下载独立判权。复制准备显式接收 `FileOwnerInternalExecutionContext`，其中只有真实owner选定的固定内部 binding、资源和对象；Files不自产来源或接受允许结果。确认同时接收该源上下文与原 `FileOwnerCreationContext`，将二者分别交给来源和目标owner。Document 的文件元数据只消费固定内部read；CopySource在原独立完整批read和真实文件回链后消费唯一read + documentObjectCopy floor。首次ConfirmCopy匹配同事务真实Added关联与同引用创建来源，不读取不存在的新对象；confirmed重试只校验源上下文形状、原actor/lease和目标持久回链，不重新读取源或重放copy裁决。无上下文旧ABI及旧复制context已删除。
+读取和开流由真实 owner 建立本阶段私有上下文，FileId/UsageId/LinkId 不能代替规范业务对象。Document 下载通过实际按钮进入，在原读取与文件回链位置独立执行 read/download；反馈与下载互不作为允许凭据。复制使用 owner 私有 copy scope，分别证明当前来源与创建目标，File policy 保留自身完整回链、批read和 documentObjectCopy 主动检查；ConfirmCopy 在同一事务核真实 Added 关联。幂等重试核原 actor/lease 与持久回链，不重放复制写入或先前裁决；旧无上下文 ABI 和中央创建 context 不恢复。
 
 安全元数据 `ReadUsageMetadataAsync` 仍限制单次输入不超过 `MaxReadBatchSize`，超界拒绝，由调用方分批，同用途 policy 批量验证。开流另行判定 read/download；可信目标的持久关联损坏、物理内容缺失或长度不匹配是明确故障。返回流由调用方释放，请求取消也关闭真实文件句柄。
 

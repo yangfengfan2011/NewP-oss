@@ -74,7 +74,7 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 ### 动作数据声明与进入检查
 
-显式接入的数据要求直接写在原 View 的按钮 `dataAccess` 中，例如 `"dataAccess": { "execution": "workspace.history.enter", "resources": ["workspace.folder", "part.part", "document.document"], "actions": ["read"] }`。列表首次读取由 View 自身的 `dataAccess` 声明；详情按钮、输出预览及 `outputActions` 中的导出选中/全部、打印选中/全部分别声明要求。`execution` 只标识允许的服务端执行关系，不是数据动作或新增功能点。
+按钮只在原 View 的 dataAccess 声明 object/actions，例如 `"dataAccess":{"object":"Person","actions":["edit"]}`；多个对象采用条目数组。省略数据要求不会增加默认动作，但真实业务按钮仍有派生身份。execution/resources/additionalActions 旧按钮形态及混写拒绝。列表、详情、lookup 和 PageRef 保留独立读取来源，不把它们当成写按钮身份。
 
 Canonical Module Plan 在既有功能位置展开时编译声明，按模块、View、动作结构及按钮 key 派生身份，拒绝未知数据动作、冲突身份、错误归属及非真实数据资源引用。活动 metadata manifest 的 `dataAccess` 是前后端共享的派生结果，不能独立编辑。Shell 只从该投影绑定按钮和读取上下文；同一执行关系的不同按钮可以各自配置动作。来源详情的既有导航贡献可通过 `dataActionReference` 引用原 View 按钮，不再维护一份数据要求。
 
@@ -82,13 +82,15 @@ Canonical Module Plan 在既有功能位置展开时编译声明，按模块、V
 
 List View 的 `detailContributions[].dataAccess` 声明详情贡献按钮自身的数据要求，身份保留该结构位置和贡献 key。它沿原 `navigationKey` 的功能资格进入，不增加目标详情或来源读取资格；来源列表注册在 `actionPrechecks[贡献key]` 提供检查，检查通过后才创建原 Modal/PageOutlet。
 
-预检及每次正式请求分别携带原 `X-NewP-Feature` 和自身 `X-NewP-Data-Declaration`。服务端 `IActionDataAccess` 只从活动计划解析要求，并核对声明、当前 endpoint owner、允许的执行关系及原功能位置，再使用 owner 解析的真实资源/对象交集完整读取与声明动作。Workspace 必须保留完整位置及 LID，不能用客户端资源名或裸 EID 替代。直接请求不需要点击历史；预检允许也不是后续凭据。未接入入口保留原行为，已接入出口缺失声明必须失败，不能回退到默认 read。
+业务按钮请求携带实际 X-NewP-Button 与 X-NewP-Feature；独立读取请求携带自己的 X-NewP-Data-Declaration 与位置，两种身份混写拒绝。服务端实际 endpoint 登记 typed handler，IButtonBusinessExecutor 自动绑定当前按钮，在 handler 原事务/锁边界内从同一业务状态取得 Target，检查后才 Execute。资源 owner 继续解析规范目标及主动检查关联对象，Workspace 保留真实位置/LID，客户端不能提交允许结果。缺身份、错误实现或目标都失败关闭。inputReadSourceKey 只引用既有纯读来源，按当前功能位置唯一解析；不可借它保存。
 
 运行时动态列的 `StandardCrudColumnContext.featurePosition` 同样来自所属读取入口。column provider 与行 data adapter 各自沿请求传递该位置；例如 Example 动态工作量的列请求和行请求使用相同的入口位置，原有模块列上下文 token 仍负责列与行的业务一致性，不能用它替代授权位置。宿主的动态列缓存已经按读取位置隔离。
 
 列表与详情读取、Lookup 的缓存按位置隔离。标准宿主只加载可用入口及动作所需读取，创建或编辑的准备步骤和提交使用同一动作位置；动作 Drawer 不加载底层列表查询的 Lookup。纯容器没有可用后代时隐藏，默认 Tab 不可用时进入首个可用 Tab，不预读未授权内容。
 
-详情摘要 renderer 通过 `featureActions` 接收本 View 声明的专用动作映射，形状为 `Record<key, { position, allowed }>`。模块以 `allowed` 控制呈现、以 `position` 发起该动作请求，例如 Organization 的账号绑定；不要导入 Shell 的内部位置 Context，也不要把其他动作或入口资格用作写入授权。输入、确认、pending、错误及刷新仍沿用既有动作生命周期。摘要的内容读取使用所属详情的读取上下文；例如 Identity 安全事件由模块自己的 summary data 传递 `readContext.featurePosition`，查询缓存同时区分位置，不能借用写动作或其他页面的读取资格。
+详情摘要 renderer 通过 featureActions 接收本 View 的专用动作映射，包含 position/allowed/buttonId/dataAccess；模块传递实际动作上下文并复用 SDK standardCrudRequestHeaders，不自行拼身份或从业务 key 挑按钮。输入、确认、pending、错误及刷新沿原生命周期。摘要内容读取传递所属详情独立 readContext，缓存区分来源和位置，不能借写按钮资格。
+
+回退应将 authoring、正式编译投影、SDK请求和 typed handler 的整条调用链恢复到一致版本，保留权限配置与审计；不得通过旧parser fallback、漏身份放行或只恢复未保护接口回滚。
 
 ## 通用对象授权界面
 

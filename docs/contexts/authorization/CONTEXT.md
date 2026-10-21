@@ -68,11 +68,11 @@ _Avoid_: 角色详情授权弹窗、角色基础信息编辑、用户角色分�
 
 ### 按钮动作权限（首批消费者已采用，其余入口迁移中）
 
-本节目标及其与现有执行合同的替代范围见 [ADR-0057](../../adr/0057-buttons-declare-object-actions-and-business-inputs-own-targets.md)。岗位列表新建、列表与查看 Drawer 的编辑、工作区上下移已分别采用自身的 object/actions 声明；其他按钮及所有查询来源继续使用各自现行协议，不因声明解析失败切换路径。
+本节与既有读取合同的边界见 [ADR-0057](../../adr/0057-buttons-declare-object-actions-and-business-inputs-own-targets.md)。真实按钮及标准数据 producer 均采用自身 object/actions；旧 execution/resources/additionalActions 按钮解析、重复写入映射及无消费者 facade 已退役，纯读取、内部读取和独立 API 合同保持。
 
 Kernel 从按钮结构派生身份、业务绑定和合法功能位置，运行时投影由平台生成。SDK 传递 `X-NewP-Button` 与 `X-NewP-Feature`，服务端 `IButtonExecutionAccess` 核对活动声明、真实端点业务绑定和正式目标，全部要求允许后调用业务；新旧身份混写、缺失、未知或串用均拒绝。未配置数据要求的已登记业务按钮同样有身份，不自动追加对象动作。岗位详情编辑沿真实 List 到 Detail 引用展开独立 detail.pageActions 位置；列表与详情各自传递实际按钮身份和功能位置，交叉串用拒绝。已有列表资格不隐式授予新增详情动作。
 
-`IObjectActionAccess.CheckAsync(objectName, objectId, actions)` 是 Authorization 拥有的通用接口，不要求执行合同；逐动作复用完整读取约束、动作启停和原对象裁决，全部允许才成功，依赖故障传播。岗位编辑在原事务内保护读取旧值，以路由目标与旧值 EID 核验后进入该管线；写后读取仍只决定详情或成功回执。下文执行合同说明适用于尚未迁移的入口与独立读取来源。
+`IObjectActionAccess.CheckAsync(objectName, objectId, actions)` 是 Authorization 拥有的通用接口，不要求执行合同；逐动作复用完整读取约束、动作启停和原对象裁决，全部允许才成功，依赖故障传播。业务按自身语义选择对象、动作和时点，未声明数据要求的按钮不增加隐式下限；写后读取只决定详情或成功回执。下文执行合同仅描述独立读取、内部执行和纯 API 的实际来源。
 
 `IObjectActionAccess.CheckCandidateAsync(objectName, candidate, actions)` 直接消费业务补齐的正式新建候选，复用同一候选规则引擎，不依附 CRUD、按钮或执行合同。标准 CRUD 用独立 `ButtonCreationTarget` 在默认值、可信审计、归属及真实新 EID 补齐后自动检查，再在原事务内持久化同一候选；不伪造已有对象或添加创建后 read 门槛。已有对象仍由 `ButtonExecutionTarget` 表达原事实；两者属于 `ButtonObjectTarget`，业务总目标类型为 `ButtonBusinessTarget`。同一业务状态中的实际对象集合使用 `ButtonTargetSet`，每个目标按实际对象与派生资源匹配唯一 `ObjectRequirements` 条目，全部通过后才调用一次业务；声明中未出现于本次输入的对象类型不额外生成目标。数组投影的标量 `Object` 为空仍必须执行全部实际目标检查。
 
@@ -105,7 +105,7 @@ _Avoid_: 功能入口授权、列表筛选、字段授权
 _Avoid_: 按钮位置、对象操作扩展点、资源名称、功能入口启停
 
 **数据权限绑定（Data Permission Binding）**：
-入口对正式执行合同的明确引用，由前后端共同使用同一次装配的有效要求；同一执行可在不同功能位置分别绑定。它不授予功能入口资格，也不替代对象的完整访问约束。
+按钮绑定真实业务实现并声明对象动作；独立读取、纯 API 和内部执行引用各自正式合同。它们不授予功能入口资格，不替代完整对象访问约束，也不把先前允许结果作为凭据。
 _Avoid_: 公共业务操作权限项、功能授权位置、前端授权结果
 
 **执行合同（Data Execution Contract）**：
@@ -113,38 +113,38 @@ _Avoid_: 公共业务操作权限项、功能授权位置、前端授权结果
 _Avoid_: 客户端授权结果、业务操作权限目录、通用策略语言
 
 **有效要求（Effective Data Requirement）**：
-正式装配将执行合同与合法入口附加要求组合后的结果；保留角色、阶段与各项交集、有限分支的结构，由前后端共同消费。
+正式装配分别编译按钮 object/actions 以及独立读取、纯 API 或内部合同；按钮要求与正式目标逐项匹配，读取合同保留角色、阶段、交集及有限分支，不能把两者作为可互换身份。
 _Avoid_: 动作字符串集合、点击允许凭证、跨请求授权缓存
 
-Example 标准 CRUD 已使用执行合同：创建针对服务端归一化后的候选，编辑的准备读取与提交前旧值判权分阶段表示，删除保留最终读取和 delete。固定下限由 Standard CRUD 提供者定义，owner Capsule 仅绑定执行身份与实际资源；真实端点在装配时核对 provider，入口不能用直接 actions 改写下限。列表与详情声明引用各自读取执行，数据库侧过滤继续由原读取计划负责。存在声明不意味着额外点击预检；正式请求独立核对声明、功能位置及实际目标。写后独立读取只决定返回详情还是成功回执，不推翻已提交的创建或编辑。
+Example 与标准 CRUD 的创建针对完整服务端候选，更新和删除针对原保护范围中的真实旧事实；平台从实际按钮声明检查对象动作，业务继续拥有字段规则和事务。列表、详情与编辑准备各自使用正式独立 read 来源，数据库侧过滤由原读取计划负责；写后不可读不推翻已提交结果。
 
-共享写入器对未迁移调用继续消费正式 `DataExecutions` 与显式 `ObjectOperationWriteSource.Declared`；岗位编辑使用平台建立的 `ObjectOperationWriteSource.Button`，不再维护独立 update 执行合同或固定 edit 下限。HTTP 来源核对真实入口；尚未迁移的旧内部 Declared 来源核对固定调用者、执行、资源及目标，仍在原候选或受保护旧值位置判权；不存在缺声明选择旧路径、逐调用者 legacy 登记或无执行器构造。Workspace 组合写与 Part、Document 真副本分别在原外层和 owner 判权位置消费正式要求，不用外层允许替代内层裁决。Workspace 私有详情分别使用明确的 entry、固定 API 或可信内部来源，未登记的普通详情调用拒绝。
+共享写入器只接受当前 Button、受控创建续体或显式活动事务 Internal 来源，不保留 Declared 或中央写入 floor。HTTP 身份核对真实入口、业务绑定与规范目标；缺身份不能选择内部路径。Workspace 组合写、Part 和 Document 真副本在原保护时点分别执行当前按钮检查及业务主动判权，不继承外层允许。Workspace 私有详情保留明确 entry、固定 API 或可信内部来源。
 
-标准数据包由真实 Blueprint producer 生成 list、create、update，以及实际 DetailView 的 read 合同；无 DetailView 时 descriptor 显式将 read 指向同一 update.prepare，缺少 read 映射仍拒绝，不在端点或服务中猜测别名。已有 enable/disable 复用原 UpdateAsync 及其 update.submit 要求，authorize 非呈现功能动作通过资源短引用消费 Authorization 唯一下限；不生成新按钮或新能力。未迁移的 `dataAccess` 继续引用 execution/resources 及被允许的 additionalActions；岗位编辑只使用 object/actions，同一声明新旧形态混写拒绝。执行 LegacyActions 写法仍拒绝。
+标准数据包由真实 Blueprint producer 生成按钮 object/actions，以及 list/read 独立读取合同。无 DetailView 的编辑沿实际编辑功能位置显式引用 standardCrud.read target/read/object 来源，不造详情或借列表来源。enable/disable 保留各自身份和功能位置，只复用更新的固定状态字段与受保护写入。authorize 真实非呈现来源也有新按钮身份，不增加界面或资格；旧写声明和新旧混写均拒绝。
 
 底层调用由 `DataScopeDecisionBoundaryTests` 扫描实际 IL 调用位置，变量、常量和具体实现调用均可见。允许的实际位置为统一执行器、Authorization 通用对象动作接口、完整读取边界和独立写后观察，并逐位置说明动作来源；完整读取 resolver 同时核真实接口、DI 和 fixed internal 合同的引用，不能新增任意允许清单。Workspace 权限目标的完整读取保留原 Link 可读 404、独立 data-read 403、根约束的顺序与 SQL；纯外部 AddReference 使用自己的固定 API parent/target 要求，不能借界面声明。
 
-通用对象授权能力的固定下限由 Authorization 的活动 provider 贡献，Example、Organization 四资源、账号、角色、Part 和 Document 只绑定各自资源。Workspace 的异构 LID 入口使用执行 owner 模式，明确引用 Folder、Part、Document 资源集，不能冒充其中每个资源的 owner；全部资源均核对活动目录及模块依赖。单资源 owner 通过 `resourceKey` 短引用，执行 owner 集合通过 `resources` 短数组引用固定能力，两者互斥；消费者不能改写能力的要求、阶段、形状或分支。通用 Authorization 端点只消费自己明确登记的能力，仍核实际资源 owner 与原 authorize 功能位置；Workspace 集合来源只能为所属 Folder 的通用管理使用，不能借到 Part/Document 的独立管理入口。
+通用对象授权管理与 Workspace 异构批量入口共用 IDataScopeObjectReadHandler/SaveHandler 和 IDataScopeBatchReadHandler/SaveHandler，经 IButtonBusinessExecutor 在原保护范围核同一实际目标。资源 owner、真实实现与原 authorize 功能位置分别核验；异构目标按各自规范资源/EID检查，不把 Folder 按钮身份借到 Part/Document 独立入口。旧 IDataScopeObjectAuthorization/IDataScopeBatchAuthorization facade 和 manage/inspect provider 映射已删除。
 
-Part、Document 和 Workspace 的既有只读权限页及行入口分别携带自己的查看声明，保持原完整 read，不新增 authorize 功能或数据资格。owner 的 explanation、catalog、字面 subjects/user 也接受管理来源的辅助 view 角色，仍只执行原 read；其他主体候选、eligibility、完整配置及保存执行 read + authorize。通用对象管理端点的所有辅助读取保持 read + authorize，Example 的既有“查看授权”也不降格。单对象与批量保存沿原图锁、全部 ACL 锁和事务重验，成功后自身失权不追加回读。共享输入按声明身份隔离草稿、取消及未知提交状态；批量准备允许合法空筛选，但空结果也先核声明、功能位置与允许零目标的准备角色，保存和显式核对保留原非空集合守卫。
+Part、Document 和 Workspace 既有只读权限 PageRef 保留自己的完整 read；导航行预检引用目标 PageRef 的 inputReadSourceKey，使用原浏览功能位置，编译器拒绝错误目标来源，不新增业务处理器或 authorize 要求。owner 的 explanation、catalog 和字面 user 目录仍只读；其他主体候选、完整配置及保存保持 read+authorize。generic 管理全部辅助读取和 Example inspection 保持 read+authorize；只读 inspection 实现与 Save 身份互相不可借用。保存在原图锁、ACL锁及事务内重验，允许成功后自身失权；unknown 只可显式核当前配置，不重放提交。
 
-对象权限查询、单／批量管理、候选准备与父授权初始化只保留显式来源接口，null 或空来源在配置读取与锁之前拒绝。执行接口不提供迁移期默认实现，生产服务组合必须提供真实执行器。纯 API 与可信内部执行使用各自固定绑定，不能作为界面缺声明的回退。Workspace 的无界面候选、空间根详情、兼容位置与 AddReference API 核真实 RouteEndpoint、HTTP method、endpoint module、活动 provider/资源及依赖；查询在原 SQL 位置取得同一计划，对象动作在原裁决位置消费角色。
+独立权限查询保留显式读取来源，null/空来源在读取之前拒绝；单/批管理由真实 typed handler 经按钮执行器接入，不提供旧 null-source facade。纯 API 与可信内部执行保留各自固定绑定，不能作为界面缺身份回退。Workspace 无界面候选、空间根详情、兼容位置与 AddReference API 仍核真实 RouteEndpoint、HTTP method、endpoint module、活动 provider/资源及依赖。
 
 回滚须同时恢复一致的合同、声明、服务调用与装配版本；保留原权限配置、审计与已发布迁移，不恢复缺声明放行或仅功能授权的旧数据路径。
 
 可信内部对象执行只接受正式 internal 合同及精确固定调用者，复用同一角色裁决器。资源 owner 可在原读取阶段完成后提供受控当前事实；执行器核对同一请求、主体、目标、阶段及来源引用，不接收允许布尔值或跨请求结果缓存。Document 文件摘要反馈、正式下载、文件 owner 下载校验和锁内释放各自建立本阶段事实；上传、取消和首次／幂等确认保持原凭据与事务证明，不新增对象 read。
 
-归属转交以中央固定 `entityOwnership.transfer` 下限在原 owner 检查后的 edit 位置消费 prepare／submit 要求，读取依赖仍由同一 edit 动作的 RequiresRead 执行，不另加对象读取。Part／Document 归属维护使用固定 query/read、visibility/read（404）及 target/edit（403）角色，Workspace 的有限 owner 执行在原 Link 查询和 edit 位置消费要求，已有固定内部 Link read 保留；资格与接收人最小目录仍按原 AdminOnly／功能守卫，不增加业务对象读取。通知仍是接收人的私有记录，目标与发送者名称在原分组批量读取点使用精确固定内部来源，不把通知登记为新 ACL 资源。
+归属转交和维护由真实业务 handler 交出规范目标或准备序列，在原所属人、完整读取和写锁顺序中执行按钮 edit 要求；原 AdminOnly、功能资格与接收人最小目录保持。维护候选保留独立 query/read 来源，不接受其身份提交。通知仍是接收人的私有记录，名称读取保留固定内部来源，不新增 ACL 资源。
 
 多对象角色保留集合整体基数、按资源选择的有限替代动作和服务端选择的有限阶段分支。可信解析器由执行合同选择并返回真实目标及业务事实，客户端不能提交允许结果；完整读取在该解析位置执行一次，再对解析出的真实对象判动作。结果按原输入顺序逐项消费，业务 owner 可在下一对象判权前保留原业务错误。资源目录按当前资源的结构化要求校验动作适用性，不把兼容动作摘要展平后交给所有资源。
 
-标准列表、详情、Position options 及 Example、人员 current/all 导出引用固定读取合同。Organization 的四个自定义候选来源和关系树也引用各自正式读取执行，在原 SQL 位置取得同一最终计划；候选与当前值集合分开，组织树保留不可读父节点截断。查询定义集合通过原查询计划在数据库侧过滤，再计数、排序和分页；显式当前值集合独立表示，保留原分片读取与不可读名称 `***`。声明来源包含实际 provider、执行和合法功能位置；导出不能借用列表声明，详情只接受正式 read 或已登记编辑准备读取来源。读取上下文由服务端创建，不接受 JSON 自报。完整详情从已读取快照进入编辑，不切换读取身份或追加准备 GET；列表抽屉原有编辑准备读取仍消费 update.prepare，提交另行消费 update.submit。
+标准列表、详情、options 和查询导出保留原读取合同、数据库侧过滤、计数排序分页及当前值遮蔽。输入读取通过 inputReadSourceKey 引用已有来源并投影到自身真实功能位置，不能提交或降低主按钮要求。详情从已读快照编辑，列表 Drawer 使用独立 read 准备后以自身 Button 提交；两者不再消费 update.prepare/submit 合同。
 
 关联显示、账号摘要、审计名称和 Workspace 既有 Properties、编辑取值、单对象复制准备的内部详情读取，使用精确调用者、执行及资源的固定内部绑定，在原 SQL 位置取得计划或批量可读 ID；它不代替原业务来源资格、图锁或动作裁决，也不能补救 HTTP 缺声明。批量适配器只在实际调用时解析同作用域执行器，避免展示目录与可信解析器的构造依赖闭环，不缓存允许结果。
 
-Workspace、Part、Document 的普通履历入口、列表、详情、预览、导出和打印现已引用 owner 固定完整 read 执行，不在入口重复 `actions: [read]`。点击预检与服务端执行共同消费同一有效要求，预检不产生授权凭据；服务端仍重验完整对象与来源。数据动作目录和资源适用集合不再包含 `history`；原履历功能点、导航、Tab 与端点功能资格保持不变。
+Workspace、Part、Document 的履历业务按钮、预览与输出采用 object/read 要求和真实 handler，列表及详情仍保留 owner 独立完整 read 来源。点击预检不产生允许凭据；服务端在原事实范围逐次检查。history 不属于数据动作目录，原履历功能点、导航与 Tab 资格保持。
 
-Organization 的初始化、人员启停及永久账号绑定按具体服务端执行保持原 AdminOnly／功能资格，沿原业务、账号及会话事务执行；不新增数据声明、对象 read/edit 下限或强制点击预检。授权管理的主体目录继续按管理资格读取，不套业务候选的 read 过滤。
+Organization 初始化、人员启停和永久绑定使用当前无对象要求按钮身份，保持原 AdminOnly、功能资格、账号保护、会话联动及业务事务；不添加 read/edit/authorize 下限。缺身份不构成旁路，授权管理主体目录仍按原管理资格读取。
 
 账号与角色的既有非呈现 authorize 来源及通用对象授权管理读写采用同一 read + authorize 管理要求；没有独立只读查看入口的资源不新增按钮或资格。角色标准查询、账号角色输入的角色选项及功能授权工作台目录／详情保持原数据读取计划；工作台通过其真实自定义 PageRef 的正式来源进入，同一执行以有限 catalog／detail 分支保留 query 和 object 形状。账号 snapshot 与安全事件摘要透传本详情 root read 声明，摘要查询身份包含声明 ID。原 GET /authorization/roles 全局管理目录、账号候选、已配置角色、功能／规则配置和角色管理命令保持各自原功能资格；Identity 原 AdminOnly 及已关闭 Role 删除入口不变，不因原数据读取拒绝增加管理门槛。
 
@@ -209,7 +209,7 @@ _Avoid_: 部门资源的数据条件、公司全体人员、组织准入
 - 同一受控owner可用 `InitializeFromParentsAsync` 读取并比较全部新父的完整配置语义，排除技术项ID、对象身份和无意见项；全部相同才初始化一次并返回实际采用父对象，供owner登记真实关联事实。当前Workspace单根新图保证同源配置；不同配置按不变量失败关闭，此契约不提供HTTP来源选择能力。
 - 资源owner可用 `DataScopeResourceActionBinding` 显式选用已登记全局数据动作，由同一准备期资源目录验证资源、owner、唯一性和动作身份；对象目录、解释、完整替换和实际动作裁决消费同一适用集合。未声明的旧资源保持原全局目录合同，原四参资源构造与解构保留；不按动作定义的模块或首批业务模型名推断适用性，也不静默改写旧配置。
 
-- 批量直接项通过 `IDataScopeBatchAuthorization` 一次提交全部规范资源/EID。默认U保留未指定选择器，并完整替换指定选择器的意见、优先级、匹配选项和绝对期限；R完整替换所有直接项，空资源组须显式确认。资源分组严格匹配实际目标及正式适用动作，不修改规则树或系统来源。owner先锁定并重解完整来源，批服务按资源/EID稳定顺序取得全部ACL锁后重验全部read/authorize；资格、配置、基础设施或取消任一失败均不产生部分成功，实际变化与各对象审计共享本次事务及可信stamp，无变化不记事件。Workspace的LID只校验真实位置与private来源，ACL仍是Folder/Part/Document真实对象身份。
+- 批量直接项通过当前 IDataScopeBatchSaveHandler 在原边界一次交接全部规范资源/EID。默认U保留未指定选择器并完整替换指定选择器，R完整替换且空资源组须确认。owner稳定锁齐全组ACL并逐对象重验当前read/authorize，任何拒绝、故障或取消均无部分成功，变化与各对象审计共享事务及可信stamp。Workspace LID只负责真实位置解析，ACL仍是各业务对象身份。
 - 显式整组当前配置核对沿同一来源和锁序，全组当前read/authorize都成立才返回直接配置；它不写ACL/审计，也不证明原未知请求曾提交或未提交。客户端未知状态属于当前主体/页面实例，关闭弹层不会允许重放；核对后仍须用户显式开始新操作并清空原模板，不以当前相等或资格拒绝推断先前结果。
 
 ## 角色管理与事务性功能配置

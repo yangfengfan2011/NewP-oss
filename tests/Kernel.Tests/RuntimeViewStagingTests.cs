@@ -272,6 +272,61 @@ public sealed class RuntimeViewStagingTests : IDisposable
         Assert.Empty(Directory.GetDirectories(_installRoot, ".materialize-staging-*"));
     }
 
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("undeclared")]
+    public void StandardDataButtons_DeclareTheirOwnActionsAndKeepPreparationIndependent(string detailScenario)
+    {
+        var packageRoot = Path.Combine(_installRoot, "packages", "Partner.AssetCatalog", "1.0.0");
+        WriteStandardDataPackage(packageRoot, detailScenario);
+        var features = ReadStandardDataFeatures(packageRoot);
+        var declarations = features.SelectMany(feature => feature.DataAccess).ToArray();
+        foreach (var (surface, key, operation, action) in new[]
+        {
+            ("pageActions", "create", "create", "create"), ("rowActions", "edit", "update", "edit"),
+            ("rowActions", "enable", "enable", "edit"), ("rowActions", "disable", "disable", "edit"),
+            ("featureActions", "authorize", "authorize", "authorize")
+        })
+        {
+            var button = Assert.Single(declarations, item => item.Surface == surface && item.ActionKey == key);
+            Assert.Equal("Asset", button.Object);
+            Assert.Equal([action], button.Actions);
+            Assert.Equal("Partner.AssetCatalog.Asset." + operation, button.BusinessBinding);
+            Assert.Empty(button.Execution);
+        }
+        if (detailScenario == "undeclared")
+        {
+            var consumer = Assert.Single(features, feature => feature.DataAccess.Any(item => item.Surface == "rowActions" && item.ActionKey == "edit"));
+            var input = Assert.Single(consumer.DataAccess, item => item.Surface == "rowActions" && item.ActionKey == "edit");
+            var blueprint = JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "authoring", "newp.plugin.json")))!.AsObject();
+            var source = Assert.Single(StandardDataMetadataProjection.ReadExecutions("Partner.AssetCatalog", blueprint), item => item.Key == input.InputReadSourceKey);
+            var point = Assert.Single(FeatureCatalogCompiler.Compile(features), item => item.ReferenceKey == (consumer.ReferenceKey ?? consumer.Key));
+            Console.WriteLine(JsonSerializer.Serialize(new { input.InputReadSourceKey, input.ViewKey, input.ActionKey,
+                consumer.BehaviorKey, consumer.ReadBehaviors, point.Position, source.Provider, source.FeatureBehaviors, source.Requirements }));
+        }
+        var plan = CreateStandardDataPlan(packageRoot);
+        Assert.All(plan.Modules.Single(module => module.ModuleId == "Partner.AssetCatalog").DataExecutions,
+            source => Assert.Contains(source.Provider, new[] { "standardCrud.list", "standardCrud.read" }));
+        var edit = Assert.Single(plan.FeatureCatalog, feature => feature.Key == "edit" && feature.ActionScope == "list.rowActions");
+        var read = Assert.Single(plan.ActionDataAccessCatalog, source => source.Surface == "read"
+            && source.FeaturePositions.Contains(edit.Position) && source.Provider == "standardCrud.read");
+        Assert.All(read.Requirements!, requirement =>
+        {
+            Assert.NotEqual("submit", requirement.Stage);
+            Assert.All(requirement.AnyOf, actions => Assert.Equal(new[] { "read" }, actions));
+        });
+        if (detailScenario == "valid")
+        {
+            var documents = StandardDataMetadataProjection.Project("Partner.AssetCatalog",
+                JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "authoring", "newp.plugin.json")))!.AsObject(),
+                JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "projections", "standard-data.json")))!.AsObject(),
+                StandardDataMetadataProjection.ReadDocuments(Path.Combine(packageRoot, "metadata")));
+            var detail = Assert.Single(documents.Values, document => document["view"]?["key"]?.GetValue<string>() == "partner.asset.detail")["view"]!;
+            Assert.Null(detail["pageActions"]);
+            Assert.Null(detail["rowActions"]);
+        }
+    }
+
     private static void AssertStateAction(
         IReadOnlyList<JsonElement> rowActions,
         string key,

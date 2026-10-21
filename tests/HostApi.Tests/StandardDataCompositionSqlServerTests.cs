@@ -37,9 +37,24 @@ public sealed class StandardDataCompositionSqlServerTests
         {
             var packageRoot = Path.Combine(root, "packages", "Partner.AssetCatalog", "1.0.0");
             ZipFile.ExtractToDirectory(package!, packageRoot);
+            // 直接复用正式pack的完整输入；无详情能力不表示作者包里没有未引用View。
+            var blueprint = JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "authoring", "newp.plugin.json")))!.AsObject();
+            var originalDocuments = ICP.Platform.Kernel.PluginPackages.StandardDataMetadataProjection.ReadDocuments(Path.Combine(packageRoot, "metadata"));
+            var projectedDocuments = ICP.Platform.Kernel.PluginPackages.StandardDataMetadataProjection.Project(ModuleId, blueprint,
+                JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "projections", "standard-data.json")))!.AsObject(), originalDocuments);
+            foreach (var document in originalDocuments.Where(item => item.Value["view"] is JsonObject view && view["resourceKey"] is null))
+            {
+                var key = document.Value["view"]!["key"]!.GetValue<string>();
+                var referenced = blueprint["standardData"]!["resources"]!.AsArray()
+                    .Any(resource => resource!["detailViewKey"]?.GetValue<string>() == key);
+                if (!referenced) Assert.True(JsonNode.DeepEquals(document.Value, projectedDocuments[document.Key]));
+            }
+            Console.WriteLine(JsonSerializer.Serialize(projectedDocuments.Where(item => item.Value["view"] is JsonObject)
+                .Select(item => new { file = item.Key, key = item.Value["view"]!["key"]?.GetValue<string>(),
+                    model = item.Value["view"]!["model"]?.GetValue<string>(), resourceKey = item.Value["view"]!["resourceKey"]?.GetValue<string>() })));
             var catalog = new PlatformApiHostCatalog("1.0.0", ["standard-data.v1"], [new("1.0.0", PlatformApiReleaseIdentity.ReleaseDigest)]);
             var repository = new DirectoryInfo(AppContext.BaseDirectory);
-            while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, ".git"))) repository = repository.Parent;
+            while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, ".git")) && !File.Exists(Path.Combine(repository.FullName, ".git"))) repository = repository.Parent;
             var releaseRoot = Path.Combine(repository!.FullName, "apps", "host-api", "bin", "Release", "net10.0");
             var builtIns = TrustedBuiltInModuleSource.CreateForHostDistribution(releaseRoot, Path.Combine(releaseRoot, "modules"));
             // 与正式Host同源编译，保留模板投影的功能、资源和读取合同，不手造丢字段的第二候选。
@@ -48,7 +63,22 @@ public sealed class StandardDataCompositionSqlServerTests
                 new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false));
             var external = Assert.Single(modules.Modules, module => module.ModuleId == ModuleId);
             Assert.NotEmpty(external.DataExecutions);
-            Assert.Contains(modules.ActionDataAccessCatalog, requirement => requirement.ModuleId == ModuleId && requirement.Provider == "standardCrud.update");
+            Assert.All(external.DataExecutions, source => Assert.Contains(source.Provider, new[] { "standardCrud.list", "standardCrud.read" }));
+            var descriptor = Assert.Single(new ICP.Platform.Crud.Planning.StandardDataCrudDescriptorProjector().Project(modules), item => item.ModuleId == ModuleId);
+            Assert.Equal(new[] { "list", "read" }, descriptor.DataExecutions.Keys.Order(StringComparer.Ordinal));
+            Assert.Equal("Partner.AssetCatalog.Asset.read", descriptor.DataExecutions["read"]);
+            var editPoint = Assert.Single(modules.FeatureCatalog, point => point.ModuleId == ModuleId && point.Key == "edit" && point.ActionScope == "list.rowActions");
+            var readSource = Assert.Single(modules.ActionDataAccessCatalog, source => source.ModuleId == ModuleId && source.Surface == "read"
+                && source.FeaturePositions.Contains(editPoint.Position, StringComparer.Ordinal));
+            Assert.Equal("standardCrud.read", readSource.Provider);
+            Assert.All(readSource.Requirements!, requirement =>
+            {
+                Assert.Equal("object", requirement.Shape);
+                Assert.Equal("read", requirement.Stage);
+                Assert.Equal(new[] { "Partner.AssetCatalog.Asset" }, requirement.Resources);
+                Assert.Equal(new[] { "read" }, Assert.Single(requirement.AnyOf));
+            });
+            Assert.Contains(modules.ActionDataAccessCatalog, requirement => requirement.ModuleId == ModuleId && requirement.BusinessBinding == "Partner.AssetCatalog.Asset.update");
             var result = new PersistencePlanCompiler(Path.Combine(repository!.FullName, "server", "platform-modeling", "metadata", "storage-types.json")).Compile(modules, PersistenceProvider.SqlServer);
             Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics));
             var model = Assert.Single(result.Plan!.Models, model => model.OwnerModuleId == "Partner.AssetCatalog");
@@ -72,13 +102,19 @@ public sealed class StandardDataCompositionSqlServerTests
     }
 
     [EnvironmentGatedFact("NEWP_RUN_EXTERNAL_PLUGIN_SQLSERVER_INTEGRATION", "实际公开包经正式离线安装与Host迁移后可读写Asset")]
-    public async Task PublicPackage_InstallsAndWritesThroughFormalHost()
+    public Task PublicPackage_InstallsAndWritesThroughFormalHost() => ExercisePublicPackageAsync(requireNoDetail: false);
+
+    [EnvironmentGatedFact("NEWP_RUN_EXTERNAL_PLUGIN_SQLSERVER_INTEGRATION", "同一公开Partner.AssetCatalog无详情View产物经正式Host，编辑准备与新按钮提交保持独立")]
+    public Task PublicPackageWithoutDetail_PreparesAndWritesThroughFormalButtons() => ExercisePublicPackageAsync(requireNoDetail: true);
+
+    // 两种既有页面形态共用真实包安装与当前Host；无详情变体仅改变公开authoring引用，不改模型或迁移。
+    private async Task ExercisePublicPackageAsync(bool requireNoDetail)
     {
         var package = Environment.GetEnvironmentVariable("NEWP_EXTERNAL_PLUGIN_PACKAGE");
         Assert.True(File.Exists(package), "Set NEWP_EXTERNAL_PLUGIN_PACKAGE to the public release smoke .npp output.");
         var output = new DirectoryInfo(AppContext.BaseDirectory);
         var repository = output;
-        while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, ".git"))) repository = repository.Parent;
+        while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, ".git")) && !File.Exists(Path.Combine(repository.FullName, ".git"))) repository = repository.Parent;
         var sourceHost = Path.Combine(repository!.FullName, "apps", "host-api", "bin", output.Parent!.Name, output.Name);
         // 此消费者不改Example功能反例，直接保留本轮正式Host发行物的完整装配输入。
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync([], sourceHostRoot: sourceHost);
@@ -86,6 +122,11 @@ public sealed class StandardDataCompositionSqlServerTests
         fixture.ExternalPluginsEnabled = true;
         var packageRoot = Path.Combine(fixture.EvidenceRoot, "external-package");
         ZipFile.ExtractToDirectory(package!, packageRoot);
+        if (requireNoDetail)
+        {
+            var blueprint = JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "authoring", "newp.plugin.json")))!;
+            Assert.Null(Assert.Single(blueprint["standardData"]!["resources"]!.AsArray())!["detailViewKey"]);
+        }
         Assert.Equal(0, (await Offline(fixture, "install", "-PackagePath", packageRoot)).ExitCode);
         Assert.Equal(0, (await Offline(fixture, "select", "-ModuleId", "Partner.AssetCatalog", "-Version", "1.0.0", "-Enabled", "true")).ExitCode);
         try { await fixture.StartAsync(); }
@@ -103,29 +144,42 @@ public sealed class StandardDataCompositionSqlServerTests
         using var manifest = await fixture.Administrator.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json");
         var owner = Assert.Single(manifest!.RootElement.GetProperty("modules").EnumerateArray(), module => module.GetProperty("moduleId").GetString() == ModuleId);
         var declarations = owner.GetProperty("dataAccess").Deserialize<ActionDataAccessRequirement[]>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
-        ActionDataAccessRequirement Declaration(string execution, FeaturePoint point) => Assert.Single(declarations,
-            item => item.Execution == resource + "." + execution && item.FeaturePositions.Contains(point.Position, StringComparer.Ordinal));
+        ActionDataAccessRequirement Button(string operation, FeaturePoint point) => Assert.Single(declarations,
+            item => item.BusinessBinding == resource + "." + operation && item.FeaturePositions.Contains(point.Position, StringComparer.Ordinal));
         var point = Assert.Single(fixture.Catalog, point => point.BehaviorKey == resource + ".create");
         using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, ApiRoute,
             new { Code = "MISSING321", Name = "缺少来源" })) Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, ApiRoute,
-            new { Code = "EXTERNAL266", Name = "真实外仓266" }, Declaration("create", point));
+            new { Code = "EXTERNAL266", Name = "真实外仓266" }, Button("create", point));
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         var created = await response.Content.ReadFromJsonAsync<JsonElement>();
         var id = created.GetProperty("fields").GetProperty("EID").GetString()!;
-        // 编辑准备沿真实行动作来源消费update.prepare，正式详情仍保留独立read。
+        // 准备保留实际edit功能位置及对象read；新submit按钮身份与读取来源不能互相替代。
         var edit = Assert.Single(fixture.Catalog, item => item.BehaviorKey == resource + ".update" && item.ActionScope == "list.rowActions");
-        var update = Declaration("update", edit);
+        var update = Button("update", edit);
+        var prepare = Assert.Single(declarations, item => item.ModuleId == ModuleId && item.BusinessBinding is null
+            && item.FeaturePositions.Contains(edit.Position, StringComparer.Ordinal)
+            && item.Requirements is { Count: > 0 } && item.Requirements.All(requirement => requirement.Stage != "submit"
+                && requirement.Shape == "object" && requirement.AnyOf.All(actions => actions.SequenceEqual(["read"]))));
         using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Get, ApiRoute + "/" + id))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
-        using var detailResponse = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Get, ApiRoute + "/" + id, dataAccess: update);
+        using (var borrowedButton = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Get, ApiRoute + "/" + id, dataAccess: update))
+            Assert.Equal(HttpStatusCode.BadRequest, borrowedButton.StatusCode);
+        using var detailResponse = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Get, ApiRoute + "/" + id, dataAccess: prepare);
         Assert.True(detailResponse.StatusCode == HttpStatusCode.OK, await detailResponse.Content.ReadAsStringAsync());
         var detail = await detailResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("真实外仓266", detail.GetProperty("fields").GetProperty("Name").GetString());
+        using (var borrowedRead = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Put, ApiRoute + "/" + id,
+            new { Name = "不得借准备读取提交" }, prepare)) Assert.Equal(HttpStatusCode.BadRequest, borrowedRead.StatusCode);
+        using (var unchanged = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Get, ApiRoute + "/" + id, dataAccess: prepare))
+        {
+            Assert.Equal(HttpStatusCode.OK, unchanged.StatusCode);
+            Assert.Equal("真实外仓266", (await unchanged.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("fields").GetProperty("Name").GetString());
+        }
         using (var changed = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, edit, HttpMethod.Put, ApiRoute + "/" + id,
             new { Name = "正式写入321" }, update)) Assert.True(changed.IsSuccessStatusCode, await changed.Content.ReadAsStringAsync());
         var authorize = Assert.Single(fixture.Catalog, item => item.BehaviorKey == resource + ".authorize");
-        var manage = Declaration("authorization.manage", authorize);
+        var manage = Button("authorize", authorize);
         var permissionRoute = "/api/authorization/data-scope/objects/" + resource + "/" + id;
         using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, authorize, HttpMethod.Get, permissionRoute))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
@@ -141,6 +195,8 @@ public sealed class StandardDataCompositionSqlServerTests
         await using var command = new SqlCommand("SELECT COUNT(*) FROM np_partner_assetcatalog.Asset WHERE EID=@id;", connection);
         command.Parameters.AddWithValue("@id", id);
         Assert.Equal(1, Convert.ToInt32(await command.ExecuteScalarAsync()));
+        command.CommandText = "SELECT Name FROM np_partner_assetcatalog.Asset WHERE EID=@id;";
+        Assert.Equal("正式写入321", await command.ExecuteScalarAsync());
         await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "external266-first-slice.json"),
             JsonSerializer.Serialize(new { packageSha256 = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(package!))), id, model = "Asset", owner = "Partner.AssetCatalog", fixture.EvidenceRoot }));
     }
@@ -163,7 +219,7 @@ public sealed class StandardDataCompositionSqlServerTests
         await Select(fixture, ModuleId, "1.0.0", true);
         await fixture.StartAsync();
         var create = Assert.Single(fixture.Catalog, point => point.BehaviorKey == ModuleId + ".Asset.create");
-        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, create, HttpMethod.Post, ApiRoute, new { Code = "LIFECYCLE266", Name = "独立作者保留266" });
+        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, create, HttpMethod.Post, ApiRoute, new { Code = "LIFECYCLE266", Name = "独立作者保留266" }, new FeatureHttpTestRequests(fixture).Declaration(create.BehaviorKey, create));
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         var assetId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("fields").GetProperty("EID").GetString()!;
         var history = await History(fixture);
@@ -276,7 +332,8 @@ public sealed class StandardDataCompositionSqlServerTests
     private static async Task AssertAsset(FeatureCatalogHostFixture fixture, string id)
     {
         var point = Assert.Single(fixture.Catalog, point => point.BehaviorKey == ModuleId + ".Asset.read");
-        var detail = await FeatureHttpTestRequests.ReadAsync(fixture.Administrator, point, ApiRoute + "/" + id);
+        var detail = await FeatureHttpTestRequests.ReadAsync(fixture.Administrator, point, ApiRoute + "/" + id,
+            new FeatureHttpTestRequests(fixture).ReadDeclaration(ModuleId + ".Asset.read", point));
         Assert.Equal("独立作者保留266", detail.GetProperty("fields").GetProperty("Name").GetString());
     }
 

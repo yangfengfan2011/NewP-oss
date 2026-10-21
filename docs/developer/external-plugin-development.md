@@ -22,6 +22,14 @@ Model metadata 的单个业务根使用全局技术名，例如 `Asset`，与 Bl
 
 存储声明由 `metadata/models/*.model.json` 拥有，Host 正式 PersistencePlan 是唯一存储消费入口。`explain` 中现有 `schemaName`、`tableName`、`uniqueIndexes` 是既有的旧物理提示，当前未用于建库、EF 或 CRUD 寻址，不能替代模型声明；本次没有修正这些旧提示或改变已有物理 schema。
 
+## 生成页面与按钮来源
+
+标准数据模板的创建、编辑、已有启停与授权入口直接发布自身的对象和动作要求，身份从正式目录取得；描述符只保留列表查询和对象读取合同，不再复制这些按钮的写入许可。启停只在原资源已有 `IsEnabled` 字段时生成，不增加字段或迁移；作者详情中未声明的操作也不会凭空生成。共享规则见 [ADR-0057](../adr/0057-buttons-declare-object-actions-and-business-inputs-own-targets.md)。
+
+详情能力必须由 Blueprint 的非空 `detailViewKey` 显式引用包内匹配的完整 View。未声明时不生成详情能力，包内未被引用的作者 View 可以保留。正式派生 projection 的可选详情键允许省略或为 `null`；作者输入的显式 `null`、空白和非法类型仍拒绝。
+
+无详情 View 的编辑器通过生成动作的 `inputReadSourceKey` 引用本资源既有对象读取来源；准备 GET 保持实际编辑功能位置和独立只读身份，不借列表读取或提交按钮。提交使用当前按钮身份，读取身份与按钮身份不能互换或混写。新按钮请求传 `X-NewP-Button`，独立读取传 `X-NewP-Data-Declaration`，两者都保留实际 `X-NewP-Feature`；这些头只引用目录身份，服务端仍在原事务和对象保护边界重新检查实际候选或对象。
+
 ## 工具闭环
 
 取得与公共包同版的 Platform API release manifest 后，在外部项目根目录执行：

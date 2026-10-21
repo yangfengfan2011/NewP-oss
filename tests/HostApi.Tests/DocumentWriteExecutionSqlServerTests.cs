@@ -304,7 +304,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             Assert.DoesNotContain(db.ChangeTracker.Entries(), entry => entry.Metadata.Name == "DocumentFileLink" && entry.State == EntityState.Added);
             // 不同owner实例不能借用私有context，真实确认与空批都必须在查关联前拒绝。
             var otherOwner = new DocumentFileCreationScope(db);
-            var otherPolicy = new DocumentFileOwnerPolicy(db, otherOwner, null!, null!, null!, null!, null!);
+            var otherPolicy = new DocumentFileOwnerPolicy(db, otherOwner, null!, null!, null!, null!, null!, scope.ServiceProvider.GetRequiredService<DocumentFileCopyScope>());
             var foreign = await Assert.ThrowsAsync<FileLifecycleException>(() => otherPolicy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, created.LinkId),
                 created.FileId, created.UsageId, FileOwnerOperation.Confirm, context, default));
             Assert.Equal("Document.FileWriteContextInvalid", foreign.Code);

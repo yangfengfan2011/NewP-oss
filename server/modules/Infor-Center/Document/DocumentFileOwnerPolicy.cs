@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Document;
 /// <summary>从 Document 自有真实关联与当前资格核验文件使用，不把 Link 伪装成实体授权资源。</summary>
 public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFileCreationScope creation,
     IDataScopeReadableIds readable, IOptions<DocumentOptions> options,
-    IDataExecutionAccess access, DocumentFileReadScope readScope, IObjectActionAccess objectActions) : IFileOwnerPolicy
+    IDataExecutionAccess access, DocumentFileReadScope readScope, IObjectActionAccess objectActions, DocumentFileCopyScope copyScope) : IFileOwnerPolicy
 {
     public const string Key = "document.fileLink";
     public string OwnerKey => Key;
@@ -75,10 +75,8 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
         var sourceId = context switch
         {
             FileOwnerExecutionContext source => source.ObjectId,
-            FileOwnerInternalExecutionContext source => source.ObjectId,
-            FileOwnerCreationContext source => source.ObjectId,
             FileOwnerReleaseContext source => source.ObjectId,
-            _ => creation.CreatedObjectId(context) ?? readScope.DownloadObjectId(context)
+            _ => creation.CreatedObjectId(context) ?? creation.CopiedObjectId(context) ?? readScope.DownloadObjectId(context) ?? copyScope.ObjectId(context, operation)
         };
         if (sourceId is not null && (documentIds.Length != 1 || documentIds[0] != sourceId))
             throw new FileLifecycleException(404, "Files.UsageUnavailable");
@@ -98,11 +96,13 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
             var master = version is null ? null : masters.SingleOrDefault(row => Equals(row["EID"], version["DocumentId"]));
             if (iteration is null || version is null || master is null
                 || !Equals(master["LatestVersionId"], version["EID"]) || !Equals(version["CurrentIterationId"], iteration["EID"])
-                || !Equals(iteration["Kind"], "regular") || !Equals(link["CEID"], reference.FileId)
+                || !Equals(iteration["Kind"], "regular")
+                || copyScope.ObjectId(context, operation) is not null && !copyScope.Matches(context, (string)master["EID"]!, (string)version["EID"]!, (string)iteration["EID"]!)
+                || !Equals(link["CEID"], reference.FileId)
                 || !Equals(link["FileUsageId"], reference.UsageId) || !HasValidRole(link, 100))
                 throw new InvalidOperationException("Document.FileAssociationCorrupted");
             if (operation is FileOwnerOperation.Download or FileOwnerOperation.Release or FileOwnerOperation.CopySource
-                || operation == FileOwnerOperation.Read && context is FileOwnerInternalExecutionContext) readFacts[(string)master["EID"]!] = new(master, version, iteration);
+                || operation == FileOwnerOperation.Read && copyScope.ObjectId(context, operation) is not null) readFacts[(string)master["EID"]!] = new(master, version, iteration);
         }
         if (operation is FileOwnerOperation.Download or FileOwnerOperation.Release)
         {
@@ -125,15 +125,17 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
                 }
             }
         }
-        if (context is FileOwnerInternalExecutionContext internalSource && operation is FileOwnerOperation.Read or FileOwnerOperation.CopySource)
+        if (operation is FileOwnerOperation.Read or FileOwnerOperation.CopySource && copyScope.ObjectId(context, operation) is not null)
             foreach (var documentId in documentIds)
             {
                 // 本次实际文件回链与独立批read已完成，只在同HTTP/主体/对象阶段内消费原事实。
                 using var read = readScope.Begin(documentId, operation == FileOwnerOperation.Read
                     ? DocumentFileReadPhase.PolicyCopyMetadata : DocumentFileReadPhase.PolicyCopySource, readFacts[documentId]);
-                var decision = await access.EvaluateInternalObjectAsync(internalSource.Source, "target", readScope.Target(documentId), token);
-                if (decision.Decision == DataExecutionDecision.NotFound) throw new FileLifecycleException(404, "Files.UsageUnavailable");
-                if (decision.Decision != DataExecutionDecision.Allowed) throw new FileLifecycleException(403, "Document.CopyDenied");
+                var target = readScope.Resolve(readScope.Target(documentId));
+                var decision = await objectActions.CheckAsync("Document", target.ObjectId,
+                    operation == FileOwnerOperation.Read ? ["read"] : ["documentObjectCopy"], token);
+                if (decision == DataExecutionDecision.NotFound) throw new FileLifecycleException(404, "Files.UsageUnavailable");
+                if (decision != DataExecutionDecision.Allowed) throw new FileLifecycleException(403, "Document.CopyDenied");
             }
     }
 
@@ -141,14 +143,11 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
     private void ValidateCreationSource(FileOwnerOperation operation, FileOwnerOperationContext? context)
     {
         if (operation == FileOwnerOperation.Confirm && creation.CreatedObjectId(context) is { Length: > 0 }) return;
-        if (operation != FileOwnerOperation.ConfirmCopy || context is not FileOwnerCreationContext source || string.IsNullOrWhiteSpace(source.ObjectId)
-            || source.Source.ResourceKey != "document.document" || source.Source.ObjectId is not null
-            || source.Source.Binding != new DataExecutionBindingReference("document.document.internal.create", "standardCrud.create", "submit")
-            || source.Source.Internal != new DataExecutionInternalBinding("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CopyAsync)))
-            throw new FileLifecycleException(400, "Document.FileWriteContextInvalid");
+        if (operation == FileOwnerOperation.ConfirmCopy && creation.CopiedObjectId(context) is { Length: > 0 }) return;
+        throw new FileLifecycleException(400, "Document.FileWriteContextInvalid");
     }
 
-    // 内部复制只接受Document真实固定调用者；源Document仍须与本次文件回链一致。
+    // 复制只接受本次实际读取的私有scope，旧固定record不能替代origin；每批仍核真实Document回链。
     private void ValidateReadSource(FileOwnerOperation operation, FileOwnerOperationContext? context)
     {
         if (operation == FileOwnerOperation.Download)
@@ -164,16 +163,7 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
             access.Validate([expected], formal.ResourceKey);
             return;
         }
-        if (context is FileOwnerInternalExecutionContext source && source.ResourceKey == "document.document"
-            && !string.IsNullOrWhiteSpace(source.ObjectId) && source.Source.Caller == typeof(DocumentFiles))
-        {
-            var valid = operation == FileOwnerOperation.Read
-                ? source.Source == DocumentCopyExecutions.Metadata(source.ObjectId).Source
-                : operation == FileOwnerOperation.CopySource && source.Source.Execution == "document.files.copySource"
-                    && source.Source.Provider == "document.files.copySource"
-                    && source.Source.Member is nameof(DocumentFiles.PrepareCopyFilesAsync) or nameof(DocumentFiles.CopyAsync);
-            if (valid) return;
-        }
+        if (copyScope.ObjectId(context, operation) is { Length: > 0 }) return;
         throw new FileLifecycleException(400, "Document.FileReadContextInvalid");
     }
 }

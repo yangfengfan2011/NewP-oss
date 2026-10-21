@@ -148,9 +148,18 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 var files = provider.GetRequiredService<IFileCopyService>();
                 var error = await Assert.ThrowsAsync<FileLifecycleException>(() => files.PrepareCopyAsync("wrong-owner-" + index,
                     reference, DocumentFileOwnerPolicy.Key, crossed[index]!));
-                Assert.Equal(index == 1 ? 404 : 400, error.StatusCode);
+                Assert.Equal(400, error.StatusCode);
                 return true;
             });
+        // 迁移后的owner来源必须由真实读取作用域产生，已登记的旧record本身不能证明这次调用来自owner。
+        await AsCopyActor(fixture, async provider =>
+        {
+            var error = await Assert.ThrowsAsync<FileLifecycleException>(() => provider.GetRequiredService<IFileCopyService>()
+                .PrepareCopyAsync("registered-record-without-origin", reference, DocumentFileOwnerPolicy.Key, CopyFileSource(documentId)));
+            Assert.Equal(400, error.StatusCode);
+            Assert.Equal("Document.FileReadContextInvalid", error.Code);
+            return true;
+        });
         Assert.Empty(await Rows(fixture, "FileCopyLease"));
         Assert.Equal(2, (await Rows(fixture, "FileRecord")).Length);
         Assert.Equal(2, Directory.EnumerateFiles(fixture.StorageRoot).Count());

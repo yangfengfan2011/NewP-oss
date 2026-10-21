@@ -33,14 +33,25 @@ public sealed class DocumentFileCreationScope(EfPlatformDbContext db)
     // 已确认重试仍绑定产生来源的owner实例和对象事实；actor/lease与持久回链由Files和policy重新核验。
     internal string? CreatedObjectId(FileOwnerOperationContext? source) => source is CreatedContext created && ReferenceEquals(created.Owner, this) ? created.ObjectId : null;
 
-    // 新创建与尚未迁移的Copy分别保留自己的来源形状，不把新业务冒充旧执行合同。
+    // 真副本只有正常nested Create成功后才启动自己的创建证明，不借用上传或固定声明record。
+    internal IDisposable BeginCopied(DocumentCurrentIdentity identity, out FileOwnerOperationContext source)
+    {
+        source = new CopiedContext(this, (string)identity.Master["EID"]!);
+        return Begin(identity, copying: true, source: source);
+    }
+
+    // 已确认重试只保留owner实例和真实目标身份，持久使用及回链仍由Files重新核验。
+    internal string? CopiedObjectId(FileOwnerOperationContext? source) => source is CopiedContext copied && ReferenceEquals(copied.Owner, this) ? copied.ObjectId : null;
+
+    // 上传和复制拥有不同私有来源，均不接受可构造的旧创建record。
     private static string? ObjectId(FileOwnerOperationContext source) => source switch
     {
         CreatedContext created => created.ObjectId,
-        FileOwnerCreationContext legacy => legacy.ObjectId,
+        CopiedContext copied => copied.ObjectId,
         _ => null
     };
     private sealed record CreatedContext(DocumentFileCreationScope Owner, string ObjectId) : FileOwnerOperationContext;
+    private sealed record CopiedContext(DocumentFileCreationScope Owner, string ObjectId) : FileOwnerOperationContext;
 
     /// <summary>确认仅匹配同一事务的真实当前版次，不从客户端接收授权标志。</summary>
     public bool ProvesIteration(string iterationId) => _identity is not null

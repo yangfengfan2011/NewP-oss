@@ -56,7 +56,7 @@ public sealed class DocumentFileExecutionScopeTests
         if (problem == "endpoint") http.HttpContext!.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(new EndpointModuleAttribute("Workspace")), "wrong-owner"));
         if (problem == "ended") phase.Dispose();
         using var nested = problem == "nested" ? scope.Begin("Document_two", DocumentFileReadPhase.Open) : null;
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, consuming, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, consuming, null!, new DocumentFileCopyScope(null!, new HttpContextAccessor()));
         var operation = () => policy.VerifyBatchAsync([], FileOwnerOperation.Download, context, default);
         if (problem == "valid") await operation();
         else if (problem == "endpoint") await Assert.ThrowsAsync<ActionDataAccessException>(operation);
@@ -172,7 +172,7 @@ public sealed class DocumentFileExecutionScopeTests
     public async Task InternalCopyRead_RejectsAnArbitraryImplementationIdentityBeforeAnyQuery()
     {
         // 未构造后续基础设施，证明明确caller守卫在任何查询之前拒绝。
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, Microsoft.Extensions.Options.Options.Create(new DocumentOptions()), null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, Microsoft.Extensions.Options.Options.Create(new DocumentOptions()), null!, null!, null!, new DocumentFileCopyScope(null!, new HttpContextAccessor()));
         var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(IFileCopyService), "PrepareCopyAsync"), "document.document", "document-one");
         var failure = await Assert.ThrowsAsync<ICP.Platform.Modules.Files.Contracts.FileLifecycleException>(() => policy.VerifyBatchAsync([], ICP.Platform.Modules.Files.Contracts.FileOwnerOperation.CopySource, source, default));
         Assert.Equal("Document.FileReadContextInvalid", failure.Code);
@@ -185,7 +185,7 @@ public sealed class DocumentFileExecutionScopeTests
     [InlineData("ReadCopyAsync", false)]
     public async Task InternalCopySource_AcceptsOnlyItsTwoActualSourceReadingMembers(string member, bool allowed)
     {
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!, null!, new DocumentFileCopyScope(null!, new HttpContextAccessor()));
         var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), member), "document.document", "document-one");
         if (allowed) await policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, source, default);
         else
@@ -217,7 +217,7 @@ public sealed class DocumentFileExecutionScopeTests
             _ => source with { Source = source.Source with { Member = "ReadCopyAsync" } }
         };
         // 没有任何DB或evaluator；guard必须在空批返回及任何读取前拒绝串用来源。
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!, null!, new DocumentFileCopyScope(null!, new HttpContextAccessor()));
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, crossed, default));
         Assert.Equal("Document.FileReadContextInvalid", failure.Code);
     }
@@ -225,7 +225,7 @@ public sealed class DocumentFileExecutionScopeTests
     [Fact]
     public async Task CopyConfirmation_DoesNotBorrowThePrepareSourceIdentity()
     {
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!, null!, new DocumentFileCopyScope(null!, new HttpContextAccessor()));
         var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), nameof(DocumentFiles.PrepareCopyFilesAsync)), "document.document", "document-one");
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, "target-link"),
             "target-file", null, FileOwnerOperation.ConfirmCopy, source, default));
@@ -267,7 +267,7 @@ public sealed class DocumentFileExecutionScopeTests
             _ => source
         };
         FileOwnerOperationContext? context = problem == "missing" ? null : new FileOwnerCreationContext(source, problem == "object" ? "" : "document-one");
-        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, new DocumentFileCreationScope(null!), null!, null!, null!, null!, null!, new DocumentFileCopyScope(null!, new HttpContextAccessor()));
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, "link-one"), "file-one", null,
             FileOwnerOperation.Confirm, context, default));
         Assert.Equal("Document.FileWriteContextInvalid", failure.Code);

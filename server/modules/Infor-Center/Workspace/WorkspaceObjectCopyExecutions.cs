@@ -13,10 +13,6 @@ public sealed partial class WorkspaceContents
             _ => throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired")
         }, token) == DataExecutionDecision.Allowed;
 
-    // Document最终新候选原点以真实调用方法固定来源，不增加新对象read。
-    private static DataExecutionWriteContext DocumentCopyFinalCandidateSource(string member) => new(
-        new("document.document.copy.finalCandidate", "standardCrud.create", "submit"), "document.document", null)
-        { Internal = new("document.document.copy.finalCandidate", "standardCrud.create", typeof(WorkspaceContents), member) };
     // 原位置完整read仍由既有resolver取得，再执行同一次父edit，不加authorize或额外查询。
     private Task<WorkspacePositionPath> ObjectCopyTargetPositionAsync(string actor, WorkspacePosition position, CancellationToken token) => ResolveWritableButtonPositionAsync(actor, position, token);
 }

@@ -13,6 +13,6 @@ public sealed class DocumentCopyBehavior(DocumentFiles files) : IObjectBehavior
 
     /// <inheritdoc/>
     public ValueTask<StandardCrudMutationResult> ExecuteAsync(ObjectOperationContext context, CancellationToken cancellationToken = default) =>
-        files.CopyAsync((string)context.Values["Confirmation"]!, (string)context.Values["OperationKey"]!,
+        files.CopyAsync(context, (string)context.Values["Confirmation"]!, (string)context.Values["OperationKey"]!,
             (IReadOnlyDictionary<string, object?>)context.Values["Values"]!, cancellationToken);
 }

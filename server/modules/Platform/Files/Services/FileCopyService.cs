@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Files.Services;
 public sealed partial class FileLifecycleService
 {
     /// <inheritdoc/>
-    public async Task<FileCopyPreparation> PrepareCopyAsync(string requestKey, FileUsageReference source, string targetOwnerKey, FileOwnerInternalExecutionContext context, CancellationToken token = default)
+    public async Task<FileCopyPreparation> PrepareCopyAsync(string requestKey, FileUsageReference source, string targetOwnerKey, FileOwnerOperationContext context, CancellationToken token = default)
     {
         if (transactions.IsActive) throw new InvalidOperationException("Files.CopyRequiresIndependentTransaction");
         ValidateCopyKey(requestKey); Policy(targetOwnerKey);
@@ -60,7 +60,7 @@ public sealed partial class FileLifecycleService
     }
 
     /// <inheritdoc/>
-    public async Task<ConfirmedFileUsage> ConfirmCopyAsync(string requestKey, FileOwnerReference target, FileOwnerInternalExecutionContext sourceContext, FileOwnerCreationContext creation, CancellationToken token = default)
+    public async Task<ConfirmedFileUsage> ConfirmCopyAsync(string requestKey, FileOwnerReference target, FileOwnerOperationContext sourceContext, FileOwnerOperationContext creation, CancellationToken token = default)
     {
         state.RequireTransaction(); ValidateCopyKey(requestKey);
         var known = await state.ReadCopyPairAsync(requestKey, Actor(), target.Key, false, token) ?? throw CopyUnavailable();

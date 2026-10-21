@@ -96,7 +96,7 @@ public sealed partial class WorkspaceContents
             var candidateAllowed = endpoint.ModelKey == "Part"
                 ? await objectActions.CheckCandidateAsync("Part", result.Detail.Fields, ["create"], checkedToken)
                     == ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed
-                : await executionAccess.EvaluateCandidateAsync(DocumentCopyFinalCandidateSource(nameof(CopyObjectAsync)), "document.document", "candidate", result.Detail.Fields, checkedToken)
+                : await objectActions.CheckCandidateAsync("Document", result.Detail.Fields, ["create"], checkedToken)
                     == ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed;
             if (!candidateAllowed)
                 throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");

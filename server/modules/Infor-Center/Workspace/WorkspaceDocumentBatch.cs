@@ -153,7 +153,7 @@ public sealed partial class WorkspaceContents
             await RequireDocumentSourcesAsync(actor, input, checkedToken);
             await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, checkedToken);
             foreach (var fields in created)
-                if (await executionAccess.EvaluateCandidateAsync(DocumentCopyFinalCandidateSource(nameof(CopyDocumentBatchAsync)), "document.document", "candidate", fields, checkedToken)
+                if (await objectActions.CheckCandidateAsync("Document", fields, ["create"], checkedToken)
                     != ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");
             row["State"] = "committed";
             audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);

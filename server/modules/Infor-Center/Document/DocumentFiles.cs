@@ -22,14 +22,9 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
     IStandardCrudResourceRegistry resources, StandardCrudDefaultWriter writer, IDataScopeObjectDecisionProvider decisions,
     IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit,
     DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options, IBusinessAuditRecorder businessAudit,
-    IDataExecutionAccess access, DocumentFileReadScope readScope, IButtonBusinessExecutor buttons, IObjectActionAccess objectActions) : IDocumentFiles, IDocumentCopies
+    IDataExecutionAccess access, DocumentFileReadScope readScope, IButtonBusinessExecutor buttons, IObjectActionAccess objectActions, DocumentFileCopyScope copyScope) : IDocumentFiles, IDocumentCopies
 {
     internal static readonly DataExecutionBindingReference FileReadBinding = new("document.document.read", "standardCrud.read", "read");
-
-    // 尚未迁移的真副本保留自己的固定内部来源；不冒充已迁移的Workspace创建或Stage来源。
-    private static ObjectOperationWriteSource.Declared InternalCreateSource(string member) => new(new(
-        new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
-        { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), member) });
 
     /// <inheritdoc/>
     public Task<StandardCrudMutationResult> PrepareUploadCandidateAsync(IReadOnlyDictionary<string, object?> values,

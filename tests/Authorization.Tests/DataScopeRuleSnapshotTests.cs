@@ -31,13 +31,17 @@ public sealed class DataScopeRuleSnapshotTests : IDisposable
             new DataScopeIdentities([new AllAuthenticatedDataScopeIdentities()]));
     }
 
+    // 全量装载逐条填充 builder，提交与修复沿 Apply；两条路径必须得到同一隔离与故障结论。
+    public static TheoryData<bool> Paths => new() { false, true };
+
     // 模块卸载后其规则仍留在库中：完整树只封闭自身资源，其他资源照常判权，删除后错误随最后节点一起清除。
-    [Fact]
-    public void UnregisteredResourceTree_IsIsolatedAndClearedByDeletion()
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public void UnregisteredResourceTree_IsIsolatedAndClearedByDeletion(bool streamed)
     {
-        var snapshot = DataScopeRuleSnapshot.Empty.Apply(
+        var snapshot = Load(streamed,
             [Added(Node("RoleRule", "RoleRule", null, Role)), Added(Node("LostRule", "LostRule", null, Lost)),
-             Added(Node("LostChild", "LostRule", "LostRule", Lost))], catalog, default);
+             Added(Node("LostChild", "LostRule", "LostRule", Lost))]);
 
         Assert.Equal("RoleRule", Assert.Single(snapshot.ForResource(Role)).Id);
         var unavailable = Assert.Throws<PlatformCacheUnavailableException>(() => snapshot.ForResource(Lost));
@@ -51,11 +55,12 @@ public sealed class DataScopeRuleSnapshotTests : IDisposable
     }
 
     // 已登记根下混入未登记子节点属于跨资源损坏，两端都失败关闭，但不扩大为整份缓存故障。
-    [Fact]
-    public void UnregisteredChildUnderRegisteredRoot_ClosesBothResourcesOnly()
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public void UnregisteredChildUnderRegisteredRoot_ClosesBothResourcesOnly(bool streamed)
     {
-        var snapshot = DataScopeRuleSnapshot.Empty.Apply(
-            [Added(Node("RoleRule", "RoleRule", null, Role)), Added(Node("LostChild", "RoleRule", "RoleRule", Lost))], catalog, default);
+        var snapshot = Load(streamed,
+            [Added(Node("RoleRule", "RoleRule", null, Role)), Added(Node("LostChild", "RoleRule", "RoleRule", Lost))]);
 
         var registered = Assert.Throws<PlatformCacheUnavailableException>(() => snapshot.ForResource(Role));
         Assert.Equal("DATA_SCOPE_RULE_RESOURCE_RELATION_INVALID", Assert.IsType<InvalidOperationException>(registered.InnerException).Message);
@@ -63,19 +68,28 @@ public sealed class DataScopeRuleSnapshotTests : IDisposable
     }
 
     // 孤立主体无法建立任何资源归属，仍使整份结果无法发布。
-    [Fact]
-    public void OrphanSubject_StillFailsTheWholeSnapshot()
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public void OrphanSubject_StillFailsTheWholeSnapshot(bool streamed)
     {
-        var error = Assert.Throws<InvalidOperationException>(() => DataScopeRuleSnapshot.Empty.Apply(
+        var error = Assert.Throws<InvalidOperationException>(() => Load(streamed,
             [Added(Node("RoleRule", "RoleRule", null, Role)), new(DataScopeRuleCache.SubjectModel, "Orphan", null, new Dictionary<string, object?>
             {
                 ["EID"] = "Orphan", ["NodeId"] = "MissingNode", ["SubjectType"] = "all", ["SubjectId"] = null, ["Priority"] = 1L,
                 ["ActionsJson"] = "{}", ["MatchOptionsJson"] = null
-            })], catalog, default));
+            })]));
         Assert.Equal("DATA_SCOPE_SUBJECT_NODE_INVALID", error.Message);
     }
 
     public void Dispose() => db.Dispose();
+
+    private DataScopeRuleSnapshot Load(bool streamed, PlatformRecordChange[] changes)
+    {
+        if (!streamed) return DataScopeRuleSnapshot.Empty.Apply(changes, catalog, default);
+        var builder = new DataScopeRuleSnapshot.Builder(DataScopeRuleSnapshot.Empty);
+        foreach (var change in changes) builder.Add(change, default);
+        return builder.Build(catalog, default);
+    }
 
     private static PlatformRecordChange Added(Dictionary<string, object?> node) => new(DataScopeRuleCache.NodeModel, (string)node["EID"]!, null, node);
 

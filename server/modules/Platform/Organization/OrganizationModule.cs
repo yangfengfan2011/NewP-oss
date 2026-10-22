@@ -25,8 +25,6 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<ICP.Platform.Authorization.Contracts.IDataScopeBusinessConditionProvider, OrganizationDataScopeConditions>();
         services.AddScoped<ICP.Platform.Authorization.Contracts.IDataScopeEnumFieldProvider, OrganizationDataScopeEnums>();
         services.AddStandardCrudKernel();
-        services.AddSingleton<OrganizationCache>();
-        services.AddSingleton<IPlatformCacheStatus>(sp => sp.GetRequiredService<OrganizationCache>());
         services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, OrganizationAvailabilityHandler>();
         services.AddSingleton<IOrganizationQuery, OrganizationQuery>();
         services.AddScoped<ICP.Platform.Persistence.Ownership.IAccountOwnershipDirectory, OrganizationAccountOwnershipDirectory>();
@@ -35,9 +33,9 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<OrganizationInitializationButtonHandler>();
         services.AddScoped<ICP.Platform.Identity.Contracts.IIdentityAdmissionPolicy, OrganizationAdmissionPolicy>();
         services.AddScoped<OrganizationAdmissionCommitParticipant>();
-        foreach (var model in new[] { "Company", "Department", "Position", "Person" })
-            services.AddScoped(sp => new PlatformCommitRegistration(model, sp.GetRequiredService<OrganizationAdmissionCommitParticipant>()));
-        services.AddHostedService<OrganizationCacheInitializer>();
+        // 准入参与者包装缓存提交 scope；四个模型在同一 scope 内共享该实例。
+        services.AddNamedCache<OrganizationCache, OrganizationSnapshot>(OrganizationCache.Models,
+            sp => sp.GetRequiredService<OrganizationAdmissionCommitParticipant>());
         services.AddScoped<PersonCreationRecorder>();
         services.AddScoped<IStandardCrudCreationRecorder>(static provider =>
             provider.GetRequiredService<PersonCreationRecorder>());

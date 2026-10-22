@@ -33,11 +33,7 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IDataScopeIdentityProvider, AllAuthenticatedDataScopeIdentities>();
         services.AddScoped<IDataScopeIdentityProvider, AuthorizationDataScopeIdentities>();
         services.AddScoped<DataScopeCatalog>();
-        services.AddSingleton<DataScopeRuleCache>();
-        services.AddSingleton<IPlatformCacheStatus>(provider => provider.GetRequiredService<DataScopeRuleCache>());
-        foreach (var model in new[] { "DataScopeRuleNode", "DataScopeRuleSubject" })
-            services.AddScoped(provider => new PlatformCommitRegistration(model, provider.GetRequiredService<DataScopeRuleCache>()));
-        services.AddHostedService<DataScopeRuleCacheInitializer>();
+        services.AddNamedCache<DataScopeRuleCache, DataScopeRuleSnapshot>(DataScopeRuleCache.Models);
         services.AddScoped<DataScopeRules>();
         services.AddScoped<DataScopeObjectGrants>();
         services.AddScoped<IDataScopeObjectInitializer, DataScopeObjectInitializer>();

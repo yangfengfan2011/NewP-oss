@@ -8,7 +8,7 @@ The goal is to let application developers reuse common platform mechanisms and a
 
 ## Project status
 
-NewP was first made public on 2026-10-22. This repository includes 1,264 genuine commits from its earlier private development, with authors, dates, messages, and parent relationships preserved. Database passwords were redacted from the imported history, which changes affected commit hashes. The original public source snapshot is also retained. There are currently no confirmed external adopters and no stable public release. APIs and authoring formats may evolve. Existing tests and bounded acceptance scenarios cover specific behavior; their presence does not certify every deployment or production workload.
+APIs and authoring formats may evolve. Existing tests and bounded acceptance scenarios cover specific behavior; their presence does not certify every deployment or production workload.
 
 ## Prerequisites
 

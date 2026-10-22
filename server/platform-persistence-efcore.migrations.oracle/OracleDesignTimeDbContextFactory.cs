@@ -11,7 +11,7 @@ public sealed class OracleDesignTimeDbContextFactory : IDesignTimeDbContextFacto
     {
         var optionsBuilder = new DbContextOptionsBuilder<EfPlatformDbContext>();
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Oracle")
-            ?? "User Id=system;Password=REDACTED_FOR_OPEN_SOURCE;Data Source=localhost:1521/FREEPDB1;";
+            ?? "User Id=system;Password=Icp_oracle_123;Data Source=localhost:1521/FREEPDB1;";
 
         EfCoreProviderOptions.Configure(
             optionsBuilder,

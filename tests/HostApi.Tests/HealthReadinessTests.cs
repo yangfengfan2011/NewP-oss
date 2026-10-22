@@ -205,7 +205,7 @@ public sealed class HealthReadinessTests
     [Fact]
     public async Task GetReady_WhenContributorThrows_DoesNotExposeExceptionDetails()
     {
-        const string sensitiveException = "Server=private;Password=REDACTED_FOR_OPEN_SOURCE; D:\\deploy\\plugin";
+        const string sensitiveException = "Server=private;Password=secret; D:\\deploy\\plugin";
         var contributor = FakeContributor.Required(
             "database",
             10,

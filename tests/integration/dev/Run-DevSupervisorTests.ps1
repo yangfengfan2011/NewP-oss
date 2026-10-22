@@ -201,7 +201,7 @@ finally {
     }
 }
 
-$sanitized = ConvertTo-DevSanitizedText "Server=db;User Id=operator;Password=REDACTED_FOR_OPEN_SOURCE;Data Source=D:\private\db"
+$sanitized = ConvertTo-DevSanitizedText "Server=db;User Id=operator;Password=secret;Data Source=D:\private\db"
 Assert-False ($sanitized -match "operator|secret|D:\\private") "Diagnostics must redact credentials and private absolute paths."
 
 $devScriptSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\dev.ps1") -Raw
@@ -212,7 +212,7 @@ Assert-True ($stopScriptSource -match [regex]::Escape("scripts\lib\dev-superviso
 Assert-True ($devScriptSource -notmatch "LocalAuth__") "dev.ps1 must not restore the removed LocalAuth configuration path."
 Assert-True ($devScriptSource -notmatch "settings\.LocalAuth") "dev.ps1 must not read a plaintext password from appsettings."
 Assert-True ($devScriptSource -match "antiforgery-token") "dev.ps1 authenticated smoke must follow the Host antiforgery protocol."
-Assert-True ($devScriptSource -match [regex]::Escape('@{ ecode = $Credentials.Ecode; password = REDACTED_FOR_OPEN_SOURCE }')) "dev.ps1 authenticated smoke must post the Identity ECODE contract."
+Assert-True ($devScriptSource -match [regex]::Escape('@{ ecode = $Credentials.Ecode; password = $Credentials.Password }')) "dev.ps1 authenticated smoke must post the Identity ECODE contract."
 Assert-True ($devScriptSource -match [regex]::Escape('$currentUser.ecode')) "dev.ps1 authenticated smoke must read the current-user ECODE contract."
 Assert-True ($devScriptSource -match [regex]::Escape('NEWP_DEV_ADMIN_ECODE')) "dev.ps1 authenticated smoke must name its optional account input as ECODE."
 Assert-False ($devScriptSource -match '(?i)username') "dev.ps1 must not restore the removed username contract."

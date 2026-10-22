@@ -10,7 +10,7 @@ public sealed class AcceptanceSanitizeTests
     {
         // 密码同时是完整连接串的子串；若先替换短 token，连接串会只剩下未被整体替换的残片。
         const string password = "P@ssw0rd";
-        const string connection = "Server=localhost;Database=NewP;User ID=sa;Password=REDACTED_FOR_OPEN_SOURCE";
+        const string connection = "Server=localhost;Database=NewP;User ID=sa;Password=P@ssw0rd";
         string[] tokens = [password, connection];
 
         var actual = AcceptanceInfrastructure.Sanitize(tokens, $"failed to open {connection}");

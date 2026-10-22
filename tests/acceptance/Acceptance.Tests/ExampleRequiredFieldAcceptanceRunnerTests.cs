@@ -12,7 +12,7 @@ public sealed class ExampleRequiredFieldAcceptanceRunnerTests
             Unhandled exception. ICP.Platform.PluginPlatform.Activation.PluginActivationException: Plugin activation failed (PLUGIN_ACTIVATION_MIGRATION_FAILED).
              ---> ICP.Platform.Persistence.Ownership.DatabaseOwnershipException: Database ownership validation failed (PERSISTENCE_MIGRATION_HISTORY_NON_PREFIX).
                at SqlServerDatabaseOwnershipGuard.VerifyAsync() in D:\Work\Git\NewP\server\Guard.cs:line 70
-            Server=localhost;User ID=sa;Password=REDACTED_FOR_OPEN_SOURCE
+            Server=localhost;User ID=sa;Password=NotASecretHere
             """;
 
         var actual = ExampleRequiredFieldAcceptanceRunner.ExtractStableDiagnostic(log);

@@ -72,7 +72,7 @@ public sealed class AcceptanceSqlServerConnectionResolverTests
         var environment = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             [AcceptanceSqlServerConnectionResolver.AcceptanceEnvironmentVariable] =
-                $"Server=local;Password=REDACTED_FOR_OPEN_SOURCE;Unsupported Keyword=value"
+                $"Server=local;Password={secret};Unsupported Keyword=value"
         };
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -90,7 +90,7 @@ public sealed class AcceptanceSqlServerConnectionResolverTests
         var environment = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             [AcceptanceSqlServerConnectionResolver.AcceptanceEnvironmentVariable] =
-                $"Server=local;Database=acceptance;User ID=sa;Password=REDACTED_FOR_OPEN_SOURCE;TrustServerCertificate=true"
+                $"Server=local;Database=acceptance;User ID=sa;Password={secret};TrustServerCertificate=true"
         };
 
         var result = AcceptanceSqlServerConnectionResolver.Resolve(repository.RootPath, environment.GetValueOrDefault);

@@ -247,7 +247,7 @@ function Invoke-ShellAcceptance {
         throw "DEV_ANTIFORGERY_TOKEN_INVALID: token endpoint returned an empty request token."
     }
 
-    $loginBody = @{ ecode = $Credentials.Ecode; password = REDACTED_FOR_OPEN_SOURCE } | ConvertTo-Json -Compress
+    $loginBody = @{ ecode = $Credentials.Ecode; password = $Credentials.Password } | ConvertTo-Json -Compress
     $loginResponse = Invoke-WebRequest `
         -Uri "$baseUri/api/auth/login" `
         -Method Post `
@@ -291,7 +291,7 @@ function Get-DevelopmentSmokeCredentials {
         throw "DEV_AUTH_SMOKE_CREDENTIALS_INCOMPLETE: set both NEWP_DEV_ADMIN_ECODE and NEWP_DEV_ADMIN_PASSWORD or neither."
     }
 
-    return [pscustomobject]@{ Ecode = $ecode; Password = REDACTED_FOR_OPEN_SOURCE }
+    return [pscustomobject]@{ Ecode = $ecode; Password = $password }
 }
 
 function Assert-Toolchain {

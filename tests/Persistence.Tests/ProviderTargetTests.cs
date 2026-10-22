@@ -61,7 +61,7 @@ public sealed class ProviderTargetTests
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
                 ["ConnectionStrings:SqlServer"] =
-                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
+                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=invalid;Connect Timeout=1;TrustServerCertificate=True;"
             })
             .Build();
         var services = new ServiceCollection();
@@ -98,7 +98,7 @@ public sealed class ProviderTargetTests
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
                 ["ConnectionStrings:SqlServer"] =
-                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
+                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=invalid;Connect Timeout=1;TrustServerCertificate=True;"
             })
             .Build();
         var services = new ServiceCollection();

@@ -11,7 +11,7 @@ public sealed class MySqlDesignTimeDbContextFactory : IDesignTimeDbContextFactor
     {
         var optionsBuilder = new DbContextOptionsBuilder<EfPlatformDbContext>();
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__MySql")
-            ?? "Server=localhost;Port=3306;Database=icp_platform;User=icp;Password=REDACTED_FOR_OPEN_SOURCE;";
+            ?? "Server=localhost;Port=3306;Database=icp_platform;User=icp;Password=icp_123;";
 
         EfCoreProviderOptions.Configure(
             optionsBuilder,

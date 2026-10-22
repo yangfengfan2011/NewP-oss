@@ -1,71 +1,60 @@
-# ICP 新平台
+# NewP
 
-NewP 是独立演进的平台基础能力与扩展内核仓库，采用模块化单体结构，提供 Host、Shell、Contracts、SDK、Kernel 与内建公共模块。
+NewP is an early-stage, independently maintained .NET and React platform for modular applications. It brings together a backend host, frontend shell, stable contracts, SDKs, metadata-driven CRUD, authorization, and persistence infrastructure.
 
-## 当前事实源
+The goal is to let application developers reuse common platform mechanisms and add modules through explicit extension points. Modules declare their identity, dependencies, navigation, models, and permission references; behavior implementations bind through stable keys.
 
-1. 当前源码、配置和测试描述已经存在的能力。
-2. 已确认的 GitHub issue/spec 与 ADR 描述目标和决策。
-3. [AGENTS.md](AGENTS.md) 描述仓库工作边界；[docs/README.md](docs/README.md) 只负责把任务路由到仍有效的文档。
+[中文说明](README.zh-CN.md) · [Documentation](docs/README.md) · [Module quickstart](docs/developer/componentized-development-quickstart.md)
 
-## 快速开始
+## Project status
 
-首次拉取或 lockfile 变化后初始化：
+NewP was first made public on 2026-10-22. This repository includes 1,264 genuine commits from its earlier private development, with authors, dates, messages, and parent relationships preserved. Database passwords were redacted from the imported history, which changes affected commit hashes. The original public source snapshot is also retained. There are currently no confirmed external adopters and no stable public release. APIs and authoring formats may evolve. Existing tests and bounded acceptance scenarios cover specific behavior; their presence does not certify every deployment or production workload.
+
+## Prerequisites
+
+- PowerShell 7 on Windows for the documented scripts.
+- .NET 10 SDK for the current backend projects.
+- Node.js 24.19.0 and pnpm 11.20.0, as declared in `frontend/package.json`.
+- A SQL Server instance and a database connection authorized for your local development environment.
+
+## Local development
+
+The committed connection strings are local examples without database passwords. Configure your own development connection in the process environment before starting the host:
 
 ```powershell
+$env:NEWP_DEV_SQLSERVER_CONNECTION_STRING = Read-Host 'Enter your local SQL Server connection string'
 .\scripts\bootstrap.ps1
-```
-
-日常启动与停止：
-
-```powershell
 .\scripts\dev.ps1
-.\scripts\stop-dev.ps1
 ```
 
-默认地址：
+`Read-Host` avoids placing the connection value in shell command history. It is a convenience for local setup, not a credential store. Keep credentials out of issues, source files, screenshots, and commits. The root `.env` file is not automatically loaded by the development script.
 
-- Host API：`http://localhost:5000`
-- Frontend Shell：`http://localhost:3000`
-
-本地开发优先读取 `NEWP_DEV_SQLSERVER_CONNECTION_STRING`；未设置时使用 `apps/host-api/appsettings.Development.json` 已配置的 `ConnectionStrings:SqlServer`，无需每次重复传入连接字符串。
-
-全新数据库需要在停止开发服务后，通过交互式终端初始化本地管理员：
+Default endpoints are `http://localhost:5000` for the Host API and `http://localhost:3000` for the frontend. Stop the development services before initializing an administrator for a new database:
 
 ```powershell
+.\scripts\stop-dev.ps1
+$env:ConnectionStrings__SqlServer = $env:NEWP_DEV_SQLSERVER_CONNECTION_STRING
 dotnet run --project .\apps\host-api\HostApi.csproj -- identity bootstrap-local-admin
 ```
 
-## 验证
+See the [local environment guide](docs/guides/local-environment.md) for database, test, and administrator setup. Do not point automated tests at a database containing valuable data.
 
-```powershell
-# 当前任务先选所属项目/包的定向测试；确需全仓检查的快速变体时使用：
-.\scripts\verify.ps1 -Quick
+## Architecture and extension
 
-# 交付约定或实际影响需要全仓检查时使用，不附带验收：
-.\scripts\verify.ps1
+- `apps/`: application entry points and host composition.
+- `server/`: contracts, SDKs, kernel, platform mechanisms, and backend modules.
+- `frontend/`: shell, shared UI, frontend SDKs, metadata, and modules.
+- `tests/`: unit, integration, and bounded acceptance tests.
+- `scripts/`: development and verification entry points.
 
-# 只补本次行为需要的精确场景，例如文件夹编辑：
-.\scripts\accept.ps1 -Scenario NativeWorkspaceFolderEdit_UsesFormalDriver
-```
+Start with the [module quickstart](docs/developer/componentized-development-quickstart.md) and [componentization boundaries](docs/architecture/componentization-guardrails.md). Most detailed documentation is currently in Simplified Chinese.
 
-验证证据写入 `.codex-temp/verify/`，无需从截断的终端输出推断结果。
+## Verification and contributions
 
-## 仓库结构
+Select the smallest checks that prove your change using the [verification guide](docs/verification/quick-verification.md). There is currently no CI; verification runs locally. Environment-dependent tests may be skipped unless their prerequisites are explicitly enabled.
 
-```text
-apps/          Host 与应用入口
-server/        Kernel、Contracts、SDK、平台能力与后端模块
-frontend/      Shell、前端 SDK/UI、组件声明、metadata 与前端模块
-tests/         单元、集成与 Acceptance 验证
-docs/          当前文档入口、Context 与 ADR
-scripts/       可复跑的开发和验证入口
-```
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change and [SECURITY.md](SECURITY.md) for security reporting.
 
-新增内建模块优先使用：
+## License
 
-```powershell
-pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
-```
-
-模块身份、版本和依赖由 `<组件源码根>/newp.plugin.json` 拥有；metadata 拥有路由、菜单、权限引用和模型；后端与前端代码只绑定稳定 behavior key。完整边界见[组件化护栏](docs/architecture/componentization-guardrails.md)。
+NewP-authored code is available under the [MIT License](LICENSE). Third-party dependencies retain their own licenses; inspect their notices before redistributing a combined artifact.

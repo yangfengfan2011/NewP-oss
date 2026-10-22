@@ -1,0 +1,7 @@
+interface:
+  display_name: "Batch Grill With Docs"
+  short_description: "Batch dependency-aware questions and update domain docs"
+  default_prompt: "Use $batch-grill-with-docs to stress-test this plan in dependency-aware rounds and update domain documentation."
+
+policy:
+  allow_implicit_invocation: false

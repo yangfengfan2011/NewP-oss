@@ -1,0 +1,456 @@
+import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
+import { useStandardCrudActionEntry } from '../standard-crud/useStandardCrudActionEntry';
+import { resolvedFeaturePosition } from '../authorization/featurePlacementResolver';
+import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { formatRequestError, useLocalization } from '@icp-platform/core';
+import {
+  ModuleRegistry,
+  isStandardCrudRecord,
+  StandardCrudRequestError,
+  createStandardCrudOperationResultPresenterRegistry,
+  type StandardCrudFieldDefinition,
+  type StandardCrudResourceRegistration,
+  type StandardCrudOperationResult,
+  type ActionDataAccessRequirement,
+} from '@icp-platform/sdk';
+import { ErrorState, LoadingState } from '@icp-platform/ui/core';
+import { CrudLocaleProvider } from '@icp-platform/ui/crud-detail';
+import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
+import { useOptionalAuth } from '../contexts/AuthContext';
+import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
+import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
+import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
+import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
+import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQuery';
+import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
+import StandardCrudResolvedDetailSections from '../standard-crud/StandardCrudResolvedDetailSections';
+import {
+  reportStandardCrudDetailDiagnostics,
+  resolveStandardCrudDetailPresentation,
+} from '../standard-crud/standardCrudDetailPresentation';
+import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
+
+import { useStandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
+import { Alert, Button, Space } from 'antd';
+import { EntryNavigationContext } from '../navigation/entryNavigation';
+import { ActionInstanceContext } from '../composition/pageCompositionRuntime';
+import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
+
+type MetadataRecord = Record<string, unknown>;
+
+const StandardCrudDetailEditor = lazy(() => import('./StandardCrudDetailEditor'));
+
+interface StandardCrudDetailPageHostProps {
+  viewKey: string;
+  id: string | null;
+  registration?: StandardCrudResourceRegistration;
+  readSourceKey?: string;
+  readSourceDataAccess?: ActionDataAccessRequirement;
+}
+
+class StandardCrudHostErrorBoundary extends Component<{ children: ReactNode; message: string }, { error: string | null }> {
+  state: { error: string | null } = { error: null };
+
+  static getDerivedStateFromError(error: unknown): { error: string } {
+    return { error: error instanceof Error ? error.message : '标准 CRUD 元数据解析失败' };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error(this.props.message, error, info);
+  }
+
+  render(): ReactNode {
+    if (this.state.error) {
+      return <ErrorState message={`${this.props.message}：${this.state.error}`} />;
+    }
+
+    return this.props.children;
+  }
+}
+
+function findStandardCrudModelDocument(modelDocuments: MetadataRecord[], modelKey: unknown): MetadataRecord {
+  if (typeof modelKey !== 'string' || modelKey.trim().length === 0) {
+    return { fields: [] };
+  }
+
+  const document = modelDocuments.find((item) => item?.type === 'model' && Object.prototype.hasOwnProperty.call(item, modelKey));
+  const model = document?.[modelKey];
+  return typeof model === 'object' && model !== null && !Array.isArray(model) ? (model as MetadataRecord) : { fields: [] };
+}
+
+function localizeStandardCrudFields(
+  fields: StandardCrudFieldDefinition[],
+  dicKey: string,
+  t: (key: string, fallback?: string) => string,
+): StandardCrudFieldDefinition[] {
+  return fields.map((field) => {
+    const placeholder = t(`${dicKey}.${field.labelKey}_Placeholder`, '');
+
+    return {
+      ...field,
+      labelKey: t(`${dicKey}.${field.labelKey}`, field.labelKey),
+      placeholder: placeholder.length > 0 ? placeholder : field.placeholder,
+    };
+  });
+}
+
+function toDictionaryBlockKey(blockKey: string): string {
+  if (blockKey.length === 0) {
+    return blockKey;
+  }
+
+  return `Block_${blockKey.charAt(0).toUpperCase()}${blockKey.slice(1)}`;
+}
+
+function readMetadataString(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+}
+
+
+export default function StandardCrudDetailPageHost({
+  viewKey,
+  id,
+  registration: loadedRegistration,
+  readSourceKey,
+  readSourceDataAccess,
+}: StandardCrudDetailPageHostProps): ReactElement {
+  const { t } = useLocalization();
+  const runtimeMetadata = useRuntimeMetadata();
+  const viewDocument = resolveDetailViewDocument(runtimeMetadata?.viewDocuments ?? [], viewKey);
+  const registration = loadedRegistration
+    ?? buildStandardCrudRegistry(ModuleRegistry.getAllModules()).findByDetailViewKey(viewKey);
+
+  if (!id) {
+    return <ErrorState message={t('Platform.ResourceIdMissing', '当前地址中没有有效的资源标识。')} />;
+  }
+
+  if (!viewDocument) {
+    return <div className="sh-error-state">{t('Platform.DetailMetadataMissing', '未找到详情视图元数据')}</div>;
+  }
+
+  if (!registration) {
+    return <div className="sh-error-state">{t('Platform.CrudRegistrationMissing', '未找到标准 CRUD 前端资源注册项')}</div>;
+  }
+
+  return (
+    <StandardCrudHostErrorBoundary message={`标准 CRUD 详情元数据解析失败（${viewKey}）`}>
+    <CrudLocaleProvider><StandardCrudDetailPageContent
+      id={id}
+      view={viewDocument.view as Record<string, unknown>}
+      registration={registration}
+      readSourceKey={readSourceKey}
+      readSourceDataAccess={readSourceDataAccess}
+      viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
+      modelDocuments={runtimeMetadata?.modelDocuments ?? []}
+    /></CrudLocaleProvider>
+    </StandardCrudHostErrorBoundary>
+  );
+}
+
+function StandardCrudDetailPageContent<TDetail>({
+  id,
+  view,
+  registration: sourceRegistration,
+  readSourceKey,
+  readSourceDataAccess,
+  viewDocuments,
+  modelDocuments,
+}: {
+  id: string;
+  readSourceKey?: string;
+  readSourceDataAccess?: ActionDataAccessRequirement;
+  view: Record<string, unknown>;
+  registration: StandardCrudResourceRegistration<Record<string, string>, Record<string, unknown>, TDetail>;
+  viewDocuments: MetadataRecord[];
+  modelDocuments: MetadataRecord[];
+}): ReactElement {
+  const registration = useLocalizedStandardCrudRegistration(sourceRegistration);
+  const runtimeMetadata = useRuntimeMetadata();
+  const { t } = useLocalization();
+  // 详情宿主从不拥有地址；独立路由下也传 null。
+  const host = useStandardCrudHostEnvironment(null);
+  const actionInstance = useContext(ActionInstanceContext);
+  const readOnly = readSourceKey !== undefined;
+  const entryNavigation = useContext(EntryNavigationContext);
+  const sources = ModuleRegistry.getAllModules().flatMap(module => module.standardCrudDetailReadSources ?? [])
+    .filter(source => source.key === readSourceKey && source.resourceKeys.includes(registration.resourceKey));
+  const sourceNavigations = readOnly && sources.length === 1 ? sources[0].navigationContributions ?? [] : [];
+  const [sourceNavigationFailure, setSourceNavigationFailure] = useState<{ identity: string; error: unknown }>();
+  const features = useFeaturePlacement();
+  const readResolution = features.read();
+  const readPosition = features.placement ? resolvedFeaturePosition(readResolution) : undefined;
+  const editResolution = features.action('edit', 'detail.pageActions');
+  const composed = host.presentation.kind !== 'workspace' || host.presentation.composed;
+  const auth = useOptionalAuth();
+  const sessionTimeZoneId = auth?.user?.timeZoneId;
+  const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
+  const dataAdapter = registration.dataAdapter;
+  const operationResultPresenterRegistry = useMemo(
+    () => createStandardCrudOperationResultPresenterRegistry(registration.operationResultPresenters ?? []),
+    [registration.operationResultPresenters],
+  );
+  const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
+  const formSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
+    mode: 'edit',
+    enumOptions: registration.enumOptions ?? {},
+    lookupProviders: registration.lookupProviders ?? [],
+    timeZoneId: sessionTimeZoneId,
+  }), [modelDocument, registration.enumOptions, registration.lookupProviders, sessionTimeZoneId]);
+  const editFields = useMemo(
+    () => localizeStandardCrudFields(formSchema.fields, dicKey, t),
+    [formSchema.fields, dicKey, t],
+  );
+  const [editing, setEditing] = useState(false);
+  // 自定义读取来源只能消费本次PageRef声明，不能借目标独立详情的资格。
+  const sourceBound = typeof readSourceDataAccess?.id === 'string' && readSourceDataAccess.id.length > 0;
+  const readDataAccess = readOnly ? (sourceBound ? readSourceDataAccess : undefined) : view.dataAccess as ActionDataAccessRequirement | undefined;
+  const editDataAccess = (Array.isArray(view.pageActions) ? view.pageActions : [])
+    .find((action: { standardAction?: string }) => action.standardAction === 'edit')?.dataAccess as ActionDataAccessRequirement | undefined;
+  const lookupDataAccess = useMemo(() => Object.fromEntries(Object.entries(isStandardCrudRecord(view.lookupBindings) ? view.lookupBindings : {}).flatMap(([key, value]) => {
+    const dataAccess = isStandardCrudRecord(value) ? value.dataAccess as ActionDataAccessRequirement | undefined : undefined;
+    return dataAccess ? [[key, dataAccess]] : [];
+  })), [view.lookupBindings]);
+  const [editorDetail, setEditorDetail] = useState<{ id: string; detail: { fields: Record<string, unknown> } } | null>(null);
+  const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
+  const detailQuery = useStandardCrudDetailQuery({
+    resourceKey: registration.resourceKey,
+    id,
+    enabled: !readOnly || sourceBound,
+    dataAdapter,
+    featurePosition: readPosition,
+    dataAccess: readDataAccess,
+    queryScope: host.input.queryScope,
+    readSourceKey,
+  });
+
+  useEffect(() => {
+    setEditing(false);
+    setEditorDetail(null);
+  }, [id]);
+
+  const currentNormalizedDetail = detailQuery.detail?.normalized ?? null;
+  // 编辑草稿拥有独立子树；locale 读取换代只更新可信快照，不卸载编辑或重建输入。
+  useEffect(() => {
+    if (editing && currentNormalizedDetail) setEditorDetail({ id, detail: currentNormalizedDetail });
+  }, [currentNormalizedDetail, editing, id]);
+  const schema = useMemo(
+    () => resolveStandardCrudDetailSchema(viewDocuments, registration, { modelDocuments }),
+    [modelDocuments, registration, viewDocuments],
+  );
+  const detailFeatureActions = useMemo(() => {
+    if (!features.placement || !Array.isArray(view.featureActions)) return undefined;
+    return Object.fromEntries(view.featureActions.flatMap((action) => {
+      if (typeof action !== 'object' || action === null || Array.isArray(action)) return [];
+      const key = (action as Record<string, unknown>).key;
+      if (typeof key !== 'string') return [];
+      const resolution = features.action(key, 'detail.custom');
+      return resolution.kind === 'unresolved'
+        ? []
+        : [[key, { position: resolution.position, allowed: resolution.kind === 'allowed', buttonId: (action as Record<string, unknown>).buttonId as string | undefined, dataAccess: (action as Record<string, unknown>).dataAccess as ActionDataAccessRequirement | undefined }]];
+    }));
+  }, [features, view.featureActions]);
+  const presentation = useMemo(() => currentNormalizedDetail
+    ? resolveStandardCrudDetailPresentation({ schema, fields: currentNormalizedDetail.fields, expectedId: id })
+    : null, [currentNormalizedDetail, id, schema]);
+  const readyPresentation = presentation?.kind === 'ready' ? presentation : null;
+  const interactionIdentity = JSON.stringify([registration.resourceKey, view.key, id, readPosition, host.input.queryScope, readSourceKey,
+    auth?.user?.id, auth?.isAuthenticated, auth?.permissionEpoch,
+    [...(auth?.user?.featurePositions ?? [])].sort(), readDataAccess?.id, detailFeatureActions]);
+  const [interactionSnapshot, setInteractionSnapshot] = useState<{
+    identity: string;
+    detail: NonNullable<typeof detailQuery.detail>;
+    presentation: NonNullable<typeof readyPresentation>;
+  } | null>(null);
+  const mayPresentInteraction = (!auth || auth.isAuthenticated)
+    && (!features.placement || readResolution.kind === 'allowed')
+    && !detailQuery.error && presentation?.kind !== 'fatal';
+  const currentInteraction = useMemo(() => mayPresentInteraction && readyPresentation && detailQuery.detail
+    ? { detail: detailQuery.detail, presentation: readyPresentation } : null,
+  [mayPresentInteraction, readyPresentation, detailQuery.detail]);
+  // 摘要与动作包含模块拥有的交互草稿。只在同一记录和权限边界的重读期间保留实例；
+  // 新成功结果仍原样交给 renderer，拒绝、不可用及身份变化不能沿用旧授权数据。
+  useEffect(() => {
+    if (currentInteraction) setInteractionSnapshot({ identity: interactionIdentity, ...currentInteraction });
+    else if (!mayPresentInteraction || !detailQuery.loading) setInteractionSnapshot(null);
+  }, [currentInteraction, interactionIdentity, mayPresentInteraction, detailQuery.loading]);
+  const presentedInteraction = currentInteraction
+    ?? (mayPresentInteraction && detailQuery.loading && interactionSnapshot?.identity === interactionIdentity
+      ? interactionSnapshot : null);
+  const presentedSummaries = presentedInteraction?.detail.normalized.summaries;
+
+  useEffect(() => {
+    if (!presentation) return;
+    reportStandardCrudDetailDiagnostics(
+      schema,
+      presentation.kind === 'fatal' ? [presentation.diagnostic] : presentation.diagnostics,
+    );
+  }, [presentation, schema]);
+
+  const detailSectionPages = readyPresentation ? (
+    <StandardCrudResolvedDetailSections
+      presentation={readyPresentation}
+      allowContributions={!readOnly}
+      registration={registration}
+      textFor={(key, fallback) => t(`${schema.dicKey}.${key}`, fallback)}
+    />
+  ) : null;
+  const refresh = detailQuery.refresh;
+  const embeddedRefreshVersion = host.sync.refreshVersion;
+  const consumedRefreshVersion = useRef(0);
+  useEffect(() => {
+    if (!embeddedRefreshVersion || consumedRefreshVersion.current === embeddedRefreshVersion) return;
+    // 先消费组合通知；查询快照更新产生的新 refresh 函数不能重放同一次读取。
+    consumedRefreshVersion.current = embeddedRefreshVersion;
+    refresh();
+  }, [embeddedRefreshVersion, refresh]);
+  const detailActionHandlers = useMemo(() => ({
+    ...registration.actionHandlers,
+    edit: () => {
+      setEditorDetail(currentNormalizedDetail ? { id, detail: currentNormalizedDetail } : null);
+      setEditing(true);
+    },
+  }), [currentNormalizedDetail, id, registration.actionHandlers]);
+  const showLoading = detailQuery.loading;
+  // 背景刷新保留 Action Execution 子树及其冲突反馈，同时禁用旧快照上的再次操作。
+  // 来源读取成功后只展示已登记导航；该入口不恢复普通 EID 贡献或任何写入、摘要交互。
+  const entryCheck = useStandardCrudActionEntry(interactionIdentity);
+  const sourceNavigationActions = currentInteraction && !detailQuery.loading && !detailQuery.refreshing && entryNavigation
+    ? sourceNavigations.flatMap(contribution => {
+      const targets = runtimeMetadata?.navDocuments.flatMap(document => document.navigation.items)
+        .filter(item => item.key === contribution.navigationKey && item.routeOnly === true && item.path && item.page) ?? [];
+      const resolution = features.navigation(contribution.navigationKey);
+      if (targets.length !== 1 || resolution.kind !== 'allowed' || !resolution.position.trim()) return [];
+      return [<Button key={contribution.key} loading={entryCheck.pendingKey === contribution.key} disabled={entryCheck.pendingKey !== null} onClick={() => {
+        try {
+          const parameters = contribution.getParameters(registration.resourceKey, id, { queryScope: host.input.queryScope, featurePosition: readPosition });
+          if (!isStandardCrudRecord(parameters) || typeof parameters.then === 'function' || Object.keys(parameters).some(key => ['url', 'href', 'path', 'featurePosition', 'sourceFeaturePosition'].includes(key))
+            || Object.values(parameters).some(value => typeof value !== 'string'))
+            throw new StandardCrudRequestError('当前操作不可用。', 400, {}, { reasonKey: 'Platform.ActionUnavailable' });
+          // 通过只读进入检查后交给原导航guard；不注册mutation，也不借来源read位置发履历请求。
+          const reference = contribution.dataActionReference;
+          const definition = reference ? runtimeMetadata?.viewDocuments.find(document => document.view.key === reference.viewKey)?.view[reference.surface] : undefined;
+          const action = reference && Array.isArray(definition) ? definition.find(item => item.key === reference.actionKey) as import('@icp-platform/sdk').StandardCrudActionDefinition | undefined : undefined;
+          if (reference && !action?.dataAccess?.id) throw new StandardCrudRequestError('动作数据声明不可用。', 400);
+          void entryCheck.enter(contribution.key, { instance: actionInstance, id, action,
+            queryScope: host.input.queryScope, featurePosition: resolution.position }, contribution.precheck,
+          () => entryNavigation({ entryKey: contribution.navigationKey, parameters: { ...parameters } }));
+        } catch (error) { setSourceNavigationFailure({ identity: interactionIdentity, error }); }
+      }}>{t(contribution.labelKey, contribution.labelKey)}</Button>];
+    }) : [];
+  const detailHeaderActions = !readOnly && presentedInteraction
+    ? presentedInteraction.presentation.pageActions.length > 0
+      ? (
+        <StandardCrudActions
+          key={interactionIdentity}
+          resourceKey={registration.resourceKey}
+          onCommitted={host.sync.committed}
+          actions={presentedInteraction.presentation.pageActions.map((action) => ({
+            ...action,
+            labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
+            runtimeDisabled: detailQuery.loading || detailQuery.refreshing || action.disabled,
+            disabledReason: action.disabledReasonKey
+              ? t(`${schema.dicKey}.${action.disabledReasonKey}`, action.disabledReasonKey)
+              : undefined,
+            confirmMessage: action.confirmMessageKey
+              ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
+              : undefined,
+            confirmLabel: action.confirmLabelKey
+              ? t(`${schema.dicKey}.${action.confirmLabelKey}`, action.confirmLabelKey)
+              : undefined,
+          }))}
+          featureResolutionForAction={(action) => action.navigationTargetKey
+            ? features.navigation(action.navigationTargetKey)
+            : features.action(action.key, 'detail.pageActions')}
+          handlers={detailActionHandlers}
+          actionInputs={registration.actionInputRenderers}
+          actionStateResolver={registration.actionStateResolver}
+          actionEligibilityResolvers={registration.actionEligibilityResolvers}
+          actionPrechecks={registration.actionPrechecks}
+          onResult={(result) => {
+            if (operationResultPresenterRegistry.resolve(result)) setPresentedOperationResult(result);
+          }}
+          refresh={refresh}
+          context={{ id, detail: presentedInteraction.detail.value as TDetail, queryScope: host.input.queryScope, instance: actionInstance,
+            dataAccessDeclarations: runtimeMetadata?.manifest.modules.flatMap(module => module.dataAccess ?? []) }}
+        />
+      )
+      : undefined
+    : undefined;
+
+  if (readOnly && !sourceBound) return <ErrorState message={t('Platform.PageContextInvalid', '页面配置或上下文无效。')} />;
+
+  return (
+    <>
+      {presentedOperationResult
+        ? operationResultPresenterRegistry.resolve(presentedOperationResult)?.render({
+            result: presentedOperationResult,
+            close: () => setPresentedOperationResult(null),
+          })
+        : null}
+      <div className={composed ? undefined : "sh-page"}>
+      {sourceNavigationActions.length > 0 && <Space wrap>{sourceNavigationActions}</Space>}
+      {entryCheck.pendingKey && <div role="status">{t('Platform.Processing', '处理中...')}<Button onClick={entryCheck.cancel}>{t('Platform.Cancel', '取消')}</Button></div>}
+      {entryCheck.failure !== undefined && <Alert type="error" message={formatRequestError(entryCheck.failure, t)} />}
+      {sourceNavigationFailure?.identity === interactionIdentity && <Alert type="error" message={formatRequestError(sourceNavigationFailure.error, t)} />}
+      {!composed && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
+
+      <div className="sh-page-stack">
+      {!readOnly && presentedSummaries && <StandardCrudSummaryBlocks
+        key={interactionIdentity}
+        blocks={schema.summaryBlocks}
+        summaries={presentedSummaries}
+        renderers={registration.summaryRenderers}
+        featureActions={detailFeatureActions}
+        dataAccess={readDataAccess}
+        titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
+      />}
+      {showLoading ? (
+        <LoadingState message={t('Platform.LoadingDetail', '正在加载详情...')} />
+      ) : detailQuery.error ? (
+        <ErrorState>
+          <span>{detailQuery.error}</span>
+          <button type="button" className="sh-btn sh-btn-primary" onClick={detailQuery.retry}>{t('Platform.Retry', '重试')}</button>
+        </ErrorState>
+      ) : presentation?.kind === 'fatal' ? (
+        <ErrorState message={t('Platform.DetailContractFailed', '详情数据契约失败：{code}', { code: presentation.diagnostic.code })} />
+      ) : currentNormalizedDetail && readyPresentation ? (
+        <div className="sh-page-stack">
+          {detailSectionPages}
+
+        </div>
+      ) : (
+        <ErrorState message={t('Platform.DetailNotFound', '未找到详情。')} />
+      )}
+          {!readOnly && editing && !detailQuery.error && editorDetail?.id === id && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
+            <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingEditor', '正在加载编辑表单…')}</div>}>
+              <StandardCrudDetailEditor
+                key={id}
+                id={id}
+                resourceKey={schema.resourceKey}
+                featurePosition={resolvedFeaturePosition(editResolution)}
+                dataAccess={editDataAccess}
+                lookupDataAccess={lookupDataAccess}
+                detail={editorDetail.detail}
+                reading={detailQuery.loading || detailQuery.refreshing}
+                fields={editFields}
+                sections={formSchema.sections}
+                registration={registration}
+                onSaved={() => {
+                  setEditing(false);
+                }}
+                onRefresh={refresh}
+                onReload={detailQuery.reload}
+                onResult={(result) => {
+                  if (operationResultPresenterRegistry.resolve(result)) {
+                    setPresentedOperationResult(result);
+                  }
+                }}
+                titleForSection={(sectionTitleKey) => t(`${schema.dicKey}.${sectionTitleKey}`, sectionTitleKey)}
+              />
+            </Suspense>
+          ) : null}
+      </div>
+      </div>
+    </>
+  );
+}

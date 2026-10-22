@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Crud</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\modules\Platform\Authorization\Contracts\Authorization.Contracts.csproj" />
+    <ProjectReference Include="..\modules\Platform\Audit\Contracts\Audit.Contracts.csproj" />
+    <ProjectReference Include="..\platform-authorization\PlatformAuthorization.csproj" />
+    <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\platform-presentation\PlatformPresentation.csproj" />
+    <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
+    <ProjectReference Include="..\platform-query\PlatformQuery.csproj" />
+    <ProjectReference Include="..\plugin-contracts\Plugin.Contracts.csproj" />
+    <ProjectReference Include="..\sdk\Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>PlatformCrud.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

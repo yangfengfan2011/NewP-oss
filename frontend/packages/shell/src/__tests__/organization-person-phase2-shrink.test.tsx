@@ -1,0 +1,104 @@
+import { describe, expect, it } from 'vitest';
+import { createObjectAuthorizationActions } from '../../../ui/src/objectAuthorizationActions';
+import { mapPersonDetailView, mapPersonListItem } from '../../../../modules/platform/organization/src/services/organizationService';
+import { personStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource';
+import personListViewDocument from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
+import personDetailViewDocument from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
+import organizationNavDocument from '../../../../modules/platform/organization/metadata/navigation/Organization.nav.json';
+
+describe('organization person standard CRUD phase 2 registration', () => {
+  it('shrinks registration to metadata-first runtime hooks only', () => {
+    expect(personStandardCrudResource.fields).toBeUndefined();
+    expect(personStandardCrudResource.formSections).toBeUndefined();
+    expect(personStandardCrudResource.buildColumns).toBeUndefined();
+    expect(personStandardCrudResource.buildMutationValues).toBeUndefined();
+    expect(personStandardCrudResource.lookupProviders?.map((provider) => provider.key)).toEqual([
+      'organization.companies',
+      'organization.departments',
+      'organization.positions',
+    ]);
+    expect(Object.keys(personStandardCrudResource.summaryRenderers ?? {})).toEqual(['userBinding', 'authorizationSummary']);
+    const authorization = createObjectAuthorizationActions('organization.person', () => ({ title: 'Person' }));
+    expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual([...Object.keys(authorization.actionHandlers), 'delete', 'disable', 'enable']);
+  });
+
+  it('uses metadata ownership and exposes one runtime data adapter', () => {
+    const personnelNavigation = organizationNavDocument.navigation.items.find(
+      (item) => item.targetKey === personStandardCrudResource.listViewKey,
+    );
+
+    expect(personStandardCrudResource).not.toHaveProperty('permissions');
+    expect(personnelNavigation).not.toHaveProperty('permissions');
+    expect(personStandardCrudResource).not.toHaveProperty('createEmptyFilters');
+    expect(personStandardCrudResource).not.toHaveProperty('buildListQuery');
+    expect(personStandardCrudResource).not.toHaveProperty('apiRoute');
+    expect(personStandardCrudResource.dataAdapter).toMatchObject({
+      list: expect.any(Function),
+      get: expect.any(Function),
+      create: expect.any(Function),
+      update: expect.any(Function),
+      remove: expect.any(Function),
+      exportList: expect.any(Function),
+      getRowId: expect.any(Function),
+    });
+  });
+
+  it('declares personnel filters, columns, sort whitelist and guarded actions in metadata', () => {
+    const view = personListViewDocument.view;
+    const detailView = personDetailViewDocument.view;
+    const advancedFields = view.advancedFilter.sections.flatMap((section) => section.fields);
+
+    expect(view.query.fields.map((field) => field.key)).toEqual(['keyword', 'employmentStatus']);
+    expect(advancedFields.map((field) => field.key)).toEqual([
+      'birthDateRange', 'companyId', 'departmentId', 'positionId', 'isEnabled',
+    ]);
+    expect(view.columns.map((column) => column.key)).toEqual([
+      'personNo', 'name', 'birthDate', 'companyId', 'departmentName', 'positionName', 'employmentStatus',
+      'employmentStartedAt', 'employmentEndedAt', 'isEnabled',
+    ]);
+    expect(view.columns.filter((column) => column.sortable).map((column) => column.field)).toEqual([
+      'PersonNo', 'ENAME', 'BirthDate', 'EmploymentStatus', 'EmploymentStartedAt', 'EmploymentEndedAt', 'IsEnabled',
+    ]);
+    expect(view.columns.find((column) => column.key === 'name')).toMatchObject({ standardAction: 'view' });
+    expect(view.pageActions.map((action) => action.standardAction)).toEqual(['create']);
+    expect(view.rowActions.find((action) => action.standardAction === 'disable')).toMatchObject({
+      inputKey: 'disableReason',
+    });
+    expect(view.rowActions.find((action) => action.standardAction === 'disable')).not.toHaveProperty('dataDependency');
+    expect(view.rowActions.find((action) => action.standardAction === 'enable')).not.toHaveProperty('dataDependency');
+    expect(detailView.pageActions.find((action) => action.standardAction === 'disable')).toMatchObject({
+      inputKey: 'disableReason',
+    });
+    expect(view.rowActions.find((action) => action.standardAction === 'delete')).toMatchObject({
+      disabledWhen: { field: 'AccountEID', operator: 'notEmpty' },
+    });
+  });
+
+  it('does not present empty employment status as FullTime', () => {
+    const row = mapPersonListItem({
+      EID: 'Person_1',
+      PersonNo: 'P001',
+      ENAME: '张三',
+      EmploymentStatus: null,
+      IsEnabled: true,
+    });
+
+    expect(row.EmploymentStatus).toBe('');
+    expect(row.employmentStatus).toBe('');
+    expect(row.employmentStatusLabel).toBe('');
+
+    const detail = mapPersonDetailView({
+      fields: {
+        EID: 'Person_1',
+        PersonNo: 'P001',
+        ENAME: '张三',
+        EmploymentStatus: null,
+        IsEnabled: true,
+      },
+      summaries: {},
+    });
+
+    expect(detail.employmentStatus).toBe('');
+    expect(detail.employmentStatusLabel).toBe('');
+  });
+});

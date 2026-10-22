@@ -1,0 +1,89 @@
+using System.Security.Claims;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Authorization;
+using ICP.Platform.Authorization.Http;
+using ICP.Platform.Modules.Organization.DTOs;
+using ICP.Platform.Modules.Organization.DTOs.Requests;
+using ICP.Platform.Modules.Organization.Services;
+using ICP.Platform.Persistence.Transactions;
+using ICP.Platform.Sdk.Http;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
+namespace ICP.Platform.Modules.Organization.Controllers;
+
+[ApiController]
+[Route("api/organization/persons")]
+[EndpointModule("Organization")]
+[PlatformRequestValidation]
+public sealed class PersonUserBindingsController(IPersonUserBindingService bindingService, IButtonBusinessExecutor buttons, PersonBindingButtonHandler handler) : ControllerBase
+{
+    /// <summary>绑定动作按其已授权位置搜索候选账号。</summary>
+    [HttpGet("{personEid}/user-binding/candidates")]
+    [RequireFeature("organization.person.linkUser.lookup")]
+    public async Task<ActionResult<IReadOnlyList<PersonUserBindingCandidateDto>>> SearchCandidates(
+        string personEid,
+        [FromQuery] string? query,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Ok(await bindingService.SearchCandidatesAsync(personEid, query, cancellationToken));
+        }
+        catch (PersonUserBindingException exception)
+        {
+            return BindingProblem(exception);
+        }
+    }
+
+    /// <summary>在可信主体的绑定动作授权后执行既有不可逆绑定事务。</summary>
+    [HttpPut("{personEid}/user-binding")]
+    [RequireFeature("organization.person.linkUser"), ButtonBusinessHandler(typeof(PersonBindingButtonHandler))]
+    public async Task<ActionResult<PersonUserBindingDto>> Bind(
+        string personEid,
+        [FromBody] BindPersonUserRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(actorId))
+            {
+                throw new PersonUserBindingException(PersonUserBindingFailureCodes.InvalidActor);
+            }
+
+            return Ok(await buttons.ExecuteAsync(handler, new PersonBindingButtonInput(personEid, request,
+                new PersonUserBindingActor(actorId, HttpContext.TraceIdentifier)), cancellationToken));
+        }
+        catch (PersonUserBindingException exception)
+        {
+            return BindingProblem(exception);
+        }
+        catch (ActionDataAccessException exception)
+        {
+            return ActionDataAccessProblem.ToResult(exception, exception.Code);
+        }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return OrganizationCacheProblem.Create(exception, HttpContext.TraceIdentifier);
+        }
+    }
+
+    // 保留稳定业务错误码，并补所属模块的呈现词条。
+    private ObjectResult BindingProblem(PersonUserBindingException exception)
+    {
+        var status = exception.StatusCode;
+        var problem = new ProblemDetails { Status = status, Title = exception.FailureCode };
+        problem.Extensions["code"] = exception.FailureCode;
+        problem.Extensions["reasonKey"] = $"Organization.Person.{exception.FailureCode}";
+        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
+        if (exception.Current is not null)
+        {
+            problem.Extensions["current"] = exception.Current;
+        }
+
+        var result = StatusCode(status, problem);
+        result.ContentTypes.Add("application/problem+json");
+        return result;
+    }
+}

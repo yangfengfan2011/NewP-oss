@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dataAccess": { "execution": "organization.position.list", "resources": ["organization.position"] },
+    "key": "organization.position.list",
+    "dicKey": "PositionListView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "list",
+    "model": "Position",
+    "resourceKey": "organization.position",
+    "editorMode": "drawer",
+    "detailViewKey": "organization.position.detail",
+    "query": {
+      "fields": [
+        {
+          "key": "keyword",
+          "labelKey": "Query_Keyword",
+          "source": "preset",
+          "preset": "keyword",
+          "operator": "like"
+        },
+        {
+          "key": "isEnabled",
+          "labelKey": "Query_IsEnabled",
+          "source": "model",
+          "field": "IsEnabled",
+          "operator": "="
+        }
+      ],
+      "defaultSort": {
+        "field": "ENAME",
+        "direction": "asc"
+      },
+      "defaultPageSize": 20
+    },
+    "advancedFilter": {
+      "enabled": false,
+      "sections": []
+    },
+    "columns": [
+      {
+        "key": "name",
+        "labelKey": "Column_Name",
+        "source": "model",
+        "field": "ENAME",
+        "standardAction": "view",
+        "sortable": true,
+        "hideable": false,
+        "responsivePriority": "high"
+      },
+      {
+        "key": "description",
+        "labelKey": "Column_Description",
+        "source": "model",
+        "field": "Description",
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "isEnabled",
+        "labelKey": "Column_IsEnabled",
+        "source": "model",
+        "field": "IsEnabled",
+        "sortable": true,
+        "responsivePriority": "high"
+      }
+    ],
+    "pageActions": [
+      {
+        "key": "create",
+        "labelKey": "Action_Create",
+        "standardAction": "create", "dataAccess": { "object": "Position", "actions": ["create"] },
+        "variant": "primary"
+      }
+    ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "organization.position.authorize" }
+    ],
+    "rowActions": [
+      { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "dataAccess": {"object":"Position","actions":["authorize"]}, "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },
+      {
+        "key": "edit",
+        "labelKey": "Action_Edit",
+        "standardAction": "edit", "dataAccess": { "object": "Position", "actions": ["edit"] }
+      },
+      {
+        "key": "delete",
+        "labelKey": "Action_Delete",
+        "standardAction": "delete", "dataAccess": { "object": "Position", "actions": ["delete"] },
+        "variant": "danger",
+        "confirmMessageKey": "Action_Delete_Confirm"
+      }
+    ]
+  }
+}

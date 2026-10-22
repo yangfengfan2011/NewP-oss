@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "IdentityErrors": {
+    "IDENTITY_ECODE_INVALID": {
+      "zhs": "登录账号须为 3–64 个字符，可使用文字、数字、点、下划线、连字符或 @。",
+      "en": "Use 3–64 characters: letters, digits, periods, underscores, hyphens, or @."
+    },
+    "IDENTITY_ENAME_INVALID": {
+      "zhs": "显示名称不能为空，且不能超过 128 个字符。",
+      "en": "Enter a display name of no more than 128 characters."
+    },
+    "IDENTITY_REASON_INVALID": {
+      "zhs": "操作原因不能为空，且不能超过 500 个字符。",
+      "en": "Enter an operation reason of no more than 500 characters."
+    },
+    "IDENTITY_ECODE_CONFLICT": {
+      "zhs": "登录账号已被使用，不能重复创建。",
+      "en": "This account code is already in use."
+    },
+    "IDENTITY_ACCOUNT_NOT_FOUND": {
+      "zhs": "账号不存在，请刷新后核对。",
+      "en": "The account was not found. Refresh and check again."
+    },
+    "IDENTITY_REVISION_CONFLICT": {
+      "zhs": "账号已发生变化，请刷新最新安全状态并重新确认。",
+      "en": "The account has changed. Refresh its security state and confirm again."
+    },
+    "IDENTITY_STATUS_TARGET_INVALID": {
+      "zhs": "目标账号状态无效。",
+      "en": "The target account status is invalid."
+    },
+    "IDENTITY_ACCOUNT_DELETED": {
+      "zhs": "已删除账号处于不可恢复终态，不能执行该操作。",
+      "en": "This account has been permanently deleted. The operation is unavailable."
+    },
+    "IDENTITY_LOCAL_ADMIN_PROTECTED": {
+      "zhs": "本地管理员账号受保护，不能执行该操作。",
+      "en": "The local administrator account is protected from this operation."
+    },
+    "IDENTITY_PERSONNEL_BOUND": {
+      "zhs": "账号已绑定人员，只能停用，不能删除。",
+      "en": "This account is bound to a person. It can be disabled but cannot be deleted."
+    },
+    "IDENTITY_PERSONNEL_DISABLE_HOLD": {
+      "zhs": "存在人员停用阻断，不能启用账号。",
+      "en": "This account cannot be enabled while the linked person is disabled."
+    },
+    "IDENTITY_ACTOR_INVALID": {
+      "zhs": "当前操作者无效，请重新登录后重试。",
+      "en": "The current actor is invalid. Sign in again and retry."
+    },
+    "IDENTITY_PERSON_REFERENCE_INVALID": {
+      "zhs": "人员引用无效，请刷新后核对。",
+      "en": "The person reference is invalid. Refresh and check again."
+    },
+    "IDENTITY_QUERY_INVALID": {
+      "zhs": "账号查询条件无效，请调整后重试。",
+      "en": "The account query is invalid. Adjust the filters and retry."
+    },
+    "StatusDirectionMismatch": {
+      "zhs": "目标状态与当前动作不一致。",
+      "en": "The target status does not match this action."
+    }
+  }
+}

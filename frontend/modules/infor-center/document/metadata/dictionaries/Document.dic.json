@@ -1,0 +1,156 @@
+{
+  "Document": {
+    "HistoryOwnershipTransferred": { "zhs": "转交对象归属", "en": "Object ownership transferred" },
+    "Information": { "zhs": "属性", "en": "Properties" },
+    "Permissions": { "zhs": "权限", "en": "Permissions" },
+    "InitializeOwnership": { "zhs": "补齐归属", "en": "Initialize ownership" },
+    "OwnershipPendingObjects": { "zhs": "待补齐归属", "en": "Missing ownership" },
+    "Field_OwnerId": { "zhs": "所属人", "en": "Owner" },
+    "Field_OwnerDepartmentId": { "zhs": "所属部门", "en": "Owning department" },
+    "Files": { "zhs": "文件", "en": "Files" },
+    "Block_Files": { "zhs": "文件", "en": "Files" },
+    "Download": { "zhs": "下载", "en": "Download" },
+    "MainFile": { "zhs": "主文件", "en": "Main file" },
+    "Attachment": { "zhs": "附件", "en": "Attachment" },
+    "Attachments": { "zhs": "附件", "en": "Attachments" },
+    "SelectAttachments": { "zhs": "选择附件", "en": "Choose attachments" },
+    "RemoveAttachment": { "zhs": "移除附件", "en": "Remove attachment" },
+    "RetryUpload": { "zhs": "重试上传", "en": "Retry upload" },
+    "UploadQueued": { "zhs": "等待上传", "en": "Waiting to upload" },
+    "AttachmentStaged": { "zhs": "附件已上传，保存后生效。", "en": "Attachment uploaded. Save to create the document." },
+    "TooManyAttachments": { "zhs": "最多可选择100个附件。", "en": "Select at most 100 attachments." },
+    "UploadProgress": { "zhs": "上传进度", "en": "Upload progress" },
+    "Staged": { "zhs": "主文件已上传，保存后生效。", "en": "Main file uploaded. Save to create the document." },
+    "CancelUpload": { "zhs": "取消上传", "en": "Cancel upload" },
+    "SaveOutcomeUnknown": { "zhs": "保存结果尚未确认，请关闭后刷新列表核对；本次文件不会自动取消或重复保存。", "en": "Save outcome is unknown. Close and refresh the list to check; these files will not be cancelled or saved again automatically." },
+    "FilesLoading": { "zhs": "文件加载中", "en": "Loading files" },
+    "RetryFiles": { "zhs": "重试读取", "en": "Retry reading" },
+    "NoFiles": { "zhs": "暂无文件", "en": "No files" },
+    "FileRole": { "zhs": "用途", "en": "Role" },
+    "FileName": { "zhs": "文件名", "en": "File name" },
+    "FileLength": { "zhs": "字节数", "en": "Bytes" },
+    "InvalidUploadSet": { "zhs": "请选择一个有效主文件，附件须符合数量限制且不能重复。", "en": "Select one valid main file and distinct attachments within the configured limit." },
+    "ExtensionNotAllowed": { "zhs": "该文件扩展名不允许用于图文档。", "en": "This file extension is not allowed for documents." },
+    "DownloadDenied": { "zhs": "无权下载此图文档的文件。", "en": "Downloading this document file is not allowed." },
+    "Title": {
+      "en": "Documents",
+      "zhs": "图文档"
+    },
+    "Code": {
+      "en": "Code",
+      "zhs": "编码"
+    },
+    "Name": {
+      "en": "Name",
+      "zhs": "名称"
+    },
+    "Keyword": {
+      "en": "Code or name",
+      "zhs": "编码或名称"
+    },
+    "Keyword_Placeholder": {
+      "en": "Search by code or name",
+      "zhs": "按编码或名称搜索"
+    },
+    "Create": {
+      "en": "New document",
+      "zhs": "新建图文档"
+    },
+    "Drawer_Create": {
+      "en": "New document",
+      "zhs": "新建图文档"
+    },
+    "DetailTitle": {
+      "en": "Document properties",
+      "zhs": "图文档属性"
+    },
+    "Basic": {
+      "en": "Basic information",
+      "zhs": "基本信息"
+    },
+    "Audit": {
+      "en": "Audit information",
+      "zhs": "审计信息"
+    },
+    "OpenProperties": {
+      "en": "Open properties",
+      "zhs": "打开属性"
+    },
+    "Authorize": {
+      "en": "Object authorization",
+      "zhs": "对象授权"
+    },
+    "Field_ECODE": {
+      "en": "Code",
+      "zhs": "编码"
+    },
+    "Field_ENAME": {
+      "en": "Name",
+      "zhs": "名称"
+    },
+    "Field_Description": {
+      "en": "Description",
+      "zhs": "说明"
+    },
+    "Field_CreatedBy": {
+      "en": "Created by",
+      "zhs": "创建人"
+    },
+    "Field_CreatedAt": {
+      "en": "Created at",
+      "zhs": "创建时间"
+    },
+    "Field_UpdatedBy": {
+      "en": "Updated by",
+      "zhs": "更新人"
+    },
+    "Field_UpdatedAt": {
+      "en": "Updated at",
+      "zhs": "更新时间"
+    },
+    "CodeDuplicated": {
+      "en": "Document code must be unique.",
+      "zhs": "图文档编码必须唯一。"
+    },
+    "DescriptionTooLong": {
+      "en": "Description must not exceed 500 characters.",
+      "zhs": "说明最多 500 字。"
+    },
+    "CodeRequired": {
+      "zhs": "编码不能为空。",
+      "en": "Code is required."
+    },
+    "NameRequired": {
+      "zhs": "名称不能为空。",
+      "en": "Name is required."
+    },
+    "SelectMainFile": {
+      "zhs": "选择主文件",
+      "en": "Choose main file"
+    },
+    "NoMainFile": {
+      "zhs": "尚未选择主文件",
+      "en": "No main file selected"
+    },
+    "Uploading": {
+      "zhs": "正在上传…",
+      "en": "Uploading…"
+    },
+    "History": {
+      "zhs": "履历",
+      "en": "History"
+    },
+    "HistoryCreated": {"zhs": "创建对象", "en": "Object created"},
+    "HistoryUpdated": {"zhs": "修改对象", "en": "Object updated"},
+    "HistoryDeleted": {"zhs": "删除对象", "en": "Object deleted"},
+    "HistoryOwnershipInitialized": {"zhs": "初始化对象归属", "en": "Object ownership initialized"},
+    "HistoryOwnershipBackfilled": {"zhs": "补齐对象归属", "en": "Object ownership backfilled"},
+    "HistoryIterationInitialized": {"zhs": "初始化初版", "en": "Initial iteration initialized"},
+    "HistoryFilesCreated": {"zhs": "建立文件关联", "en": "File associations created"},
+    "HistoryFilesCopied": {"zhs": "复制文件关联", "en": "File associations copied"},
+    "HistoryFilesReleased": {"zhs": "释放文件关联", "en": "File associations released"},
+    "Transfer": { "zhs": "转交", "en": "Transfer" }
+  },
+  "type": "dic",
+  "schemaVersion": "1.0"
+}

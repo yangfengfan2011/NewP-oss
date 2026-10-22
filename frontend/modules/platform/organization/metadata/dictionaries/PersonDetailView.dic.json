@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "PersonDetailView": {
+    "Title": {
+      "zhs": "人员详情",
+      "en": "Person Detail"
+    },
+    "Description": {
+      "zhs": "查看并维护人员基础信息与摘要块。",
+      "en": "View and manage person master data and summary blocks."
+    },
+    "Section_Basic": {
+      "zhs": "基础信息",
+      "en": "Basic"
+    },
+    "Section_Organization": {
+      "zhs": "组织信息",
+      "en": "Organization"
+    },
+    "Section_Employment": {
+      "zhs": "任职信息",
+      "en": "Employment"
+    },
+    "Section_Audit": {
+      "zhs": "审计信息",
+      "en": "Audit"
+    },
+    "Field_PersonNo": {
+      "zhs": "人员编号",
+      "en": "Person No."
+    },
+    "Field_ENAME": {
+      "zhs": "姓名",
+      "en": "Name"
+    },
+    "Field_BirthDate": {
+      "zhs": "出生日期",
+      "en": "Birth Date"
+    },
+    "Field_CompanyId": {
+      "zhs": "所属公司",
+      "en": "Company"
+    },
+    "Field_DepartmentId": {
+      "zhs": "所属部门",
+      "en": "Department"
+    },
+    "Field_PositionId": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
+    "Field_EmploymentStatus": {
+      "zhs": "任职状态",
+      "en": "Employment Status"
+    },
+    "Field_EmploymentStartedAt": {
+      "zhs": "任职开始时间",
+      "en": "Employment Started At"
+    },
+    "Field_EmploymentEndedAt": {
+      "zhs": "任职结束时间",
+      "en": "Employment Ended At"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Field_CreatedBy": {
+      "zhs": "创建人",
+      "en": "Created By"
+    },
+    "Field_CreatedAt": {
+      "zhs": "创建时间",
+      "en": "Created At"
+    },
+    "Field_UpdatedBy": {
+      "zhs": "更新人",
+      "en": "Updated By"
+    },
+    "Field_UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "Updated At"
+    },
+    "Block_UserBinding": {
+      "zhs": "账号绑定",
+      "en": "User Binding"
+    },
+    "Block_AuthorizationSummary": {
+      "zhs": "授权摘要",
+      "en": "Authorization Summary"
+    },
+    "Action_Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "Action_Authorize": {
+      "zhs": "人员对象授权",
+      "en": "Person access"
+    },
+    "Action_SaveAuthorization": {
+      "zhs": "保存授权",
+      "en": "Save access"
+    },
+    "Action_Disable": {
+      "zhs": "停用",
+      "en": "Disable"
+    },
+    "Action_Disable_Confirm": {
+      "zhs": "停用会同时停用绑定账号并终止其会话，请填写停用原因。",
+      "en": "Disabling this person also disables the linked account and terminates its sessions. Enter a reason."
+    },
+    "Action_DataUnavailable": {
+      "zhs": "动作所需数据不可用，请刷新详情后重试。",
+      "en": "Required action data is unavailable. Refresh the detail and try again."
+    },
+    "Detail_Info": {
+      "zhs": "详情信息",
+      "en": "Details"
+    },
+    "Action_LinkUser": {
+      "zhs": "绑定用户账号",
+      "en": "Bind user account"
+    }
+  }
+}

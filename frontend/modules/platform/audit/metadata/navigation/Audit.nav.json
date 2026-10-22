@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "audit.changes",
+        "titleKey": "Navigation.BusinessChanges",
+        "icon": "module",
+        "path": "/audit/business-changes",
+        "order": 20,
+        "entryType": "standard-list",
+        "targetKey": "audit.change.list",
+        "localAdministratorOnly": true,
+        "featureAuthorization": true
+      },
+      {
+        "key": "audit.change.detail",
+        "path": "/audit/business-changes/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "audit.change.detail",
+        "localAdministratorOnly": true,
+        "featureOwner": "navigation:audit.changes"
+      }
+    ]
+  }
+}

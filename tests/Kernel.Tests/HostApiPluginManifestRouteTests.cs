@@ -1,0 +1,895 @@
+using ICP.Platform.Testing;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.PluginPlatform.Lifecycle;
+using Microsoft.Data.SqlClient;
+using Xunit;
+
+namespace ICP.Platform.Kernel.Tests;
+
+public class HostApiPluginManifestRouteTests : IAsyncLifetime
+{
+    private readonly UnifiedPluginPackageTestData _testData = new();
+    private readonly List<string> _tempRoots = new();
+    private ReusableSqlServerDatabase? _database;
+
+    [Fact]
+    public void HostApiBuildOutputPath_UsesCurrentKernelTestOutputDirectory()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var releaseTestOutputDirectory = Path.Combine(
+            repositoryRoot,
+            "tests",
+            "Kernel.Tests",
+            "bin",
+            "Release",
+            "net10.0");
+
+        Assert.Equal(
+            Path.Combine(releaseTestOutputDirectory, "HostApi.dll"),
+            ResolveHostApiDllPath(releaseTestOutputDirectory));
+    }
+
+    [Fact]
+    public async Task HostApiStarts_WhenInstalledPluginStateIsMissing_UsingBuiltInModuleFallback()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/swagger/v1/swagger.json");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+    }
+
+    [Fact]
+    public async Task FrontendPluginManifestRoute_ReturnsJson()
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackage();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/frontend-plugin-manifest.json");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+
+        using var document = JsonDocument.Parse(body);
+        Assert.True(document.RootElement.TryGetProperty("plugins", out var plugins));
+        Assert.Equal(JsonValueKind.Array, plugins.ValueKind);
+        Assert.NotEmpty(plugins.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task ActiveModuleRuntimeCatalogRoute_BindsAllCompatibilityProjectionsToOneSnapshot()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var activeResponse = await client.GetAsync("/plugins/active-module-runtime.json");
+        var activeBody = await activeResponse.Content.ReadAsStringAsync();
+        Assert.True(
+            activeResponse.IsSuccessStatusCode,
+            $"Status: {activeResponse.StatusCode}\nBody: {activeBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var active = JsonDocument.Parse(activeBody);
+        var snapshotId = active.RootElement.GetProperty("snapshotId").GetString();
+        var projectionHash = active.RootElement.GetProperty("projections").GetProperty("projectionHash").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(snapshotId));
+        Assert.Equal(active.RootElement.GetProperty("planHash").GetString(), projectionHash);
+        Assert.Contains(
+            active.RootElement.GetProperty("modules").EnumerateArray(),
+            module => module.GetProperty("moduleId").GetString() == "Organization");
+
+        foreach (var route in new[]
+                 {
+                     "/plugins/frontend-plugin-manifest.json",
+                     "/plugins/metadata-runtime-manifest.json",
+                     "/plugins/localization-manifest.json"
+                 })
+        {
+            using var projection = JsonDocument.Parse(await client.GetStringAsync(route));
+            Assert.Equal(snapshotId, projection.RootElement.GetProperty("snapshotId").GetString());
+            Assert.Equal(projectionHash, projection.RootElement.GetProperty("projectionHash").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task ActiveModuleRuntimeCatalog_WhenUsingBuiltIns_ProjectsOnlySupportedFrontendBindings()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/active-module-runtime.json");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var document = JsonDocument.Parse(body);
+        var projectedBindings = document.RootElement
+            .GetProperty("modules")
+            .EnumerateArray()
+            .Where(module => module.TryGetProperty("frontend", out var frontend)
+                && frontend.ValueKind == JsonValueKind.Object)
+            .SelectMany(module => module
+                .GetProperty("frontend")
+                .GetProperty("bindings")
+                .EnumerateArray()
+                .Select(binding => binding.GetString()))
+            .Where(binding => binding is not null)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var expectedBindings = new[]
+        {
+            "audit.change.detail",
+            "audit.change.list",
+            "authorization.dataScope",
+            "authorization.role.detail",
+            "authorization.role.list",
+            "authorization.workbench",
+            "document.document.detail",
+            "document.document.list",
+            "example.record.detail",
+            "example.record.list",
+            "example.runtime-workload.list",
+            "identity.account.detail",
+            "identity.account.list",
+            "organization.company.direct",
+            "organization.company.list",
+            "organization.department.direct",
+            "organization.department.global",
+            "organization.department.list",
+            "organization.node.detail",
+            "organization.person.detail",
+            "organization.person.list",
+            "organization.position.list",
+            "organization.tree.global",
+            "part.part.detail",
+            "part.part.list",
+            "workspace.folder.content",
+            "workspace.folder.list",
+            "workspace.folder.reference",
+            "workspace.references.list",
+            "workspace.references.object",
+            "workspace.spaces",
+            "workspace.tree.current"
+        };
+        Assert.True(
+            expectedBindings.SequenceEqual(projectedBindings, StringComparer.Ordinal),
+            $"Expected bindings: [{string.Join(", ", expectedBindings)}]\n"
+            + $"Projected bindings: [{string.Join(", ", projectedBindings)}]");
+        var organization = Assert.Single(document.RootElement.GetProperty("modules").EnumerateArray(),
+            module => module.GetProperty("moduleId").GetString() == "Organization");
+        Assert.Equal(
+            expectedBindings.Where(binding => binding.StartsWith("organization.", StringComparison.Ordinal)),
+            organization.GetProperty("frontend").GetProperty("bindings").EnumerateArray()
+                .Select(binding => binding.GetString()).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task ActiveModuleRuntimeCatalog_WhenUsingBuiltIns_ExposesOnlySupportedFrontendModules()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/active-module-runtime.json");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var document = JsonDocument.Parse(body);
+        var modules = document.RootElement
+            .GetProperty("modules")
+            .EnumerateArray()
+            .ToArray();
+        var frontendModuleIds = modules
+            .Where(module => module.TryGetProperty("frontend", out var frontend)
+                && frontend.ValueKind == JsonValueKind.Object)
+            .Select(module => module.GetProperty("moduleId").GetString())
+            .Where(moduleId => moduleId is not null)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var expectedModuleIds = new[] { "Audit", "Authorization", "Document", "Example", "Identity", "Organization", "Part", "Workspace" };
+        Assert.True(
+            expectedModuleIds.SequenceEqual(frontendModuleIds, StringComparer.Ordinal),
+            $"Expected frontend modules: [{string.Join(", ", expectedModuleIds)}]\n"
+            + $"Projected frontend modules: [{string.Join(", ", frontendModuleIds)}]");
+
+        var retiredFrontendModuleIds = new[]
+        {
+            "ConfigCenter",
+            "Demo",
+            "Files",
+            "MetadataConfigCenter",
+            "ModuleTemplateSample",
+            "PluginOps"
+        };
+        foreach (var moduleId in retiredFrontendModuleIds)
+        {
+            var module = Assert.Single(modules, candidate =>
+                candidate.GetProperty("moduleId").GetString() == moduleId);
+            Assert.Equal(JsonValueKind.Null, module.GetProperty("frontend").ValueKind);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    public async Task ActiveModuleRuntimeCatalog_WhenExternalPluginsDisabled_UsesBuiltInsOnly(
+        bool? externalPluginsEnabled)
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackage();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        await using var host = await StartHostAsync(
+            installRoot,
+            externalPluginsEnabled: externalPluginsEnabled);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/active-module-runtime.json");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var document = JsonDocument.Parse(body);
+        var modules = document.RootElement.GetProperty("modules").EnumerateArray().ToArray();
+        var audit = Assert.Single(modules, module =>
+            module.GetProperty("moduleId").GetString() == "Audit");
+
+        var auditFrontend = audit.GetProperty("frontend");
+        Assert.Equal(JsonValueKind.Object, auditFrontend.ValueKind);
+        Assert.Contains(modules, module => module.GetProperty("moduleId").GetString() == "Organization");
+        var pluginOps = Assert.Single(modules, module => module.GetProperty("moduleId").GetString() == "PluginOps");
+        Assert.Equal(JsonValueKind.Null, pluginOps.GetProperty("frontend").ValueKind);
+        Assert.Equal("Platform", document.RootElement.GetProperty("platformCompositionModuleId").GetString());
+        Assert.Equal(["Audit", "Authentication", "Authorization", "ConfigCenter", "Files", "Identity", "MetadataConfigCenter", "Organization", "Platform", "PluginOps"],
+            document.RootElement.GetProperty("requiredModuleIds").EnumerateArray().Select(value => value.GetString()));
+        var workspace = Assert.Single(modules, module => module.GetProperty("moduleId").GetString() == "Workspace");
+        Assert.Equal(["Audit", "Document", "Part"], workspace.GetProperty("dependencies").EnumerateArray().Select(value => value.GetString()));
+    }
+
+    [Fact]
+    public async Task RequiredPlatformMemberDisabled_RejectsBeforeAnySqlTablesAndPreservesDesiredChoice()
+    {
+        var installRoot = CreateTempRoot();
+        // 用无迁移且无下游依赖的必需模块，直接验证 required 判定先于 SQL 初始化。
+        var packageRoot = _testData.CreateValidPackage("MetadataConfigCenter", "1.0.0");
+        EnableInstalledPackage(packageRoot, installRoot, "MetadataConfigCenter");
+        var inventory = InstalledPluginInventoryAdapter.Create(new InstalledPluginStateStore(installRoot));
+        var lifecycle = new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot, new PluginLifecycleTestDeployment()));
+        Assert.True(lifecycle.RequestDisable(inventory, "MetadataConfigCenter").IsSuccess);
+        _database = await ReusableSqlServerDatabase.AcquireAsync();
+        await using var connection = new SqlConnection(_database.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped = 0;";
+        Assert.Equal(0, Convert.ToInt32(await command.ExecuteScalarAsync()));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => StartHostAsync(installRoot));
+
+        Assert.Contains("MODULE_REQUIRED_DISABLED", error.Message);
+        Assert.Equal(0, Convert.ToInt32(await command.ExecuteScalarAsync()));
+        var desired = Assert.Single(lifecycle.Resolve(inventory).DesiredModules, module => module.ModuleId == "MetadataConfigCenter");
+        Assert.False(desired.Enabled);
+        Assert.Equal("1.0.0", desired.Version);
+    }
+
+    [Fact]
+    public async Task ExternalPluginLifecycle_WhenDisabledThenReenabled_RestoresExistingActiveState()
+    {
+        var installRoot = CreateTempRoot();
+        // 此用例只验证外部开关；MetadataConfigCenter 无迁移，保持现有模块的迁移历史完整。
+        var packageRoot = _testData.CreateValidPackage("MetadataConfigCenter", "1.0.0");
+        EnableInstalledPackage(packageRoot, installRoot, "MetadataConfigCenter");
+
+        string externalFrontendUrl;
+        await using (var enabledHost = await StartHostAsync(
+                         installRoot,
+                         externalPluginsEnabled: true))
+        {
+            var metadataConfigCenter = await ReadActiveModuleAsync(enabledHost, "MetadataConfigCenter");
+            externalFrontendUrl = metadataConfigCenter.GetProperty("frontend").GetProperty("url").GetString()!;
+            Assert.False(string.IsNullOrWhiteSpace(externalFrontendUrl));
+        }
+
+        var externalStateBeforeDisabledStartup = SnapshotExternalPluginState(installRoot);
+        var lifecyclePath = Path.Combine(installRoot, "lifecycle", "v2", "state.json");
+        using var beforeLifecycle = JsonDocument.Parse(File.ReadAllBytes(lifecyclePath));
+        var recordedDesired = beforeLifecycle.RootElement.GetProperty("desiredModules").GetRawText();
+        var externalActiveSnapshot = beforeLifecycle.RootElement.GetProperty("activeSnapshotId").GetString();
+        await using (var disabledHost = await StartHostAsync(
+                         installRoot,
+                         externalPluginsEnabled: false))
+        {
+            var metadataConfigCenter = await ReadActiveModuleAsync(disabledHost, "MetadataConfigCenter");
+            Assert.Equal(JsonValueKind.Null, metadataConfigCenter.GetProperty("frontend").ValueKind);
+            var audit = await ReadActiveModuleAsync(disabledHost, "Audit");
+            Assert.Equal(JsonValueKind.Object, audit.GetProperty("frontend").ValueKind);
+        }
+        AssertExternalPluginStateUnchanged(
+            externalStateBeforeDisabledStartup,
+            SnapshotExternalPluginState(installRoot));
+        using var disabledLifecycle = JsonDocument.Parse(File.ReadAllBytes(lifecyclePath));
+        Assert.Equal(recordedDesired, disabledLifecycle.RootElement.GetProperty("desiredModules").GetRawText());
+        Assert.NotEqual(externalActiveSnapshot, disabledLifecycle.RootElement.GetProperty("activeSnapshotId").GetString());
+
+        await using (var reenabledHost = await StartHostAsync(
+                         installRoot,
+                         externalPluginsEnabled: true))
+        {
+            var metadataConfigCenter = await ReadActiveModuleAsync(reenabledHost, "MetadataConfigCenter");
+            Assert.Equal(externalFrontendUrl, metadataConfigCenter.GetProperty("frontend").GetProperty("url").GetString());
+        }
+        using var reenabledLifecycle = JsonDocument.Parse(File.ReadAllBytes(lifecyclePath));
+        Assert.Equal(recordedDesired, reenabledLifecycle.RootElement.GetProperty("desiredModules").GetRawText());
+        Assert.Equal(externalActiveSnapshot, reenabledLifecycle.RootElement.GetProperty("activeSnapshotId").GetString());
+        Console.WriteLine("EXTERNAL_SWITCH_LIFECYCLE: " + JsonSerializer.Serialize(new
+        {
+            before = beforeLifecycle.RootElement,
+            disabled = disabledLifecycle.RootElement,
+            reenabled = reenabledLifecycle.RootElement
+        }));
+    }
+
+    private static IReadOnlyDictionary<string, PersistedFileSnapshot> SnapshotExternalPluginState(
+        string installRoot)
+    {
+        var snapshot = new Dictionary<string, PersistedFileSnapshot>(StringComparer.Ordinal);
+        // 同一生命周期根的 active/LKG 随真实 Host 提交；库存保持，recorded desired 单独核对。
+        foreach (var rootName in new[] { "packages", "state" })
+        {
+            var root = Path.Combine(installRoot, rootName);
+            if (!Directory.Exists(root))
+            {
+                continue;
+            }
+
+            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                         .Order(StringComparer.Ordinal))
+            {
+                var relativePath = Path.GetRelativePath(installRoot, path)
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                snapshot.Add(
+                    relativePath,
+                    new PersistedFileSnapshot(
+                        Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path))),
+                        File.GetLastWriteTimeUtc(path)));
+            }
+        }
+
+        return snapshot;
+    }
+
+    private static void AssertExternalPluginStateUnchanged(
+        IReadOnlyDictionary<string, PersistedFileSnapshot> expected,
+        IReadOnlyDictionary<string, PersistedFileSnapshot> actual)
+    {
+        Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), actual.Keys.Order(StringComparer.Ordinal));
+        foreach (var (path, expectedFile) in expected)
+        {
+            Assert.Equal(expectedFile, actual[path]);
+        }
+    }
+
+    private sealed record PersistedFileSnapshot(string Sha256, DateTime LastWriteTimeUtc);
+
+    [Fact]
+    public async Task LocalizationManifestRoute_ReturnsJson()
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackage();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/localization-manifest.json");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+
+        using var document = JsonDocument.Parse(body);
+        Assert.True(document.RootElement.TryGetProperty("defaultLanguage", out _));
+        Assert.True(document.RootElement.TryGetProperty("supportedLanguages", out _));
+        Assert.True(document.RootElement.TryGetProperty("catalogs", out _));
+    }
+
+    [Fact]
+    public async Task MetadataRuntimeManifestRoute_IncludesBuiltInModuleMetadata_WhenPluginStateIsMissing()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var manifestResponse = await client.GetAsync("/plugins/metadata-runtime-manifest.json");
+        var manifestBody = await manifestResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            manifestResponse.IsSuccessStatusCode,
+            $"Status: {manifestResponse.StatusCode}\nBody: {manifestBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var manifestDocument = JsonDocument.Parse(manifestBody);
+        var modules = manifestDocument.RootElement.GetProperty("modules").EnumerateArray().ToArray();
+        Assert.Contains(modules, module => module.GetProperty("moduleId").GetString() == "Organization");
+
+        var navResponse = await client.GetAsync("/plugins/runtime/modules/Organization/metadata/navigation/Organization.nav.json");
+        var navBody = await navResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            navResponse.IsSuccessStatusCode,
+            $"Status: {navResponse.StatusCode}\nBody: {navBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Contains("organization.personCenter", navBody);
+
+        var localizationResponse = await client.GetAsync("/plugins/localization-manifest.json");
+        var localizationBody = await localizationResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            localizationResponse.IsSuccessStatusCode,
+            $"Status: {localizationResponse.StatusCode}\nBody: {localizationBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        using var localizationDocument = JsonDocument.Parse(localizationBody);
+        Assert.Equal(
+            "人员中心",
+            localizationDocument.RootElement
+                .GetProperty("catalogs")
+                .GetProperty("zhs")
+                .GetProperty("Navigation.PersonCenter")
+                .GetString());
+    }
+
+    [Fact]
+    public async Task LocalizationManifestRoute_RefreshesBuiltInRuntimeMetadata_WhenStaleProjectionAlreadyExists()
+    {
+        var installRoot = CreateTempRoot();
+        var stalePlatformMetadataPath = Path.Combine(installRoot, "runtime", "modules", "Platform", "metadata");
+        Directory.CreateDirectory(stalePlatformMetadataPath);
+        File.WriteAllText(
+            Path.Combine(stalePlatformMetadataPath, "stale.txt"),
+            "stale runtime metadata");
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var localizationResponse = await client.GetAsync("/plugins/localization-manifest.json");
+        var localizationBody = await localizationResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            localizationResponse.IsSuccessStatusCode,
+            $"Status: {localizationResponse.StatusCode}\nBody: {localizationBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var localizationDocument = JsonDocument.Parse(localizationBody);
+        Assert.Equal(
+            "插件运维",
+            localizationDocument.RootElement
+                .GetProperty("catalogs")
+                .GetProperty("zhs")
+                .GetProperty("Navigation.PluginOps")
+                .GetString());
+
+        Assert.False(File.Exists(Path.Combine(stalePlatformMetadataPath, "stale.txt")));
+        Assert.True(File.Exists(Path.Combine(stalePlatformMetadataPath, "dictionaries", "Navigation.dic.json")));
+    }
+
+    [Fact]
+    public async Task MetadataRuntimeManifestRoute_ReturnsJson_AndServesModuleMetadata()
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Audit");
+        var packageMetadataRoot = Path.Combine(Path.Combine(packageRoot, "modules", "Audit"), "metadata");
+        Directory.CreateDirectory(Path.Combine(packageMetadataRoot, "navigation"));
+        File.WriteAllText(
+            Path.Combine(packageMetadataRoot, "navigation", "Audit.nav.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "nav",
+              "navigation": {
+                "items": [
+                  {
+                    "key": "audit.home",
+                    "featureKey": "audit.home",
+                    "path": "/audit",
+                    "entryType": "standard-list",
+                    "targetKey": "audit.list"
+                  }
+                ]
+              }
+            }
+            """);
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var manifestResponse = await client.GetAsync("/plugins/metadata-runtime-manifest.json");
+        var manifestBody = await manifestResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            manifestResponse.IsSuccessStatusCode,
+            $"Status: {manifestResponse.StatusCode}\nBody: {manifestBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Equal("application/json", manifestResponse.Content.Headers.ContentType?.MediaType);
+
+        using var manifestDocument = JsonDocument.Parse(manifestBody);
+        var organizationModule = manifestDocument.RootElement
+            .GetProperty("modules")
+            .EnumerateArray()
+            .Single(module => module.GetProperty("moduleId").GetString() == "Audit");
+        Assert.Equal("navigation/Audit.nav.json", organizationModule.GetProperty("navFiles")[0].GetString());
+
+        var navResponse = await client.GetAsync("/plugins/runtime/modules/Audit/metadata/navigation/Audit.nav.json");
+        var navBody = await navResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            navResponse.IsSuccessStatusCode,
+            $"Status: {navResponse.StatusCode}\nBody: {navBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Contains("audit.home", navBody);
+    }
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public async Task DisposeAsync()
+    {
+        try
+        {
+            _testData.Dispose();
+            foreach (var tempRoot in _tempRoots)
+            {
+                if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+        finally
+        {
+            if (_database is not null) await _database.DisposeAsync();
+        }
+    }
+
+    private async Task<HostApiProcess> StartHostAsync(
+        string installRoot,
+        bool skipLocalAuthSeeding = true,
+        bool? externalPluginsEnabled = true)
+    {
+        _database ??= await ReusableSqlServerDatabase.AcquireAsync();
+        return await HostApiProcess.StartAsync(installRoot, _database.ConnectionString,
+            skipLocalAuthSeeding, externalPluginsEnabled);
+    }
+
+    private string CreateTempRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"host_api_plugin_route_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        _tempRoots.Add(root);
+        return root;
+    }
+
+    private static async Task<JsonElement> ReadActiveModuleAsync(HostApiProcess host, string moduleId)
+    {
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+        var response = await client.GetAsync("/plugins/active-module-runtime.json");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var document = JsonDocument.Parse(body);
+        return Assert.Single(
+                document.RootElement.GetProperty("modules").EnumerateArray(),
+                module => module.GetProperty("moduleId").GetString() == moduleId)
+            .Clone();
+    }
+
+    private static void EnableInstalledPackage(string packageRoot, string installRoot, string moduleId)
+    {
+        var moduleAssemblyPath = moduleId switch
+        {
+            "Audit" => typeof(ICP.Platform.Modules.Audit.AuditModule).Assembly.Location,
+            "MetadataConfigCenter" => typeof(ICP.Platform.Modules.MetadataConfigCenter.MetadataConfigCenterModule).Assembly.Location,
+            "Organization" => typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
+            _ => throw new InvalidOperationException($"No test module assembly is registered for '{moduleId}'.")
+        };
+        if (moduleId == "Audit")
+        {
+            var manifestPath = Path.Combine(packageRoot, "plugin.json");
+            var manifest = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(manifestPath))!;
+            // 测试包拥有自己的入口声明，并与实际装载的 Audit 执行端保持一致。
+            manifest["features"] = System.Text.Json.Nodes.JsonNode.Parse("""
+                [{"key":"audit.home","kind":"navigation","title":"Audit","behaviorKey":"audit.change.read"}]
+                """);
+            File.WriteAllText(manifestPath, manifest.ToJsonString());
+        }
+        File.Copy(moduleAssemblyPath, Path.Combine(packageRoot, "backend", "AuditModule.dll"), overwrite: true);
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var installer = new UnifiedPluginPackageInstaller(stateStore);
+        var installResult = installer.Install(packageRoot, installRoot);
+        Assert.Equal("Installed", installResult.Status);
+
+        Assert.True(stateStore.TryLoad(moduleId, out var record, out var loadError));
+        Assert.Null(loadError);
+        Assert.NotNull(record);
+        record!.CurrentEnabledVersion = record.Version;
+        Assert.True(stateStore.TrySave(record, out var saveError), saveError);
+        Assert.Null(saveError);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "apps", "host-api", "Program.cs")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Repository root not found.");
+    }
+
+    private static string ResolveHostApiDllPath(string testOutputDirectory)
+        => Path.Combine(testOutputDirectory, "HostApi.dll");
+
+    private sealed class HostApiProcess : IAsyncDisposable
+    {
+        private readonly Process _process;
+        private readonly StringBuilder _stdout;
+        private readonly StringBuilder _stderr;
+
+        private HostApiProcess(Process process, string baseAddress, StringBuilder stdout, StringBuilder stderr)
+        {
+            _process = process;
+            BaseAddress = baseAddress;
+            _stdout = stdout;
+            _stderr = stderr;
+        }
+
+        public string BaseAddress { get; }
+
+        // StringBuilder 不是线程安全的：AppendLine 来自 Process 的输出读取线程，
+        // ToString 来自测试线程——而每条 Assert.True 的消息都是插值字符串，
+        // 无论断言成败都会求值，所以读取远比失败频繁。测试项目之间并行后
+        // CPU 压力上来，这个竞争会真的炸。读写共用一把锁。
+        public string StdOut { get { lock (_stdout) { return _stdout.ToString(); } } }
+        public string StdErr { get { lock (_stderr) { return _stderr.ToString(); } } }
+
+        public static async Task<HostApiProcess> StartAsync(
+            string installRoot,
+            string connectionString,
+            bool skipLocalAuthSeeding = true,
+            bool? externalPluginsEnabled = true)
+        {
+            var repoRoot = FindRepositoryRoot();
+            var hostApiDllPath = ResolveHostApiDllPath(AppContext.BaseDirectory);
+            if (!File.Exists(hostApiDllPath))
+            {
+                throw new FileNotFoundException($"HostApi build output not found: {hostApiDllPath}");
+            }
+
+            var port = GetFreeTcpPort();
+            var baseAddress = $"http://127.0.0.1:{port}";
+            var stdout = new StringBuilder();
+            var stderr = new StringBuilder();
+
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    WorkingDirectory = repoRoot,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.StartInfo.ArgumentList.Add(hostApiDllPath);
+            process.StartInfo.ArgumentList.Add("--urls");
+            process.StartInfo.ArgumentList.Add(baseAddress);
+            process.StartInfo.Environment["Platform__PluginInstallRoot"] = installRoot;
+            process.StartInfo.Environment["Files__StorageRoot"] = Path.Combine(installRoot, "storage");
+            if (externalPluginsEnabled.HasValue)
+            {
+                process.StartInfo.Environment["Platform__ExternalPluginsEnabled"] =
+                    externalPluginsEnabled.Value ? "true" : "false";
+            }
+            process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
+            process.StartInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
+            process.StartInfo.Environment["Platform__SkipAuthorizationCatalogInitialization"] = skipLocalAuthSeeding ? "true" : "false";
+            process.StartInfo.Environment["Authentication__Host__KeyRingPath"] = Path.Combine(installRoot, ".host-auth-key-ring");
+            process.StartInfo.Environment["Authentication__Host__CookieName"] = "__Host-ICP.Platform.Auth";
+            process.StartInfo.Environment["Authentication__Host__ProtectKeysAtRest"] = "true";
+            process.StartInfo.Environment["Authentication__Sessions__DefaultTimeZoneId"] = "Asia/Shanghai";
+            process.StartInfo.Environment["ConnectionStrings__SqlServer"] = connectionString;
+
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("Failed to start HostApi.");
+            }
+
+            process.OutputDataReceived += (_, args) =>
+            {
+                if (args.Data is not null)
+                {
+                    lock (stdout)
+                    {
+                        stdout.AppendLine(args.Data);
+                    }
+                }
+            };
+
+            process.ErrorDataReceived += (_, args) =>
+            {
+                if (args.Data is not null)
+                {
+                    lock (stderr)
+                    {
+                        stderr.AppendLine(args.Data);
+                    }
+                }
+            };
+
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            var host = new HostApiProcess(process, baseAddress, stdout, stderr);
+            try
+            {
+                await host.WaitForStartupAsync();
+                return host;
+            }
+            catch
+            {
+                await host.DisposeAsync();
+                throw;
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                if (!_process.HasExited)
+                {
+                    _process.Kill(entireProcessTree: true);
+                    await _process.WaitForExitAsync();
+                }
+            }
+            finally
+            {
+                _process.Dispose();
+            }
+        }
+
+        private async Task WaitForStartupAsync()
+        {
+            using var client = new HttpClient
+            {
+                BaseAddress = new Uri(BaseAddress),
+                Timeout = TimeSpan.FromSeconds(2)
+            };
+
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (_process.HasExited)
+                {
+                    throw new InvalidOperationException($"HostApi exited early with code {_process.ExitCode}.\nSTDOUT:\n{_stdout}\nSTDERR:\n{_stderr}");
+                }
+
+                try
+                {
+                    _ = await client.GetAsync("/");
+                    return;
+                }
+                catch (HttpRequestException)
+                {
+                    // Not ready yet.
+                }
+                catch (TaskCanceledException)
+                {
+                    // Not ready yet.
+                }
+
+                await Task.Delay(250);
+            }
+
+            throw new TimeoutException($"HostApi did not become reachable in time.\nSTDOUT:\n{_stdout}\nSTDERR:\n{_stderr}");
+        }
+
+        private static int GetFreeTcpPort()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            return port;
+        }
+    }
+
+}

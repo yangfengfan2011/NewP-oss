@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Files.Contracts</AssemblyName>
+    <RootNamespace>ICP.Platform.Modules.Files.Contracts</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Authorization\Contracts\Authorization.Contracts.csproj" />
+  </ItemGroup>
+</Project>

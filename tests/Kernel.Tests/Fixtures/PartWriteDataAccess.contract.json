@@ -1,0 +1,21 @@
+[
+  {
+    "id": "Part/view:part.part.list/pageActions/action:create",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "pageActions",
+    "actionKey": "create",
+    "execution": "",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "create"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.pageActions/action:create"
+    ],
+    "object": "Part",
+    "businessBinding": "part.part.create"
+  }
+]

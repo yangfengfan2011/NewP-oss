@@ -1,0 +1,6 @@
+{
+  "module": "Part",
+  "readPosition": "Workspace/navigation:workspace/module:Part/navigation:part.parts",
+  "transferPosition": "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:transfer",
+  "batchPosition": null
+}

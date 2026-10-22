@@ -1,0 +1,49 @@
+.data-scope-page > .ant-spin-nested-loading,
+.data-scope-page > .ant-spin-nested-loading > .ant-spin-container {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.data-scope-workspace {
+  --np-workspace-header-height: 48px;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: clamp(260px, 24vw, 300px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 16px;
+}
+.data-scope-workspace > aside, .data-scope-detail { min-width: 0; }
+.data-scope-workspace > aside { min-height: 0; overflow: auto; }
+.data-scope-sidebar, .data-scope-detail { display: flex; flex-direction: column; min-height: 0; }
+.data-scope-sidebar { height: 100%; }
+.data-scope-sidebar > .ant-card-head, .data-scope-detail > .ant-card-head { flex-shrink: 0; }
+.data-scope-sidebar > .ant-card-body, .data-scope-detail > .ant-card-body { flex: 1; min-height: 0; overflow: auto; }
+.data-scope-detail > .ant-card-body { padding: 16px; }
+.data-scope-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; min-height: 44px; box-sizing: border-box; padding-block: 4px; }
+.data-scope-title > .ant-typography { white-space: normal; overflow-wrap: anywhere; }
+.data-scope-title > .ant-input { width: 220px; max-width: 100%; padding-inline: 4px; font-weight: 600; }
+.data-scope-name { height: auto; min-height: 32px; max-width: 100%; padding-inline: 4px; font-weight: 600; white-space: normal; text-align: start; }
+.data-scope-name > span:first-child { overflow-wrap: anywhere; }
+.data-scope-basics {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.5fr) auto;
+  gap: 12px 20px;
+  align-items: start;
+}
+.data-scope-basics .ant-form-item { margin-bottom: 4px; }
+.data-scope-basics .ant-select { width: 100%; }
+.data-scope-ancestors { margin-bottom: 16px; }
+.data-scope-ancestors summary { cursor: pointer; }
+.data-scope-ancestors li { margin-top: 8px; }
+.data-scope-savebar { margin-top: 24px; padding-top: 16px; }
+@media (max-width: 900px) {
+  .data-scope-page { overflow: auto; }
+  .data-scope-workspace { flex: none; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  .data-scope-sidebar { min-height: 0; }
+}
+@media (max-width: 600px) {
+  .data-scope-basics { grid-template-columns: minmax(0, 1fr); }
+}

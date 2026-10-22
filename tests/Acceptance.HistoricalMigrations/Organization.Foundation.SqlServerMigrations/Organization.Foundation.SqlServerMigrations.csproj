@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Organization.Foundation.SqlServerMigrations</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Optimize>true</Optimize>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../server/platform-persistence-efcore/PlatformPersistence.EfCore.csproj" />
+    <Compile Include="../../../server/modules/Platform/Organization/Migrations.SqlServer/Migrations/20260812144235_Organization_000001_Foundation.cs" Link="Migrations/20260812144235_Organization_000001_Foundation.cs" />
+    <Compile Include="../../../server/modules/Platform/Organization/Migrations.SqlServer/Migrations/20260812144235_Organization_000001_Foundation.Designer.cs" Link="Migrations/20260812144235_Organization_000001_Foundation.Designer.cs" />
+  </ItemGroup>
+</Project>

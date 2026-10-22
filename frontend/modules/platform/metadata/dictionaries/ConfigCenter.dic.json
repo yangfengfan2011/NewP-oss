@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "ConfigCenter": {
+    "Model_ConfigItem": {
+      "zhs": "配置项",
+      "en": "Config Item"
+    },
+    "Model_ConfigItem_Field_EID": {
+      "zhs": "实体 ID",
+      "en": "Entity ID"
+    },
+    "Model_ConfigItem_Field_ENAME": {
+      "zhs": "实体名称",
+      "en": "Entity Name"
+    },
+    "Model_ConfigItem_Field_Key": {
+      "zhs": "键",
+      "en": "Key"
+    },
+    "Model_ConfigItem_Field_Value": {
+      "zhs": "值",
+      "en": "Value"
+    },
+    "Model_ConfigItem_Field_Type": {
+      "zhs": "类型",
+      "en": "Type"
+    },
+    "Model_ConfigItem_Field_ModuleId": {
+      "zhs": "模块 ID",
+      "en": "Module ID"
+    },
+    "Model_ConfigItem_Field_Group": {
+      "zhs": "分组",
+      "en": "Group"
+    },
+    "Model_ConfigItem_Field_Environment": {
+      "zhs": "环境",
+      "en": "Environment"
+    },
+    "Model_ConfigItem_Field_TenantId": {
+      "zhs": "租户 ID",
+      "en": "Tenant ID"
+    },
+    "Model_ConfigItem_Field_Description": {
+      "zhs": "说明",
+      "en": "Description"
+    },
+    "Model_ConfigItem_Field_IsSensitive": {
+      "zhs": "敏感项",
+      "en": "Sensitive"
+    }
+  }
+}

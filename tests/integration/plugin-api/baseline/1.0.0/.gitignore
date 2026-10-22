@@ -1,0 +1,7 @@
+.artifacts/
+.packages/
+.pnpm-store/
+node_modules/
+**/bin/
+**/obj/
+migrations/sqlserver/*.dll

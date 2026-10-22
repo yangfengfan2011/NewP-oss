@@ -1,0 +1,107 @@
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { CompositionContext, type CompositionRuntime, type CompositionChange } from './pageCompositionRuntime';
+import { useBlocker } from 'react-router-dom';
+import Modal from 'antd/es/modal';
+import useMessage from 'antd/es/message/useMessage';
+import Alert from 'antd/es/alert';
+import Button from 'antd/es/button';
+import { useLocalization } from '@icp-platform/core';
+import { StandardCrudDialogTitle } from '../standard-crud/StandardCrudDialogTitle';
+import type { PageLifecycleState } from '@icp-platform/sdk';
+
+/** 一个外层组合拥有所有页面（包括非活动标签）的离开裁决及成功后只读同步。 */
+export function PageComposition({ children }: { children: ReactNode }) {
+  const existing = useContext(CompositionContext);
+  return existing ? <>{children}</> : <CompositionOwner>{children}</CompositionOwner>;
+}
+function CompositionOwner({ children }: { children: ReactNode }) {
+  const { t } = useLocalization();
+  const [messageApi, messageHolder] = useMessage();
+  const noticeText = useRef(t); noticeText.current = t;
+  // 翻译变化不能重建组合 runtime，否则已选对象的草稿会随上下文身份变化丢失。
+  const notice = useCallback((reasonKey: string, args?: Record<string, unknown>) => { void messageApi.info({ key: 'standard-crud-action-notice', content: noticeText.current(reasonKey, reasonKey, args), duration: 5 }); }, [messageApi]);
+  const states = useRef(new Map<string, PageLifecycleState & { discard?: () => void; save?: () => Promise<boolean> }>());
+  const savingLeave = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const readers = useRef(new Map<string, (change: CompositionChange) => Promise<void>>());
+  const queuedChanges = useRef<CompositionChange[]>([]);
+  const draining = useRef(false);
+  const retries = useRef<Array<() => Promise<void>>>([]);
+  const retryRead = useRef<(() => Promise<void>) | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<{ proceed: () => void; cancel?: () => void } | null>(null);
+  const blocker = useBlocker(useCallback(() => [...states.current.values()].some(state => state.dirty || state.submitting), []));
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return;
+    if (savingLeave.current) return;
+    if ([...states.current.values()].some(state => state.submitting)) { blocker.reset(); return; }
+    setPendingLeave({ proceed: blocker.proceed, cancel: blocker.reset });
+  }, [blocker]);
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if ([...states.current.values()].some(state => state.dirty || state.submitting)) { event.preventDefault(); event.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, []);
+  const dispatch = useCallback(async (change: CompositionChange) => {
+    const run = async (pending: Array<() => Promise<void>>) => {
+      const failed: Array<() => Promise<void>> = [];
+      for (const read of pending) {
+        try { await read(); } catch { failed.push(read); }
+      }
+      retries.current.push(...failed);
+      setError(retries.current.length ? 'Platform.SavedRefreshFailed' : null);
+    };
+    retryRead.current = async () => { const pending = retries.current.splice(0); await run(pending); };
+    await run([...readers.current.values()].map(reader => () => reader(change)));
+  }, []);
+  const drain = useCallback(async () => {
+    if (draining.current || [...states.current.values()].some(state => state.dirty || state.submitting)) return;
+    draining.current = true;
+    try { while (queuedChanges.current.length) await dispatch(queuedChanges.current.shift()!); }
+    finally { draining.current = false; }
+  }, [dispatch]);
+  const committed = useCallback(async (change: CompositionChange) => {
+    queuedChanges.current.push(change);
+    await drain();
+  }, [drain]);
+  const runtime = useMemo<CompositionRuntime>(() => ({
+    notice,
+    report: (id, state, discard, save) => { if (state) states.current.set(id, { ...state, discard, save }); else states.current.delete(id); void drain(); },
+    leave: (proceed) => {
+      if ([...states.current.values()].some(state => state.submitting)) return;
+      if ([...states.current.values()].some(state => state.dirty)) setPendingLeave({ proceed });
+      else proceed();
+    },
+    subscribe: (id, read) => { readers.current.set(id, read); return () => { readers.current.delete(id); }; },
+    committed,
+  }), [committed, drain, notice]);
+  const canSave = [...states.current.values()].filter(state => state.dirty).every(state => !!state.save);
+  const cancelLeave = () => { if (savingLeave.current) return; pendingLeave?.cancel?.(); setPendingLeave(null); };
+  const discardLeave = () => {
+    if (savingLeave.current || [...states.current.values()].some(state => state.submitting)) return;
+    for (const state of states.current.values()) if (state.dirty) state.discard?.();
+    const proceed = pendingLeave?.proceed; setPendingLeave(null); proceed?.();
+  };
+  const saveLeave = async () => {
+    if (savingLeave.current || !canSave) return;
+    savingLeave.current = true; setSaving(true);
+    try {
+      for (const state of states.current.values()) if (state.dirty && !await state.save!()) return;
+      const proceed = pendingLeave?.proceed; setPendingLeave(null); proceed?.();
+    } catch { setError('Platform.CompositionSaveFailed'); }
+    finally { savingLeave.current = false; setSaving(false); }
+  };
+  return <CompositionContext.Provider value={runtime}>
+    {messageHolder}
+    {error && <Alert type="warning" message={t(error, error === 'Platform.SavedRefreshFailed' ? '已保存，刷新失败：当前组合待同步。' : '保存失败，当前页面和未保存输入已保留。')} action={<Button onClick={() => runtime.leave(() => { void retryRead.current?.(); })}>{t('Platform.RetryRead', '重试读取')}</Button>} />}
+    {children}
+    <Modal open={pendingLeave !== null} title={<StandardCrudDialogTitle>{t('Platform.CompositionDiscardTitle', '放弃未保存的修改？')}</StandardCrudDialogTitle>} closable={!saving} onCancel={cancelLeave}
+      footer={<><Button disabled={saving} onClick={cancelLeave}>{t('Platform.KeepEditing', '继续编辑')}</Button>
+        <Button disabled={saving} onClick={discardLeave}>{t('Platform.DiscardDraft', '放弃修改')}</Button>
+        {canSave && <Button type="primary" loading={saving} onClick={() => void saveLeave()}>{t('Platform.SaveAndLeave', '保存并离开')}</Button>}</>}>
+      {t('Platform.CompositionDiscardDescription', '当前组合包含未保存的输入，离开将放弃这些修改。')}
+    </Modal>
+  </CompositionContext.Provider>;
+}

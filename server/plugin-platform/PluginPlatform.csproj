@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.PluginPlatform</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="ComponentBundles/platform-runtime-release.json" LogicalName="NewP.PlatformRuntimeRelease.json" />
+    <EmbeddedResource Include="../platform-modeling/metadata/storage-types.json" LogicalName="NewP.NativeStorageTypes.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\plugin-contracts\Plugin.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

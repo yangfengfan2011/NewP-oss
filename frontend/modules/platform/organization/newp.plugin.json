@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Organization",
+  "displayName": "组织结构",
+  "version": "1.1.0",
+  "description": "组织结构管理模块",
+  "entryAssembly": "../../OrganizationModule.dll",
+  "dependencies": [
+    "Identity",
+    "Authentication",
+    "Audit"
+  ],
+  "hostVersion": {
+    "min": "1.1.0",
+    "max": "2.0.0"
+  },
+  "backend": {
+    "behaviorKey": "organization.backend"
+  },
+  "dataExecutions": [
+    {"key":"organization.structure.read","moduleId":"Organization","provider":"organization.backend","boundary":"entry","featureBehaviors":["tree:organization.structure"],"requirements":[{"role":"query","stage":"read","shape":"query","resources":["organization.company","organization.department","organization.person"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}]},
+    {"key":"organization.department.parent.lookup","moduleId":"Organization","provider":"organization.backend","boundary":"entry","featureBehaviors":["organization.department.parent.lookup"],"requirements":[{"role":"query","stage":"read","shape":"query","resources":["organization.department"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null},{"role":"current","stage":"read","shape":"objects","resources":["organization.department"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}]},
+    {"key":"organization.department.company.lookup","moduleId":"Organization","provider":"organization.backend","boundary":"entry","featureBehaviors":["organization.department.company.lookup"],"requirements":[{"role":"query","stage":"read","shape":"query","resources":["organization.company"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null},{"role":"current","stage":"read","shape":"objects","resources":["organization.company"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}]},
+    {"key":"organization.person.department.lookup","moduleId":"Organization","provider":"organization.backend","boundary":"entry","featureBehaviors":["organization.person.department.lookup"],"requirements":[{"role":"query","stage":"read","shape":"query","resources":["organization.department"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null},{"role":"current","stage":"read","shape":"objects","resources":["organization.department"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}]},
+    {"key":"organization.person.company.lookup","moduleId":"Organization","provider":"organization.backend","boundary":"entry","featureBehaviors":["organization.person.company.lookup"],"requirements":[{"role":"query","stage":"read","shape":"query","resources":["organization.company"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null},{"role":"current","stage":"read","shape":"objects","resources":["organization.company"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}]},
+    {"key":"organization.person.accountSummary","moduleId":"Organization","provider":"organization.backend","boundary":"internal","featureBehaviors":[],"requirements":[{"role":"targets","stage":"read","shape":"objects","resources":["identity.account"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}],"fixedBindings":[{"kind":"internal","identity":"organization.person.accountSummary","caller":"ICP.Platform.Modules.Organization.Crud.PersonUserBindingSummaryProvider"}]},
+    {"key":"organization.department.display","moduleId":"Organization","provider":"organization.backend","boundary":"internal","featureBehaviors":[],"requirements":[{"role":"targets","stage":"read","shape":"objects","resources":["organization.company","organization.department"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}],"fixedBindings":[{"kind":"internal","identity":"organization.department.display","caller":"ICP.Platform.Modules.Organization.Crud.DepartmentCrudDisplayValueResolver"}]},
+    {"key":"organization.person.display","moduleId":"Organization","provider":"organization.backend","boundary":"internal","featureBehaviors":[],"requirements":[{"role":"targets","stage":"read","shape":"objects","resources":["organization.company","organization.department","organization.position"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}],"fixedBindings":[{"kind":"internal","identity":"organization.person.display","caller":"ICP.Platform.Modules.Organization.Crud.PersonCrudDisplayValueResolver"}]},
+    {"key":"organization.person.list","moduleId":"Organization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["organization.person.read"],"resourceKey":"organization.person"},
+    {"key":"organization.person.read","moduleId":"Organization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["organization.person.read"],"resourceKey":"organization.person"},
+    {"key":"organization.person.export","moduleId":"Organization","provider":"standardCrud.export","boundary":"entry","featureBehaviors":["organization.person.export"],"resourceKey":"organization.person"},
+    {"key":"organization.company.list","moduleId":"Organization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["organization.company.read"],"resourceKey":"organization.company"},
+    {"key":"organization.company.read","moduleId":"Organization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["organization.company.read"],"resourceKey":"organization.company"},
+    {"key":"organization.department.list","moduleId":"Organization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["organization.department.read"],"resourceKey":"organization.department"},
+    {"key":"organization.department.read","moduleId":"Organization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["organization.department.read"],"resourceKey":"organization.department"},
+    {"key":"organization.position.list","moduleId":"Organization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["organization.position.read"],"resourceKey":"organization.position"},
+    {"key":"organization.position.read","moduleId":"Organization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["organization.position.read"],"resourceKey":"organization.position"},
+    {"key":"organization.position.options","moduleId":"Organization","provider":"standardCrud.options","boundary":"entry","featureBehaviors":["organization.position.lookup"],"resourceKey":"organization.position"}
+  ],
+  "frontend": {
+    "behaviorKey": "organization.frontend",
+    "entry": "organization",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "organization.person.list",
+      "organization.person.detail",
+      "organization.position.list",
+      "organization.company.list",
+      "organization.department.list",
+      "organization.node.detail",
+      "organization.company.direct",
+      "organization.department.direct",
+      "organization.tree.global",
+      "organization.department.global"
+    ]
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/Company.model.json",
+      "metadata/models/Department.model.json",
+      "metadata/models/Person.model.json",
+      "metadata/models/Position.model.json"
+    ],
+    "migrations": {
+      "sqlServer": {
+        "assembly": "migrations/Organization.SqlServerMigrations.dll",
+        "manifest": "migrations/Organization.SqlServerMigrations.json"
+      }
+    }
+  }
+}

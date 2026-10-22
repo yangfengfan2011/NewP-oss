@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "organization.management",
+    "mode": "tab",
+    "dicKey": "OrganizationComposition",
+    "titleKey": "Management",
+    "defaultTabKey": "structure",
+    "tabs": [
+      {
+        "key": "structure",
+        "titleKey": "Structure",
+        "pageRef": {
+          "pageKey": "platform.tree",
+          "parameters": {
+            "viewKey": "organization.structure"
+          },
+          "inputResolverKey": "organization.tree.global"
+        }
+      },
+      {
+        "key": "companies",
+        "titleKey": "Company",
+        "pageRef": {
+          "pageKey": "platform.list",
+          "parameters": {
+            "viewKey": "organization.company.list"
+          }
+        }
+      },
+      {
+        "key": "departments",
+        "titleKey": "Department",
+        "pageRef": {
+          "pageKey": "platform.list",
+          "parameters": {
+            "viewKey": "organization.department.list"
+          },
+          "inputResolverKey": "organization.department.global"
+        }
+      },
+      {
+        "key": "positions",
+        "titleKey": "Position",
+        "pageRef": {
+          "pageKey": "platform.list",
+          "parameters": {
+            "viewKey": "organization.position.list"
+          }
+        }
+      },
+      {
+        "key": "persons",
+        "titleKey": "Person",
+        "pageRef": {
+          "pageKey": "platform.list",
+          "parameters": {
+            "viewKey": "organization.person.list"
+          }
+        }
+      }
+    ]
+  }
+}

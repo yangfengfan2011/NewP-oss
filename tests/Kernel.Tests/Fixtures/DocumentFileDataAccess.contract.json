@@ -1,0 +1,739 @@
+{
+  "moduleId": "Document",
+  "metadataBasePath": "/plugins/runtime/modules/Document/metadata",
+  "navFiles": [
+    "navigation/Document.nav.json"
+  ],
+  "viewFiles": [
+    "views/DocumentDetail.view.json",
+    "views/DocumentList.view.json",
+    "views/DocumentObjectHistoryList.view.json",
+    "views/DocumentTabs.view.json"
+  ],
+  "modelFiles": [
+    "models/Document.model.json",
+    "models/DocumentFileLink.model.json",
+    "models/DocumentIteration.model.json",
+    "models/DocumentVersion.model.json"
+  ],
+  "features": [
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "moduleId": "Document",
+      "key": "document.documents",
+      "kind": "navigation",
+      "title": "\u56FE\u6587\u6863",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "document.document.read",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.Title",
+      "staticScopeTitleKey": null,
+      "actionScope": null,
+      "readBehaviors": [
+        "document.document.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history",
+      "moduleId": "Document",
+      "key": "document.history",
+      "kind": "navigation",
+      "title": "\u5BF9\u8C61\u5C65\u5386",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.history",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "document.history",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.History",
+      "staticScopeTitleKey": null,
+      "actionScope": null,
+      "readBehaviors": [
+        "document.history.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:detail.custom/action:download",
+      "moduleId": "Document",
+      "key": "download",
+      "kind": "action",
+      "title": "\u4E0B\u8F7D",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.download",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents/surface:detail.custom/action:download",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.Download",
+      "staticScopeTitleKey": null,
+      "actionScope": "detail.custom",
+      "readBehaviors": [],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:authorize",
+      "moduleId": "Document",
+      "key": "authorize",
+      "kind": "action",
+      "title": "\u5BF9\u8C61\u6388\u6743",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.authorize",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents/surface:list.custom/action:authorize",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.Authorize",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.custom",
+      "readBehaviors": [],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:initializeOwnership",
+      "moduleId": "Document",
+      "key": "initializeOwnership",
+      "kind": "action",
+      "title": "\u8865\u9F50\u5F52\u5C5E",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.initializeOwnership",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents/surface:list.custom/action:initializeOwnership",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.InitializeOwnership",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.custom",
+      "readBehaviors": [],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:create",
+      "moduleId": "Document",
+      "key": "create",
+      "kind": "action",
+      "title": "\u65B0\u5EFA\u56FE\u6587\u6863",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.create",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents/surface:list.pageActions/action:create",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.Create",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "document.document.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending",
+      "moduleId": "Document",
+      "key": "initializeOwnershipPending",
+      "kind": "action",
+      "title": "\u5F85\u8865\u9F50\u5F52\u5C5E",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.initializeOwnership",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.OwnershipPendingObjects",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "document.document.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize",
+      "moduleId": "Document",
+      "key": "authorize",
+      "kind": "action",
+      "title": "\u5BF9\u8C61\u6388\u6743",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.authorize",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents/surface:list.rowActions/action:authorize",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.Authorize",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.rowActions",
+      "readBehaviors": [
+        "document.document.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:initializeOwnership",
+      "moduleId": "Document",
+      "key": "initializeOwnership",
+      "kind": "action",
+      "title": "\u8865\u9F50\u5F52\u5C5E",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.initializeOwnership",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents/surface:list.rowActions/action:initializeOwnership",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.InitializeOwnership",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.rowActions",
+      "readBehaviors": [
+        "document.document.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:transfer",
+      "moduleId": "Document",
+      "key": "transfer",
+      "kind": "action",
+      "title": "\u8F6C\u4EA4",
+      "parentPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "behaviorKey": "document.document.transfer",
+      "entryDependencies": [
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:document.documents/surface:list.rowActions/action:transfer",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Document.Transfer",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.rowActions",
+      "readBehaviors": [
+        "document.document.read"
+      ],
+      "container": false
+    }
+  ],
+  "dataAccess": [
+    {
+      "id": "Document/view:document.document.detail/featureActions/action:download",
+      "moduleId": "Document",
+      "viewKey": "document.document.detail",
+      "surface": "featureActions",
+      "actionKey": "download",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "download"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:detail.custom/action:download"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.download"
+    },
+    {
+      "id": "Document/view:document.document.detail/read",
+      "moduleId": "Document",
+      "viewKey": "document.document.detail",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "document.document.read",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "read",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "standardCrud.read"
+    },
+    {
+      "id": "Document/view:document.document.initializeOwnership/read",
+      "moduleId": "Document",
+      "viewKey": "document.document.initializeOwnership",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "document.document.initializeOwnership",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:initializeOwnership",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:initializeOwnership"
+      ],
+      "requirements": [
+        {
+          "role": "query",
+          "stage": "read",
+          "shape": "query",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 0,
+          "maximumCount": null
+        }
+      ],
+      "provider": "entityOwnership.initialize"
+    },
+    {
+      "id": "Document/view:document.document.list/featureActions/action:authorize",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "featureActions",
+      "actionKey": "authorize",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "authorize"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:authorize"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.authorize"
+    },
+    {
+      "id": "Document/view:document.document.list/featureActions/action:initializeOwnership",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "featureActions",
+      "actionKey": "initializeOwnership",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:initializeOwnership"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.initializeOwnership"
+    },
+    {
+      "id": "Document/view:document.document.list/pageActions/action:create",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "pageActions",
+      "actionKey": "create",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "create"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:create"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.create"
+    },
+    {
+      "id": "Document/view:document.document.list/pageActions/action:initializeOwnershipPending",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "pageActions",
+      "actionKey": "initializeOwnershipPending",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.initializeOwnership"
+    },
+    {
+      "id": "Document/view:document.document.list/read",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "document.document.list",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents"
+      ],
+      "requirements": [
+        {
+          "role": "query",
+          "stage": "read",
+          "shape": "query",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 0,
+          "maximumCount": null
+        }
+      ],
+      "provider": "standardCrud.list"
+    },
+    {
+      "id": "Document/view:document.document.list/rowActions/action:authorize",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "rowActions",
+      "actionKey": "authorize",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "authorize"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.authorize"
+    },
+    {
+      "id": "Document/view:document.document.list/rowActions/action:history",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "rowActions",
+      "actionKey": "history",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.history"
+    },
+    {
+      "id": "Document/view:document.document.list/rowActions/action:initializeOwnership",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "rowActions",
+      "actionKey": "initializeOwnership",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:initializeOwnership"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.initializeOwnership"
+    },
+    {
+      "id": "Document/view:document.document.list/rowActions/action:transfer",
+      "moduleId": "Document",
+      "viewKey": "document.document.list",
+      "surface": "rowActions",
+      "actionKey": "transfer",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:transfer"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.transfer"
+    },
+    {
+      "id": "Document/view:document.document.permissions/read",
+      "moduleId": "Document",
+      "viewKey": "document.document.permissions",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "document.document.authorization.view",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
+      ],
+      "requirements": [
+        {
+          "role": "view",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "authorization.object.view",
+      "providerModuleId": "Authorization"
+    },
+    {
+      "id": "Document/view:document.history.list/detailContributions/action:document.object.history",
+      "moduleId": "Document",
+      "viewKey": "document.history.list",
+      "surface": "detailContributions",
+      "actionKey": "document.object.history",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.history"
+    },
+    {
+      "id": "Document/view:document.history.list/outputActions/action:exportAll",
+      "moduleId": "Document",
+      "viewKey": "document.history.list",
+      "surface": "outputActions",
+      "actionKey": "exportAll",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.history"
+    },
+    {
+      "id": "Document/view:document.history.list/outputActions/action:exportSelected",
+      "moduleId": "Document",
+      "viewKey": "document.history.list",
+      "surface": "outputActions",
+      "actionKey": "exportSelected",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.history"
+    },
+    {
+      "id": "Document/view:document.history.list/outputActions/action:printAll",
+      "moduleId": "Document",
+      "viewKey": "document.history.list",
+      "surface": "outputActions",
+      "actionKey": "printAll",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.history"
+    },
+    {
+      "id": "Document/view:document.history.list/outputActions/action:printSelected",
+      "moduleId": "Document",
+      "viewKey": "document.history.list",
+      "surface": "outputActions",
+      "actionKey": "printSelected",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.history"
+    },
+    {
+      "id": "Document/view:document.history.list/pageActions/action:output",
+      "moduleId": "Document",
+      "viewKey": "document.history.list",
+      "surface": "pageActions",
+      "actionKey": "output",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.history"
+    },
+    {
+      "id": "Document/view:document.history.list/read",
+      "moduleId": "Document",
+      "viewKey": "document.history.list",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "document.history.list",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "read",
+          "shape": "object",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "document.backend"
+    },
+    {
+      "id": "Document/view:document.history.list/rowActions/action:view",
+      "moduleId": "Document",
+      "viewKey": "document.history.list",
+      "surface": "rowActions",
+      "actionKey": "view",
+      "execution": "",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
+      ],
+      "object": "Document",
+      "businessBinding": "document.document.history"
+    }
+  ]
+}

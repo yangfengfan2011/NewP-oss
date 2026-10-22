@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Asset": {
+    "kind": "Entity",
+    "fields": [
+      { "name": "Code", "storage": { "type": "string", "nullable": false } },
+      { "name": "Name", "storage": { "type": "string", "nullable": false } },
+      {
+        "name": "PurchasedAt",
+        "storage": {
+          "type": "date",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Asset_Code",
+        "fields": [
+          "Code"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "1.0", "type": "dic",
+  "DataScope": {
+    "Action_documentObjectCopy": { "zhs": "创建图文档真副本", "en": "Create independent document copies" },
+    "Action_documentCopy": { "zhs": "复制图文档引用", "en": "Copy document references" }
+  }
+}

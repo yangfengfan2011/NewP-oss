@@ -1,0 +1,287 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "RoleView": {
+    "Action_Authorize": { "zhs": "对象授权", "en": "Object authorization" },
+    "Title": {
+      "zhs": "角色管理",
+      "en": "Role management"
+    },
+    "ECODE": {
+      "zhs": "角色代码",
+      "en": "Role code"
+    },
+    "ENAME": {
+      "zhs": "角色名称",
+      "en": "Role name"
+    },
+    "Description": {
+      "zhs": "说明",
+      "en": "Description"
+    },
+    "IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "IsBuiltIn": {
+      "zhs": "内建角色",
+      "en": "Built-in role"
+    },
+    "Basic": {
+      "zhs": "基本信息",
+      "en": "Basic information"
+    },
+    "Create": {
+      "zhs": "新建角色",
+      "en": "Create role"
+    },
+    "Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "Permissions": {
+      "zhs": "配置权限",
+      "en": "Configure permissions"
+    },
+    "ConfirmPermissions": {
+      "zhs": "完整保存此角色权限集合",
+      "en": "Save the complete permission set for this role"
+    },
+    "Query": {
+      "zhs": "关键字",
+      "en": "Keyword"
+    },
+    "Field_CreatedBy": {
+      "en": "Created by",
+      "zhs": "创建人"
+    },
+    "Field_CreatedAt": {
+      "en": "Created at",
+      "zhs": "创建时间"
+    },
+    "Field_UpdatedBy": {
+      "en": "Updated by",
+      "zhs": "更新人"
+    },
+    "Field_UpdatedAt": {
+      "en": "Updated at",
+      "zhs": "更新时间"
+    },
+    "Audit": {
+      "zhs": "记录信息",
+      "en": "Record information"
+    },
+    "Field_ECODE": {
+      "zhs": "角色代码",
+      "en": "Role code"
+    },
+    "Field_ENAME": {
+      "zhs": "角色名称",
+      "en": "Role name"
+    },
+    "Field_Description": {
+      "zhs": "说明",
+      "en": "Description"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Field_IsBuiltIn": {
+      "zhs": "内建角色",
+      "en": "Built-in role"
+    },
+    "Section_Basic": {
+      "zhs": "基本信息",
+      "en": "Basic information"
+    },
+    "UserRoles": {
+      "en": "Account roles",
+      "zhs": "账号角色"
+    },
+    "ConfirmUserRoles": {
+      "en": "Save complete account role set",
+      "zhs": "完整保存此账号角色集合"
+    },
+    "Field_EID": {
+      "zhs": "唯一标识",
+      "en": "Unique ID"
+    },
+    "WorkbenchTitle": {
+      "zhs": "功能授权",
+      "en": "Feature authorization"
+    },
+    "WorkbenchHelp": {
+      "zhs": "选择角色，按入口位置配置功能。保存一次提交该角色的完整授权集合。",
+      "en": "Select a role and configure its features by entry position. Saving submits the complete authorization set once."
+    },
+    "Roles": {
+      "zhs": "角色",
+      "en": "Roles"
+    },
+    "SearchRoles": {
+      "zhs": "搜索角色",
+      "en": "Search roles"
+    },
+    "RoleSearchPlaceholder": {
+      "zhs": "名称或代码",
+      "en": "Name or code"
+    },
+    "Disabled": {
+      "zhs": "停用",
+      "en": "Disabled"
+    },
+    "ChooseRole": {
+      "zhs": "选择一个角色",
+      "en": "Select a role"
+    },
+    "ChooseRoleHelp": {
+      "zhs": "从左侧选择角色以查看授权。",
+      "en": "Select a role on the left to view its authorization."
+    },
+    "DisabledHelp": {
+      "zhs": "此角色已停用，保留的授权当前不生效。",
+      "en": "This role is disabled. Its saved authorization is currently inactive."
+    },
+    "AdminReadOnly": {
+      "zhs": "本地管理员授权由活动目录维护，只读。",
+      "en": "Local administrator authorization is maintained by the active catalog and is read-only."
+    },
+    "NoSavePermission": {
+      "zhs": "当前账号可查看，未获保存授权。",
+      "en": "This account can view authorization but does not have permission to save it."
+    },
+    "SearchFeatures": {
+      "zhs": "搜索功能",
+      "en": "Search features"
+    },
+    "FeatureSearchPlaceholder": {
+      "zhs": "功能名称或位置",
+      "en": "Feature name or position"
+    },
+    "GrantedOnly": {
+      "zhs": "仅已授权",
+      "en": "Granted only"
+    },
+    "ExpandAll": {
+      "zhs": "展开全部",
+      "en": "Expand all"
+    },
+    "CollapseAll": {
+      "zhs": "收起全部",
+      "en": "Collapse all"
+    },
+    "SelectBranch": {
+      "zhs": "全选此分支",
+      "en": "Select this branch"
+    },
+    "ClearBranch": {
+      "zhs": "清除此分支",
+      "en": "Clear this branch"
+    },
+    "SelectionHelp": {
+      "zhs": "勾选独立生效；点击名称选定批量操作分支。",
+      "en": "Each checkbox is independent. Click a name to select a branch for bulk changes."
+    },
+    "Save": {
+      "zhs": "保存授权",
+      "en": "Save authorization"
+    },
+    "Reset": {
+      "zhs": "重置",
+      "en": "Reset"
+    },
+    "UnsavedTitle": {
+      "zhs": "当前角色有未保存的授权",
+      "en": "This role has unsaved authorization"
+    },
+    "Cancel": {
+      "zhs": "取消",
+      "en": "Cancel"
+    },
+    "DiscardSwitch": {
+      "zhs": "放弃并切换",
+      "en": "Discard and switch"
+    },
+    "SaveSwitch": {
+      "zhs": "保存并切换",
+      "en": "Save and switch"
+    },
+    "SaveFailureHelp": {
+      "zhs": "保存失败会保留当前角色及草稿。",
+      "en": "If saving fails, the current role and draft are preserved."
+    },
+    "Saved": {
+      "zhs": "授权已保存",
+      "en": "Authorization saved"
+    },
+    "GrantedCount": {
+      "zhs": "已授权 {count} / {total}",
+      "en": "Granted {count} / {total}"
+    },
+    "AddedCount": {
+      "zhs": "新增 {count}",
+      "en": "Added {count}"
+    },
+    "RemovedCount": {
+      "zhs": "移除 {count}",
+      "en": "Removed {count}"
+    },
+    "MissingEntries": {
+      "zhs": "请先补选入口：{entries}",
+      "en": "Select the required entries first: {entries}"
+    },
+    "Surface_list_pageActions": {
+      "zhs": "列表操作",
+      "en": "List actions"
+    },
+    "Surface_list_rowActions": {
+      "zhs": "行操作",
+      "en": "Row actions"
+    },
+    "Surface_detail_pageActions": {
+      "zhs": "详情操作",
+      "en": "Detail actions"
+    },
+    "Surface_detail_custom": {
+      "zhs": "专用操作",
+      "en": "Custom actions"
+    },
+    "Surface_contextMenu": {
+      "zhs": "节点操作",
+      "en": "Node actions"
+    },
+    "Surface_treeActions": {
+      "zhs": "树操作",
+      "en": "Tree actions"
+    },
+    "Surface_list": {
+      "zhs": "导出",
+      "en": "Export"
+    },
+    "AccountHelp": {
+      "zhs": "选择已有普通账号，完整保存已配置角色。停用角色不产生有效权限。",
+      "en": "Select an existing regular account and save its complete role assignment. Disabled roles do not grant effective permissions."
+    },
+    "Account": {
+      "zhs": "账号",
+      "en": "Account"
+    },
+    "AccountSearchPlaceholder": {
+      "zhs": "搜索账号或姓名",
+      "en": "Search account or name"
+    },
+    "DisabledAccount": {
+      "zhs": "停用账号",
+      "en": "Disabled account"
+    },
+    "InactiveRole": {
+      "zhs": "停用（不生效）",
+      "en": "Disabled (inactive)"
+    },
+    "ConfiguredRoles": {
+      "zhs": "已配置 {count} 个角色",
+      "en": "Configured roles: {count}"
+    }
+  }
+}

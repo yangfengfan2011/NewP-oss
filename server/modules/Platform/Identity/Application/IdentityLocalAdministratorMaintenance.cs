@@ -1,0 +1,306 @@
+using ICP.Platform.Authentication.Contracts;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Crud.ObjectIds;
+using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Identity.Models;
+using ICP.Platform.Modules.Identity.Repositories;
+using ICP.Platform.Persistence.Abstractions;
+using Microsoft.AspNetCore.Identity;
+
+namespace ICP.Platform.Modules.Identity.Application;
+
+public static class IdentityMaintenanceActors
+{
+    public const string LocalMaintenance = "platform:local-maintenance";
+}
+
+public static class IdentityMaintenanceFailureCodes
+{
+    public const string BootstrapAlreadyCompleted = "IDENTITY_BOOTSTRAP_ALREADY_COMPLETED";
+    public const string LocalAdministratorInvariant = "IDENTITY_LOCAL_ADMIN_INVARIANT";
+}
+
+public static class IdentityMaintenanceReasons
+{
+    public const string Bootstrap = "离线初始化本地管理员";
+    public const string CredentialReset = "离线重置本地管理员凭据";
+}
+
+public sealed record BootstrapLocalAdministratorCommand(
+    string ECODE,
+    string ENAME,
+    string Reason,
+    IdentityActorContext Actor);
+
+public sealed record ResetLocalAdministratorCredentialCommand(
+    string Reason,
+    IdentityActorContext Actor);
+
+public sealed class IdentityMaintenanceException : InvalidOperationException
+{
+    public IdentityMaintenanceException(string failureCode) : base(failureCode)
+    {
+        FailureCode = failureCode;
+    }
+
+    public string FailureCode { get; }
+}
+
+public interface IIdentityLocalAdministratorMaintenanceService
+{
+    ValueTask<IdentityAccountCreationResult> BootstrapAsync(
+        BootstrapLocalAdministratorCommand command,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IdentityCredentialResetResult> ResetAsync(
+        ResetLocalAdministratorCredentialCommand command,
+        CancellationToken cancellationToken = default);
+}
+
+public enum LocalAdministratorReadinessState
+{
+    Ready,
+    BootstrapRequired,
+    InvariantInvalid
+}
+
+public sealed record LocalAdministratorReadiness(
+    LocalAdministratorReadinessState State,
+    string Diagnostic,
+    string? AccountEid = null);
+
+public interface IIdentityLocalAdministratorReadinessProbe
+{
+    ValueTask<LocalAdministratorReadiness> InspectAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed class IdentityLocalAdministratorReadinessProbe(
+    IIdentityRepository repository,
+    ILocalAdministratorRoleAssignment roleAssignment) : IIdentityLocalAdministratorReadinessProbe
+{
+    public async ValueTask<LocalAdministratorReadiness> InspectAsync(CancellationToken cancellationToken = default)
+    {
+        var accounts = await repository.SearchAccountsAsync(cancellationToken);
+        if (accounts.Count == 0)
+        {
+            return new(LocalAdministratorReadinessState.BootstrapRequired, "identity-bootstrap-required");
+        }
+
+        var administrators = accounts.Where(static account => account.IsLocalAdministrator).ToArray();
+        if (administrators.Length != 1)
+        {
+            return new(LocalAdministratorReadinessState.InvariantInvalid, "local-administrator-count-invalid");
+        }
+
+        var administrator = administrators[0];
+        var credential = await repository.FindCredentialAsync(administrator.EID, cancellationToken);
+        if (administrator.Status != IdentityAccountStatus.Enabled
+            || credential is null
+            || !IsSupportedPasswordHash(credential.PasswordHash))
+        {
+            return new(LocalAdministratorReadinessState.InvariantInvalid, "local-administrator-credential-invalid", administrator.EID);
+        }
+
+        if (await roleAssignment.InspectAsync(administrator.EID, cancellationToken)
+            != LocalAdministratorAssignmentState.Assigned)
+        {
+            return new(LocalAdministratorReadinessState.InvariantInvalid, "local-admin-role-assignment-invalid", administrator.EID);
+        }
+
+        return new(LocalAdministratorReadinessState.Ready, "local-administrator-ready", administrator.EID);
+    }
+
+    private static bool IsSupportedPasswordHash(string passwordHash)
+    {
+        if (string.IsNullOrWhiteSpace(passwordHash))
+        {
+            return false;
+        }
+
+        byte[] decoded;
+        try
+        {
+            decoded = Convert.FromBase64String(passwordHash);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        if (decoded.Length == 49 && decoded[0] == 0)
+        {
+            return true;
+        }
+
+        if (decoded.Length < 14 || decoded[0] != 1)
+        {
+            return false;
+        }
+
+        var prf = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(decoded.AsSpan(1, 4));
+        var iterations = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(decoded.AsSpan(5, 4));
+        var saltLength = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(decoded.AsSpan(9, 4));
+        return prf <= 2
+            && iterations > 0
+            && saltLength >= 16
+            && saltLength <= int.MaxValue
+            && decoded.Length >= 13 + (int)saltLength + 16;
+    }
+}
+
+public sealed class IdentityLocalAdministratorMaintenanceService(
+    IIdentityRepository repository,
+    IPlatformTransactionExecutor transactionExecutor,
+    IAuthenticationSessionRegistry sessionRegistry,
+    ILocalAdministratorRoleAssignment roleAssignment,
+    IPasswordHasher<IdentityAccount> passwordHasher,
+    ITemporaryCredentialIssuer temporaryCredentialIssuer,
+    IPlatformObjectIdGenerator objectIdGenerator,
+    TimeProvider timeProvider) : IIdentityLocalAdministratorMaintenanceService
+{
+    public ValueTask<IdentityAccountCreationResult> BootstrapAsync(
+        BootstrapLocalAdministratorCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ValidateMaintenanceActor(command.Actor);
+        var ecode = IdentityInputNormalizer.NormalizeAccountCode(command.ECODE);
+        var ename = IdentityInputNormalizer.NormalizeDisplayName(command.ENAME);
+        var reason = IdentityInputNormalizer.NormalizeReason(command.Reason);
+
+        return transactionExecutor.ExecuteAsync(async token =>
+        {
+            await repository.AcquireLocalAdministratorBootstrapLockAsync(token);
+            if ((await repository.SearchAccountsAsync(token)).Count != 0)
+            {
+                throw new IdentityMaintenanceException(IdentityMaintenanceFailureCodes.BootstrapAlreadyCompleted);
+            }
+
+            var now = timeProvider.GetUtcNow().UtcDateTime;
+            var account = new IdentityAccount
+            {
+                EID = objectIdGenerator.NewId(nameof(IdentityAccount)),
+                ECODE = ecode,
+                NormalizedECODE = ecode.ToUpperInvariant(),
+                ENAME = ename,
+                Status = IdentityAccountStatus.Enabled,
+                IsLocalAdministrator = true,
+                Revision = 1,
+                CreatedBy = command.Actor.ActorId,
+                CreatedAt = now,
+                UpdatedBy = command.Actor.ActorId,
+                UpdatedAt = now
+            };
+            var temporaryCredential = temporaryCredentialIssuer.Issue();
+            repository.AddAccount(account);
+            repository.AddCredential(new LocalCredential
+            {
+                EID = objectIdGenerator.NewId(nameof(LocalCredential)),
+                AccountEID = account.EID,
+                PasswordHash = passwordHasher.HashPassword(account, temporaryCredential),
+                IsTemporary = true,
+                CreatedBy = command.Actor.ActorId,
+                CreatedAt = now,
+                UpdatedBy = command.Actor.ActorId,
+                UpdatedAt = now
+            });
+            repository.AddSecurityEvent(CreateEvent(
+                account.EID,
+                IdentitySecurityEventTypes.LocalAdministratorBootstrapped,
+                reason,
+                command.Actor,
+                now));
+            await roleAssignment.AssignAsync(account.EID, command.Actor.ActorId, token);
+            return new IdentityAccountCreationResult(IdentityAccountApplicationService.ToSnapshot(account), temporaryCredential);
+        }, cancellationToken);
+    }
+
+    public async ValueTask<IdentityCredentialResetResult> ResetAsync(
+        ResetLocalAdministratorCredentialCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ValidateMaintenanceActor(command.Actor);
+        var reason = IdentityInputNormalizer.NormalizeReason(command.Reason);
+        var accounts = await repository.SearchAccountsAsync(cancellationToken);
+        var administrators = accounts.Where(static account => account.IsLocalAdministrator).ToArray();
+        if (administrators.Length != 1)
+        {
+            throw new IdentityMaintenanceException(IdentityMaintenanceFailureCodes.LocalAdministratorInvariant);
+        }
+
+        var administrator = administrators[0];
+        var credential = await repository.FindCredentialAsync(administrator.EID, cancellationToken)
+            ?? throw new IdentityMaintenanceException(IdentityMaintenanceFailureCodes.LocalAdministratorInvariant);
+        if (administrator.Status != IdentityAccountStatus.Enabled
+            || await roleAssignment.InspectAsync(administrator.EID, cancellationToken) != LocalAdministratorAssignmentState.Assigned)
+        {
+            throw new IdentityMaintenanceException(IdentityMaintenanceFailureCodes.LocalAdministratorInvariant);
+        }
+
+        var temporaryCredential = temporaryCredentialIssuer.Issue();
+        var expectedRevision = administrator.Revision;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        credential.PasswordHash = passwordHasher.HashPassword(administrator, temporaryCredential);
+        credential.IsTemporary = true;
+        credential.UpdatedBy = command.Actor.ActorId;
+        credential.UpdatedAt = now;
+        administrator.Revision++;
+        administrator.UpdatedBy = command.Actor.ActorId;
+        administrator.UpdatedAt = now;
+
+        return await transactionExecutor.ExecuteAsync(async token =>
+        {
+            if (!await repository.TryReplaceAccountAsync(administrator, expectedRevision, token))
+            {
+                throw new IdentityMaintenanceException(IdentityMaintenanceFailureCodes.LocalAdministratorInvariant);
+            }
+
+            await repository.ReplaceCredentialAsync(credential, token);
+            await sessionRegistry.RevokeAllAsync(new AccountAuthenticationSessionsRevocation
+            {
+                AccountEid = administrator.EID,
+                Reason = reason,
+                ActorId = command.Actor.ActorId
+            }, token);
+            repository.AddSecurityEvent(CreateEvent(
+                administrator.EID,
+                IdentitySecurityEventTypes.LocalAdministratorCredentialReset,
+                reason,
+                command.Actor,
+                now));
+            return new IdentityCredentialResetResult(IdentityAccountApplicationService.ToSnapshot(administrator), temporaryCredential);
+        }, cancellationToken);
+    }
+
+    private IdentitySecurityEvent CreateEvent(
+        string accountEid,
+        string eventType,
+        string reason,
+        IdentityActorContext actor,
+        DateTime now) => new()
+        {
+            EID = objectIdGenerator.NewId(nameof(IdentitySecurityEvent)),
+            TargetAccountEID = accountEid,
+            EventType = eventType,
+            Reason = reason,
+            OccurredAt = now,
+            TraceId = actor.TraceId,
+            ActorKind = actor.ActorKind,
+            ActorAccountEID = null,
+            CreatedBy = actor.ActorId,
+            CreatedAt = now,
+            UpdatedBy = actor.ActorId,
+            UpdatedAt = now
+        };
+
+    private static void ValidateMaintenanceActor(IdentityActorContext actor)
+    {
+        if (actor.ActorKind != IdentitySecurityActorKind.LocalMaintenance
+            || !string.Equals(actor.ActorId, IdentityMaintenanceActors.LocalMaintenance, StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(actor.TraceId))
+        {
+            throw new IdentityMaintenanceException(IdentityFailureCodes.InvalidActor);
+        }
+    }
+}

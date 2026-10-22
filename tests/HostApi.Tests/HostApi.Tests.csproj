@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>ICP.Platform.HostApi.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../server/templates/backend-module-template/TemplateModule.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="ObjectOperationExtensionProbe.newp.plugin.json">
+      <LogicalName>ICP.Platform.HostApi.Tests.ObjectOperationExtensionProbe.newp.plugin.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../TestSupport/Components/ComponentBundleTestInput.cs" Link="TestSupport/ComponentBundleTestInput.cs" />
+    <ProjectReference Include="..\..\apps\host-api\HostApi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\TestSupport\Authorization\RuntimeFeatureCatalogTestSupport.cs"
+             Link="TestSupport\Authorization\RuntimeFeatureCatalogTestSupport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Acceptance.HistoricalMigrations/Example.Stage2.SqlServerMigrations/Example.Stage2.SqlServerMigrations.csproj" />
+    <ProjectReference Include="../Acceptance.HistoricalMigrations/Example.Stage3.SqlServerMigrations/Example.Stage3.SqlServerMigrations.csproj" />
+    <ProjectReference Include="../Acceptance.HistoricalMigrations/Organization.Foundation.SqlServerMigrations/Organization.Foundation.SqlServerMigrations.csproj" />
+    <ProjectReference Include="../Acceptance.HistoricalMigrations/Platform.Foundation.SqlServerMigrations/Platform.Foundation.SqlServerMigrations.csproj" />
+    <Content Include="../Acceptance.HistoricalMigrations/Authoring/**/*.json" Link="AcceptanceHistory/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../TestSupport/StandardData/StandardDataReadFixtureCatalog.cs" Link="TestSupport/StandardData/StandardDataReadFixtureCatalog.cs" />
+  </ItemGroup>
+</Project>

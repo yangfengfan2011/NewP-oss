@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "DataScopeObjectAction": {
+    "kind": "Entity",
+    "fields": [
+      { "name": "EntryId", "storage": { "type": "string" } },
+      { "name": "ActionKey", "storage": { "type": "string" } },
+      { "name": "Opinion", "storage": { "type": "string" } }
+    ],
+    "indexes": [
+      { "name": "IX_DataScopeObjectAction_0", "fields": ["EntryId", "ActionKey"], "unique": false }
+    ]
+  }
+}

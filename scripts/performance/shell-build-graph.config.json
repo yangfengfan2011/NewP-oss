@@ -1,0 +1,181 @@
+{
+  "schemaVersion": "1.0",
+  "scenarios": {
+    "anonymous": {
+      "roots": [
+        { "manifestKey": "index.html" }
+      ]
+    },
+    "authenticatedShell": {
+      "roots": [
+        { "manifestKey": "index.html" },
+        { "sourceRegex": "(?:^|/)src/App\\.tsx$" }
+      ]
+    },
+    "moduleBindingEager": {
+      "roots": [
+        { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" }
+      ]
+    },
+    "authenticatedHome": {
+      "roots": [
+        { "manifestKey": "index.html" },
+        { "sourceRegex": "(?:^|/)src/App\\.tsx$" },
+        { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" }
+      ]
+    },
+    "personnelRoute": {
+      "roots": [
+        { "manifestKey": "index.html" },
+        { "sourceRegex": "(?:^|/)src/App\\.tsx$" },
+        { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+        {
+          "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+          "match": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.primary\\.ts$" }
+        },
+        {
+          "dynamicImportsOf": { "sourceContains": "src/capabilities/StandardRouteCapabilityAdapters.tsx" },
+          "match": { "sourceContains": "src/pages/StandardListPageHost.tsx" }
+        }
+      ],
+      "relativeTo": "authenticatedHome"
+    }
+  },
+  "targetCapabilityAssets": [
+    {
+      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+      "match": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.primary\\.ts$" }
+    },
+    {
+      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+      "match": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.recovery\\.ts$" }
+    }
+  ],
+  "bindingEntries": [
+    { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" }
+  ],
+  "forbiddenDependencies": [
+    {
+      "id": "ant-design-pro",
+      "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "rc-picker",
+      "sourceContains": "/node_modules/.pnpm/rc-picker@",
+      "scenarios": ["anonymous"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "rc-picker-authenticated-shell",
+      "sourceContains": "/node_modules/.pnpm/rc-picker@",
+      "scenarios": ["authenticatedShell"],
+      "enforcement": "report-only",
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "business-module-page",
+      "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/(?:pages|components|standard-crud)/",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "shell-non-initial-page",
+      "sourceRegex": "(?:^|/)src/pages/(?:UiShowcase|StandardListPageHost|StandardCrudListPageHost|StandardCrudDetailPageHost)\\.tsx$",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "ui-root-compatibility-entry",
+      "sourceRegex": "(?:^|/)(?:packages/)?ui/src/index\\.ts$",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "ui-crud-entry",
+      "sourceRegex": "(?:^|/)(?:packages/)?ui/src/(?:crud\\.ts|pro-adapters/|patterns/StandardCrud)",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "standard-crud-list-host",
+      "sourceRegex": "(?:^|/)src/pages/StandardCrudListPageHost\\.tsx$",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "standard-crud-detail-host",
+      "sourceRegex": "(?:^|/)src/pages/StandardCrudDetailPageHost\\.tsx$",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "module-binding-eager-pro",
+      "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-",
+      "scenarios": ["moduleBindingEager"],
+      "attribution": "module-binding-eager"
+    },
+    {
+      "id": "module-binding-eager-rc-picker",
+      "sourceContains": "/node_modules/.pnpm/rc-picker@",
+      "scenarios": ["moduleBindingEager"],
+      "attribution": "module-binding-eager"
+    },
+    {
+      "id": "module-binding-eager-business-page",
+      "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/(?:pages|components|services|standard-crud)/",
+      "scenarios": ["moduleBindingEager"],
+      "attribution": "module-binding-eager"
+    },
+    {
+      "id": "retired-frontend-module",
+      "sourceRegex": "(?:^|/)modules/(?:[^/]+/)*(?:config-center|demo|files|metadata-config-center|module-template-sample|plugin-ops)/src/",
+      "scenarios": ["moduleBindingEager"],
+      "attribution": "retired-frontend"
+    },
+    {
+      "id": "retired-organization-page",
+      "sourceRegex": "(?:^|/)modules/platform/organization/src/(?:pages/(?:OrganizationTreePage|PositionManagementPage)|components/OrganizationTreePanel)\\.tsx$",
+      "scenarios": ["moduleBindingEager"],
+      "attribution": "retired-frontend"
+    }
+  ],
+  "budgets": {
+    "maxChunkMinifiedBytes": 500000,
+    "chunkOverrides": [
+      {
+        "id": "standard-list-pro-table-static-runtime",
+        "scenario": "personnelRoute",
+        "targetRoots": [
+          {
+            "dynamicImportsOf": { "sourceContains": "src/capabilities/StandardRouteCapabilityAdapters.tsx" },
+            "match": { "sourceContains": "src/pages/StandardListPageHost.tsx" }
+          }
+        ],
+        "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-form@[^/]+/node_modules/@ant-design/pro-form/es/BaseForm/createField\\.js$",
+        "forbiddenSources": [
+          { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/" },
+          { "sourceRegex": "(?:^|/)(?:packages/)?shell/src/pages/StandardCrudDetail" },
+          { "sourceRegex": "(?:^|/)(?:packages/)?ui/src/(?:crud-detail|crud-form)\\.ts$" }
+        ],
+        "maxMinifiedBytes": 550000
+      }
+    ],
+    "maxBindingEntryGzipBytes": 20480,
+    "maxAllBindingEntriesGzipBytes": 102400,
+    "scenarios": {
+      "anonymous": {
+        "maxMinifiedBytes": 819200,
+        "maxGzipBytes": 256000
+      },
+      "authenticatedHome": {
+        "maxMinifiedBytes": 1153434,
+        "maxGzipBytes": 358400
+      },
+      "personnelRoute": {
+        "maxDeltaGzipBytes": 620000
+      }
+    }
+  }
+}

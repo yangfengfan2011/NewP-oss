@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Workspace",
+  "modelDigest": "2c3e3eda8c6c6c88b115e4803f9f742d0c4fe476567b257ef419763858cd5572",
+  "bundleChecksum": "71555f1389dca1e9b517eebb287aaffcb6466aa3129708bcf8ae10c2a7918a31",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20261008072758_Workspace_000001_Spaces",
+      "previousContentDigest": null,
+      "contentDigest": "c0e86694c4561d6b2f19bf7adfe7104115898438a668efe697114b797bcb65a3",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "c7697bab6bc9a2d0d9a4208e074d7badd491e3fa9884fb649156de0d7f15cbc8",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000002",
+      "migrationId": "20261008090257_Workspace_000002_Content",
+      "previousContentDigest": "c0e86694c4561d6b2f19bf7adfe7104115898438a668efe697114b797bcb65a3",
+      "contentDigest": "64efdca5eef7d35459f39e9817433d7dfbacf9c8508a450308defd347254d2a7",
+      "fromModelDigest": "c7697bab6bc9a2d0d9a4208e074d7badd491e3fa9884fb649156de0d7f15cbc8",
+      "toModelDigest": "39f73f9996aeeff67e1d915b0c37085b00137588fe0bef27c003bdd941296286",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000003",
+      "migrationId": "20261013022831_Workspace_000003_AccountSubject",
+      "previousContentDigest": "64efdca5eef7d35459f39e9817433d7dfbacf9c8508a450308defd347254d2a7",
+      "contentDigest": "c17ec74e890c970f6e7234fdf9a3977e612d8f3851b343fc305a39d3ec290d9d",
+      "fromModelDigest": "39f73f9996aeeff67e1d915b0c37085b00137588fe0bef27c003bdd941296286",
+      "toModelDigest": "3d17f4e95d4dda309ffd1bd2e27eed959068da9bb005e13458b10ba5f2e63707",
+      "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000004",
+      "migrationId": "20261014142253_Workspace_000004_TreeOrder",
+      "previousContentDigest": "c17ec74e890c970f6e7234fdf9a3977e612d8f3851b343fc305a39d3ec290d9d",
+      "contentDigest": "f8f1e2d73a803e78d80a7176e0ce4678b1efe722f5f8dae68d979b01d0b63a6f",
+      "fromModelDigest": "3d17f4e95d4dda309ffd1bd2e27eed959068da9bb005e13458b10ba5f2e63707",
+      "toModelDigest": "7b6bf257c8b49ab7421936833251e612eb4b52b6ccba0721663f82ff8ef5f5a5",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000005",
+      "migrationId": "20261014142313_Workspace_000005_TreeOrderBackfill",
+      "previousContentDigest": "f8f1e2d73a803e78d80a7176e0ce4678b1efe722f5f8dae68d979b01d0b63a6f",
+      "contentDigest": "0b6f2aab1fe3a5131d4d5a0986c2846600ac29d402755d6ef3c66c5a2ef41660",
+      "fromModelDigest": "7b6bf257c8b49ab7421936833251e612eb4b52b6ccba0721663f82ff8ef5f5a5",
+      "toModelDigest": "7b6bf257c8b49ab7421936833251e612eb4b52b6ccba0721663f82ff8ef5f5a5",
+      "compatibility": "data-backfill"
+    },
+    {
+      "sequence": "000006",
+      "migrationId": "20261016054922_Workspace_000006_ScopeNeutral",
+      "previousContentDigest": "0b6f2aab1fe3a5131d4d5a0986c2846600ac29d402755d6ef3c66c5a2ef41660",
+      "contentDigest": "11af272a8d59b8f9db1cb8ce1ea568d64d2c56f1377cfdcf5d406d2e0d6354d4",
+      "fromModelDigest": "7b6bf257c8b49ab7421936833251e612eb4b52b6ccba0721663f82ff8ef5f5a5",
+      "toModelDigest": "c32647604387924d8ac68c163d9f532c2479ad315d97d334f79a218e1cf0c7ff",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000007",
+      "migrationId": "20261016132111_Workspace_000007_ObjectCopy",
+      "previousContentDigest": "11af272a8d59b8f9db1cb8ce1ea568d64d2c56f1377cfdcf5d406d2e0d6354d4",
+      "contentDigest": "56fc7ca7a0d07cd62244e9954fcf48a2e2f105ffc8cc48340fdc9d717187dc95",
+      "fromModelDigest": "c32647604387924d8ac68c163d9f532c2479ad315d97d334f79a218e1cf0c7ff",
+      "toModelDigest": "9c06fa32a7eb2256de4ff48444f6d77b37ac94ce50d3e1df965f827d09a1b960",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000008",
+      "migrationId": "20261017105016_Workspace_000008_EntityOwnership",
+      "previousContentDigest": "56fc7ca7a0d07cd62244e9954fcf48a2e2f105ffc8cc48340fdc9d717187dc95",
+      "contentDigest": "3ef77fbd234a046816f444a189b6f48c0a2b3b70ca1e304b71479600a19334e2",
+      "fromModelDigest": "9c06fa32a7eb2256de4ff48444f6d77b37ac94ce50d3e1df965f827d09a1b960",
+      "toModelDigest": "7eeca289e39cecb20231a90918eede01e781c0326639166b7a3fd59c028a2949",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000009",
+      "migrationId": "20261017231111_Workspace_000009_TransferNotifications",
+      "previousContentDigest": "3ef77fbd234a046816f444a189b6f48c0a2b3b70ca1e304b71479600a19334e2",
+      "contentDigest": "fbcc3df543fec6e37ba606f6763987618cef111f0c688c7cad58d61a63a3a2b7",
+      "fromModelDigest": "7eeca289e39cecb20231a90918eede01e781c0326639166b7a3fd59c028a2949",
+      "toModelDigest": "2c3e3eda8c6c6c88b115e4803f9f742d0c4fe476567b257ef419763858cd5572",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0", "type": "view",
+  "view": {
+    "key": "workspace.folder.list", "mode": "list", "model": "WorkspaceFolder", "resourceKey": "workspace.folder",
+    "querySource": { "kind": "link", "model": "WorkspaceFolderContent", "resourceKey": "workspace.content" },
+    "dataAccess": {"execution":"workspace.content.read","resources":["workspace.folder","part.part","document.document"]},
+    "dicKey": "Workspace", "titleKey": "Folder", "descriptionKey": "RootDescription", "detailViewKey": "workspace.folder.detail",
+    "query": { "fields": [{ "key": "ObjectType", "labelKey": "ObjectType", "source": "model", "field": "ObjectType", "dataSourceKey": "workspace.content.types", "operator": "=" }, { "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultPageSize": 20, "defaultSort": { "field": "UpdatedAt", "direction": "desc" } },
+    "columnResize": true,
+    "columns": [
+      { "key": "type", "labelKey": "ObjectType", "source": "projection", "field": "ObjectType" },
+      { "key": "code", "labelKey": "Code", "source": "projection", "field": "Code", "sortable": true },
+      { "key": "name", "labelKey": "Name", "source": "projection", "field": "Name", "standardAction": "view", "sortable": true },
+      { "key": "updatedBy", "labelKey": "Field_UpdatedBy", "source": "projection", "field": "UpdatedBy" },
+      { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
+    ],
+    "pageActions": [
+      {"key": "create", "labelKey": "CreateFolder", "handlerKey": "create", "inputKey": "createFolder", "variant": "primary", "dataAccess": {"object":"WorkspaceFolder","actions":["create"]}},
+      {"key": "createPart", "labelKey": "CreatePart", "handlerKey": "createPart", "inputKey": "createObject", "dataAccess": {"object":"Part","actions":["create"]}},
+      {"key": "createDocument", "labelKey": "CreateDocument", "handlerKey": "createDocument", "inputKey": "createObject", "dataAccess": {"object": "Document", "actions": ["create"]}},
+      {"key": "copySelected", "labelKey": "Copy", "handlerKey": "copy", "requiresSelection": true, "dataAccess": {"object":"WorkspaceFolder","actions":["read"]} },
+      {"key": "cutSelected", "labelKey": "Cut", "handlerKey": "cut", "requiresSelection": true, "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
+      {"key": "paste", "labelKey": "PasteReferences", "handlerKey": "paste", "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
+      {"key": "pasteObjectCopy", "labelKey": "PasteObjectCopy", "handlerKey": "pasteObjectCopy", "inputKey": "copyObject", "dataAccess":[{"object":"Part","actions":["partObjectCopy"]},{"object":"Document","actions":["documentObjectCopy"]}]},
+      {"key": "pasteFolderCopy", "labelKey": "PasteFolderCopy", "handlerKey": "pasteFolderCopy", "inputKey": "copyFolder", "dataAccess": {"object": "WorkspaceFolder", "actions": ["workspaceCopy"]}},
+      {"key": "pasteFolderStructure", "labelKey": "PasteFolderStructure", "handlerKey": "pasteFolderStructure", "inputKey": "copyFolder", "dataAccess": {"object": "WorkspaceFolder", "actions": ["workspaceCopy"]}},
+      {"key": "resolveObjectCopy", "labelKey": "CopyResolve", "handlerKey": "resolveObjectCopy", "inputKey": "recoverObjectCopy", "confirmLabelKey": "CopyCloseAndRefresh"},
+      {"key": "clearClipboard", "labelKey": "ClearClipboard", "handlerKey": "copy"},
+      {"key": "batchAuthorize", "labelKey": "BatchAuthorize", "handlerKey": "authorize", "inputKey": "batchAuthorization", "requiresSelection": true, "readBehaviors": ["workspace.folder.read"], "inputReadSourceKey": "workspace.content.permissions", "dataAccess": [{"object":"WorkspaceFolder","actions":["authorize"]},{"object":"Part","actions":["authorize"]},{"object":"Document","actions":["authorize"]}]},
+      {"key": "transferSelected", "labelKey": "TransferSelected", "handlerKey": "transfer", "inputKey": "transferOwnership", "requiresSelection": true, "readBehaviors": ["workspace.folder.read"], "dataAccess": [{"object":"WorkspaceFolder","actions":["edit"]},{"object":"Part","actions":["edit"]},{"object":"Document","actions":["edit"]}]},
+      {"key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership", "inputReadSourceKey": "workspace.folder.initializeOwnership", "dataAccess": [{"object":"WorkspaceFolder","actions":["edit"]},{"object":"Part","actions":["edit"]},{"object":"Document","actions":["edit"]}]},
+      {"key": "removeSelected", "labelKey": "RemoveSelected", "handlerKey": "removeSelected", "requiresSelection": true, "inputKey": "confirmReferences", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReferences", "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
+      {"key": "deleteObjects", "labelKey": "BatchDelete", "handlerKey": "deleteObjects", "requiresSelection": true, "inputKey": "confirmDelete", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects", "dataAccess": [{"object":"WorkspaceFolder","actions":["delete"]},{"object":"Part","actions":["delete"]},{"object":"Document","actions":["delete"]}]}
+    ],
+    "pageActionGroups": [
+      {"key": "new", "labelKey": "New", "variant": "primary", "actionKeys": ["create", "createPart", "createDocument"]},
+      {"key": "pasteOptions", "labelKey": "Paste", "actionKeys": ["paste", "pasteObjectCopy", "pasteFolderCopy", "pasteFolderStructure", "resolveObjectCopy", "clearClipboard"]},
+      {"key": "accessAndOwnership", "labelKey": "AccessAndOwnership", "actionKeys": ["batchAuthorize", "transferSelected", "initializeOwnershipPending"]},
+      {"key": "removeAndDelete", "labelKey": "RemoveAndDelete", "variant": "danger", "actionKeys": ["removeSelected", "deleteObjects"]}
+    ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "Authorize", "behaviorKey": "workspace.folder.authorize", "dataAccess": [{"object":"WorkspaceFolder","actions":["authorize"]},{"object":"Part","actions":["authorize"]},{"object":"Document","actions":["authorize"]}] },
+      { "key": "initializeOwnership", "titleKey": "InitializeOwnership", "behaviorKey": "workspace.folder.initializeOwnership", "readBehaviors": ["workspace.folder.read"], "inputReadSourceKey": "workspace.folder.initializeOwnership", "dataAccess": [{"object":"WorkspaceFolder","actions":["edit"]},{"object":"Part","actions":["edit"]},{"object":"Document","actions":["edit"]}] },
+      { "key": "moveUp", "titleKey": "MoveUp", "labelKey": "MoveUp", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"], "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
+      { "key": "moveDown", "titleKey": "MoveDown", "labelKey": "MoveDown", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"], "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
+      { "key": "add", "titleKey": "AddFolder", "behaviorKey": "workspace.folder.add", "readBehaviors": ["workspace.folder.read"] }],
+    "rowActionColumn": "menu",
+    "rowActionSets": {
+      "WorkspaceFolder": { "column": ["transfer", "view", "copy", "cut", "edit", "delete", "remove", "initializeOwnership", "viewAuthorization", "authorizeContent", "history"], "contextMenu": ["transfer", "view", "copy", "cut", "edit", "delete", "remove", "initializeOwnership", "viewAuthorization", "authorizeContent", "history"] },
+      "Part": { "column": ["transfer", "copy", "cut", "edit", "delete", "remove", "initializeOwnership", "viewAuthorization", "authorizeContent", "history"], "contextMenu": ["transfer", "copy", "cut", "edit", "delete", "remove", "initializeOwnership", "viewAuthorization", "authorizeContent", "history"] },
+      "Document": { "column": ["transfer", "copy", "cut", "edit", "delete", "remove", "initializeOwnership", "viewAuthorization", "authorizeContent", "history"], "contextMenu": ["transfer", "copy", "cut", "edit", "delete", "remove", "initializeOwnership", "viewAuthorization", "authorizeContent", "history"] }
+    },
+    "rowActions": [{ "key": "transfer", "labelKey": "Transfer", "handlerKey": "transfer", "inputKey": "transferOwnership", "readBehaviors": ["workspace.folder.read"], "dataAccess": [{"object":"WorkspaceFolder","actions":["edit"]},{"object":"Part","actions":["edit"]},{"object":"Document","actions":["edit"]}] }, { "key": "history", "labelKey": "History", "standardAction": "view", "navigationTargetKey": "workspace.history", "dataAccess": [{"object":"WorkspaceFolder","actions":["read"]},{"object":"Part","actions":["read"]},{"object":"Document","actions":["read"]}] }, { "key": "viewAuthorization", "labelKey": "Permissions", "standardAction": "view", "navigationTargetKey": "workspace.permissions", "inputReadSourceKey": "workspace.content.permissions" }, { "key": "authorizeContent", "labelKey": "Authorize", "handlerKey": "authorize", "inputKey": "objectAuthorization", "readBehaviors": ["workspace.folder.read"], "inputReadSourceKey": "workspace.content.permissions", "dataAccess": [{"object":"WorkspaceFolder","actions":["authorize"]},{"object":"Part","actions":["authorize"]},{"object":"Document","actions":["authorize"]}] }, { "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }, { "key": "copy", "labelKey": "Copy", "handlerKey": "copy", "dataAccess": {"object":"WorkspaceFolder","actions":["read"]} }, { "key": "cut", "labelKey": "Cut", "handlerKey": "cut", "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} }, { "key": "edit", "labelKey": "Edit", "handlerKey": "editObject", "inputKey": "editObject", "dataAccess": [{"object":"WorkspaceFolder","actions":["edit"]},{"object":"Part","actions":["edit"]},{"object":"Document","actions":["edit"]}] }, { "key": "delete", "labelKey": "Delete", "handlerKey": "deleteObject", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects" , "dataAccess": [{"object":"WorkspaceFolder","actions":["delete"]},{"object":"Part","actions":["delete"]},{"object":"Document","actions":["delete"]}]}, { "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference", "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} }, { "key": "initializeOwnership", "labelKey": "InitializeOwnership", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership", "inputReadSourceKey": "workspace.folder.initializeOwnership", "dataAccess": [{"object":"WorkspaceFolder","actions":["edit"]},{"object":"Part","actions":["edit"]},{"object":"Document","actions":["edit"]}] }], "export": { "enabled": false }
+  }
+}

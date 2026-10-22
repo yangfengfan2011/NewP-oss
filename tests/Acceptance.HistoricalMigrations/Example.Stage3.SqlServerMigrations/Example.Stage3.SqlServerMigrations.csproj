@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Example.Stage3.SqlServerMigrations</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Optimize>true</Optimize>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../server/platform-persistence-efcore/PlatformPersistence.EfCore.csproj" />
+    <Compile Include="../../../server/modules/Example/Migrations.SqlServer/Migrations/20260827110703_Example_000001_Foundation.cs" Link="Migrations/20260827110703_Example_000001_Foundation.cs" />
+    <Compile Include="../../../server/modules/Example/Migrations.SqlServer/Migrations/20260827110703_Example_000001_Foundation.Designer.cs" Link="Migrations/20260827110703_Example_000001_Foundation.Designer.cs" />
+    <Compile Include="../../../server/modules/Example/Migrations.SqlServer/Migrations/20260827120035_Example_000002_ReviewerUserEID.cs" Link="Migrations/20260827120035_Example_000002_ReviewerUserEID.cs" />
+    <Compile Include="../../../server/modules/Example/Migrations.SqlServer/Migrations/20260827120035_Example_000002_ReviewerUserEID.Designer.cs" Link="Migrations/20260827120035_Example_000002_ReviewerUserEID.Designer.cs" />
+    <Compile Include="../../../server/modules/Example/Migrations.SqlServer/Migrations/20260828082341_Example_000003_RecordSourceNullable.cs" Link="Migrations/20260828082341_Example_000003_RecordSourceNullable.cs" />
+    <Compile Include="../../../server/modules/Example/Migrations.SqlServer/Migrations/20260828082341_Example_000003_RecordSourceNullable.Designer.cs" Link="Migrations/20260828082341_Example_000003_RecordSourceNullable.Designer.cs" />
+  </ItemGroup>
+</Project>

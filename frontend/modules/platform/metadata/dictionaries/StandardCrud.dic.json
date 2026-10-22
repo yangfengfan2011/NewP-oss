@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "StandardCrud": {
+    "ShortTextTooLong": { "zhs": "文本不能超过 {maxLength} 个字符。", "en": "Text cannot exceed {maxLength} characters." },
+    "ShortTextNotNormalized": { "zhs": "请去除首尾空白，空值请提交 null。", "en": "Trim leading and trailing whitespace; submit null for an empty value." }
+  }
+}

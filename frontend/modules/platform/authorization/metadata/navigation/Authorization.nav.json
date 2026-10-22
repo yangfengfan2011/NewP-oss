@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "authorization.workbench",
+        "titleKey": "Navigation.Workbench",
+        "path": "/authorization/workbench",
+        "featureKey": "authorization.workbench",
+        "order": 5,
+        "page": {
+          "pageKey": "authorization.workbench",
+          "dataAccess": { "execution": "authorization.workbench.read", "resources": ["authorization.role"] }
+        }
+      },
+      {
+        "key": "authorization.dataScope",
+        "titleKey": "Navigation.DataScope",
+        "path": "/authorization/data-scope",
+        "featureKey": "authorization.dataScope",
+        "order": 7,
+        "page": {
+          "pageKey": "authorization.dataScope"
+        }
+      },
+      {
+        "key": "authorization.roles",
+        "titleKey": "Navigation.Roles",
+        "path": "/authorization/roles",
+        "icon": "module",
+        "order": 10,
+        "entryType": "standard-list",
+        "targetKey": "authorization.role.list",
+        "featureAuthorization": true
+      },
+      {
+        "key": "authorization.role.detail",
+        "path": "/authorization/roles/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "authorization.role.detail",
+        "featureOwner": "navigation:authorization.roles"
+      }
+    ]
+  }
+}

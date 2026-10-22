@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "ValueListItem": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
+    "fields": [
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_ValueListItem_ECODE",
+        "fields": [
+          "ECODE"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

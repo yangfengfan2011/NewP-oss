@@ -1,0 +1,5 @@
+{
+  "readPosition": "Workspace/navigation:workspace",
+  "batchPosition": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:batchAuthorize",
+  "copyPosition": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:copySelected"
+}

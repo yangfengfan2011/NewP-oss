@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "DepartmentDetailView": {
+    "Section_Basic": {
+      "zhs": "基本信息",
+      "en": "Basic Information"
+    },
+    "Field_CompanyId": {
+      "zhs": "所属公司",
+      "en": "Company"
+    },
+    "Field_ParentDepartmentId": {
+      "zhs": "上级部门",
+      "en": "Parent Department"
+    },
+    "Field_ECODE": {
+      "zhs": "部门编码",
+      "en": "Department Code"
+    },
+    "Field_ENAME": {
+      "zhs": "部门名称",
+      "en": "Department Name"
+    },
+    "Field_SortOrder": {
+      "zhs": "排序码",
+      "en": "Sort Order Code"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Title": {
+      "zhs": "部门详情",
+      "en": "Department Details"
+    },
+    "Description": {
+      "zhs": "查看部门信息。",
+      "en": "View department information."
+    },
+    "Section_Audit": {
+      "zhs": "审计信息",
+      "en": "Audit"
+    },
+    "Field_CreatedBy": {
+      "zhs": "创建人",
+      "en": "Created By"
+    },
+    "Field_CreatedAt": {
+      "zhs": "创建时间",
+      "en": "Created At"
+    },
+    "Field_UpdatedBy": {
+      "zhs": "更新人",
+      "en": "Updated By"
+    },
+    "Field_UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "Updated At"
+    }
+  }
+}

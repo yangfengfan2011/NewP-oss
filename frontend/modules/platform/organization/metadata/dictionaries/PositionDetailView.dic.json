@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "PositionDetailView": {
+    "Action_Edit": { "zhs": "编辑", "en": "Edit" },
+    "Section_Basic": {
+      "zhs": "基本信息",
+      "en": "Basic Information"
+    },
+    "Field_ENAME": {
+      "zhs": "岗位名称",
+      "en": "Position Name"
+    },
+    "Field_Description": {
+      "zhs": "岗位描述",
+      "en": "Description"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Title": {
+      "zhs": "岗位详情",
+      "en": "Position Details"
+    },
+    "Description": {
+      "zhs": "查看岗位信息。",
+      "en": "View position information."
+    },
+    "Section_Audit": {
+      "zhs": "审计信息",
+      "en": "Audit"
+    },
+    "Field_CreatedBy": {
+      "zhs": "创建人",
+      "en": "Created By"
+    },
+    "Field_CreatedAt": {
+      "zhs": "创建时间",
+      "en": "Created At"
+    },
+    "Field_UpdatedBy": {
+      "zhs": "更新人",
+      "en": "Updated By"
+    },
+    "Field_UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "Updated At"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+using ICP.Platform.Authorization.Contracts;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace ICP.Platform.Authorization.Http;
+
+/// <summary>启动覆盖与运行时共用真实端点的业务归属证明，不包含对象动作要求。</summary>
+public static class ButtonBusinessEndpointBindings
+{
+    /// <summary>静态端点匹配原模块行为；资源端点只匹配已登记资源拥有者及其真实行为。</summary>
+    public static bool Matches(Endpoint? endpoint, string moduleId, string businessBinding, DataScopeResource? resource = null, string? featureBehavior = null)
+    {
+        if (endpoint is null) return false;
+        var owners = endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
+        var features = endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>();
+        var dynamic = endpoint.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>();
+        var operation = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.OperationKey;
+        if (owners.Count != 1) return false;
+        if (dynamic.Count == 0)
+            return operation is null && owners[0].ModuleId == moduleId && features.Count == 1 && features[0].BehaviorKey == businessBinding;
+        return IsResourceEndpoint(endpoint) && resource is not null && resource.ModuleId == moduleId
+            && (operation is null || !string.IsNullOrWhiteSpace(operation)
+                && featureBehavior == resource.ResourceKey + "." + dynamic[0].ActionKey)
+            && businessBinding == resource.ResourceKey + "." + (operation ?? dynamic[0].ActionKey);
+    }
+
+    /// <summary>核验通用资源端点的固定结构；注册不代表当前存在可调用按钮或取得对象允许。</summary>
+    public static bool IsResourceEndpoint(Endpoint? endpoint)
+    {
+        if (endpoint is null) return false;
+        var bindings = endpoint.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>();
+        var operation = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.OperationKey;
+        return endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>().Count == 1
+            && bindings.Count == 1 && !string.IsNullOrWhiteSpace(bindings[0].ActionKey)
+            && endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>().Count == 0
+            && endpoint.Metadata.GetOrderedMetadata<AuthenticatedOnlyAttribute>().Count == 1
+            && (operation is null || !string.IsNullOrWhiteSpace(operation))
+            && endpoint is RouteEndpoint route
+            && route.RoutePattern.Parameters.Any(parameter => parameter.Name == "resourceKey" && !parameter.IsOptional && !parameter.IsCatchAll)
+            && route.RoutePattern.Parameters.Any(parameter => parameter.Name == "objectId" && !parameter.IsOptional && !parameter.IsCatchAll);
+    }
+}

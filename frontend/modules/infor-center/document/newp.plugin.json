@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0", "moduleId": "Document", "displayName": "图文档", "version": "1.6.0",
+  "description": "独立图文档元数据", "entryAssembly": "../../DocumentModule.dll",
+  "dependencies": ["Identity", "Authentication", "Authorization", "Organization", "Audit", "Files"],
+  "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
+  "backend": { "behaviorKey": "document.backend" },
+  "features": [{ "key": "document.history", "kind": "navigation", "parentKey": "navigation:document.documents", "title": "对象履历", "titleKey": "Document.History", "behaviorKey": "document.document.history" }],
+  "dataActions": [{ "key": "documentObjectCopy", "title": "创建图文档真副本", "behaviorKey": "data.document.objectCopy", "requiresRead": true }, { "key": "documentCopy", "title": "复制图文档引用", "behaviorKey": "data.document.copy", "requiresRead": true }, { "key": "download", "title": "下载", "behaviorKey": "data.download", "requiresRead": true }],
+  "dataExecutionProviders": [
+    {"key": "document.files.release", "moduleId": "Document", "backendBehaviorKey": "document.backend", "consumerBinding": "resource-owner", "requirements": [{"role": "target", "stage": "submit", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "delete"]], "readResolverKey": "document.files.currentRead"}]}
+  ],
+  "dataExecutions": [
+    {"key": "document.document.authorization.view", "moduleId": "Document", "provider": "authorization.object.view", "boundary": "entry", "featureBehaviors": ["document.document.read"], "resourceKey": "document.document"},
+    {"key": "document.document.initializeOwnership", "moduleId": "Document", "provider": "entityOwnership.initialize", "boundary": "entry", "featureBehaviors": ["document.document.initializeOwnership"], "requirements": [{"role":"query","stage":"read","shape":"query","resources":["document.document"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}]},
+    {"key": "document.files.release", "moduleId": "Document", "provider": "document.files.release", "boundary": "internal", "featureBehaviors": [], "resourceKey": "document.document", "fixedBindings": [{"kind": "internal", "identity": "document.files.release", "caller": "ICP.Platform.Modules.Document.DocumentFileOwnerPolicy.VerifyBatchAsync"}]},
+    {"key": "document.document.list", "moduleId": "Document", "provider": "standardCrud.list", "boundary": "entry", "featureBehaviors": ["document.document.read"], "resourceKey": "document.document"},
+    {"key": "document.document.read", "moduleId": "Document", "provider": "standardCrud.read", "boundary": "entry", "featureBehaviors": ["document.document.read"], "resourceKey": "document.document"},
+    {"key": "document.history.list", "moduleId": "Document", "provider": "document.backend", "boundary": "entry", "featureBehaviors": ["document.document.history"], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["document.document"], "anyOf": [["read"]]}]}
+  ],
+  "frontend": { "behaviorKey": "document.frontend", "entry": "document", "bindingMode": "behavior-bindings", "bindings": ["document.document.list", "document.document.detail", "document.document.permissions", "document.document.record", "document.history.list", "document.document.historyInput"] },
+  "persistence": { "models": ["metadata/models/Document.model.json", "metadata/models/DocumentVersion.model.json", "metadata/models/DocumentIteration.model.json", "metadata/models/DocumentFileLink.model.json"], "migrations": { "sqlServer": { "assembly": "migrations/Document.SqlServerMigrations.dll", "manifest": "migrations/Document.SqlServerMigrations.json" } } }
+}

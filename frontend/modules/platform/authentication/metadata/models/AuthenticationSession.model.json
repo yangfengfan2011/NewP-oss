@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "AuthenticationSession": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "AccountEID",
+        "storage": { "type": "guid" }
+      },
+      {
+        "name": "TokenHash",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "SessionType",
+        "storage": { "type": "string" },
+        "contract": { "valueType": "enum", "clrType": "ICP.Platform.Authentication.Contracts.AuthenticationSessionType" }
+      },
+      {
+        "name": "TimeZoneId",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "ExpiresAt",
+        "storage": { "type": "datetime" }
+      },
+      {
+        "name": "RevokedAt",
+        "storage": { "type": "datetime", "nullable": true }
+      },
+      {
+        "name": "RevocationReason",
+        "storage": { "type": "text", "nullable": true }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_AuthenticationSession_TokenHash",
+        "fields": ["TokenHash"],
+        "unique": true
+      },
+      {
+        "name": "IX_AuthenticationSession_AccountEID",
+        "fields": ["AccountEID"],
+        "unique": false
+      },
+      {
+        "name": "IX_AuthenticationSession_ExpiresAt",
+        "fields": ["ExpiresAt"],
+        "unique": false
+      }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_AuthenticationSession_IdentityAccount",
+        "fields": ["AccountEID"],
+        "principalModuleId": "Identity",
+        "principalModel": "IdentityAccount",
+        "principalFields": ["EID"],
+        "onDelete": "Restrict"
+      }
+    ]
+  }
+}

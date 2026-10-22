@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Navigation": {
+    "Organization": {
+      "zhs": "组织结构",
+      "en": "Organization"
+    },
+    "PersonCenter": {
+      "zhs": "人员中心",
+      "en": "Person Center"
+    },
+    "OrganizationTree": {
+      "zhs": "组织树",
+      "en": "Organization Tree"
+    },
+    "PositionManagement": {
+      "zhs": "岗位管理",
+      "en": "Position Management"
+    },
+    "CompanyManagement": {
+      "zhs": "公司管理",
+      "en": "Company Management"
+    },
+    "DepartmentManagement": {
+      "zhs": "部门管理",
+      "en": "Department Management"
+    },
+    "OrganizationManagement": {
+      "zhs": "组织管理",
+      "en": "Organization management"
+    }
+  }
+}

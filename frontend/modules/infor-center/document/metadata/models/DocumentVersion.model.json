@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "DocumentVersion": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "DocumentId",
+        "storage": {
+          "type": "guid"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "VersionOrdinal",
+        "storage": {
+          "type": "int"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "VersionLabel",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "State",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "CurrentIterationId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_DocumentVersion_Ordinal",
+        "fields": [
+          "DocumentId",
+          "VersionOrdinal"
+        ],
+        "unique": true
+      }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_DocumentVersion_Document",
+        "fields": [
+          "DocumentId"
+        ],
+        "principalModuleId": "Document",
+        "principalModel": "Document",
+        "principalFields": [
+          "EID"
+        ],
+        "onDelete": "Restrict"
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "example.runtime-workload.list",
+    "dicKey": "RuntimeWorkloadListView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "list",
+    "columnSource": "runtime",
+    "query": {
+      "fields": [
+        {
+          "key": "keyword",
+          "labelKey": "Query_Keyword",
+          "source": "preset",
+          "preset": "keyword",
+          "operator": "like"
+        }
+      ],
+      "defaultPageSize": 20
+    },
+    "resourceKey": "example.runtime-workload"
+  }
+}

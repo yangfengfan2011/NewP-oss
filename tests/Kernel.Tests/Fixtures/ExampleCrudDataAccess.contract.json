@@ -1,0 +1,226 @@
+[
+  {
+    "id": "Example/view:example.record.detail/pageActions/action:edit",
+    "moduleId": "Example",
+    "viewKey": "example.record.detail",
+    "surface": "pageActions",
+    "actionKey": "edit",
+    "execution": "",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:detail.pageActions/action:edit"
+    ],
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.update"
+  },
+  {
+    "id": "Example/view:example.record.detail/read",
+    "moduleId": "Example",
+    "viewKey": "example.record.detail",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "example.record.read",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records",
+      "Example/navigation:example.group/navigation:example.records/surface:detail.pageActions/action:edit",
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:edit"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.read"
+  },
+  {
+    "id": "Example/view:example.record.list/export/action:export",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "export",
+    "actionKey": "export",
+    "execution": "",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list/action:export"
+    ],
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.export",
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.export"
+  },
+  {
+    "id": "Example/view:example.record.list/pageActions/action:create",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "pageActions",
+    "actionKey": "create",
+    "execution": "",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "create"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.pageActions/action:create"
+    ],
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.create"
+  },
+  {
+    "id": "Example/view:example.record.list/read",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "example.record.list",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.list"
+  },
+  {
+    "id": "Example/view:example.record.list/rowActions/action:authorize",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "rowActions",
+    "actionKey": "authorize",
+    "execution": "",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "authorize"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:authorize"
+    ],
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.authorize"
+  },
+  {
+    "id": "Example/view:example.record.list/rowActions/action:delete",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "rowActions",
+    "actionKey": "delete",
+    "execution": "",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "delete"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:delete"
+    ],
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.delete"
+  },
+  {
+    "id": "Example/view:example.record.list/rowActions/action:edit",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "rowActions",
+    "actionKey": "edit",
+    "execution": "",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:edit"
+    ],
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.update"
+  },
+  {
+    "id": "Example/view:example.record.list/rowActions/action:viewAuthorization",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "rowActions",
+    "actionKey": "viewAuthorization",
+    "execution": "",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read",
+      "authorize"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:viewAuthorization"
+    ],
+    "object": "ExampleRecord",
+    "businessBinding": "example.record.viewAuthorization"
+  }
+]

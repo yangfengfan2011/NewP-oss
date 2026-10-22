@@ -1,0 +1,317 @@
+[
+  {
+    "id": "Document/view:document.document.list/featureActions/action:authorize",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "featureActions",
+    "actionKey": "authorize",
+    "execution": "",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "authorize"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:authorize"
+    ],
+    "object": "Document",
+    "businessBinding": "document.document.authorize"
+  },
+  {
+    "id": "Document/view:document.document.list/rowActions/action:authorize",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "rowActions",
+    "actionKey": "authorize",
+    "execution": "",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "authorize"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
+    ],
+    "object": "Document",
+    "businessBinding": "document.document.authorize"
+  },
+  {
+    "id": "Document/view:document.document.permissions/read",
+    "moduleId": "Document",
+    "viewKey": "document.document.permissions",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "document.document.authorization.view",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
+    ],
+    "requirements": [
+      {
+        "role": "view",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "authorization.object.view",
+    "providerModuleId": "Authorization"
+  },
+  {
+    "id": "Part/view:part.part.list/featureActions/action:authorize",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "featureActions",
+    "actionKey": "authorize",
+    "execution": "",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "authorize"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.custom/action:authorize"
+    ],
+    "object": "Part",
+    "businessBinding": "part.part.authorize"
+  },
+  {
+    "id": "Part/view:part.part.list/rowActions/action:authorize",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "rowActions",
+    "actionKey": "authorize",
+    "execution": "",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "authorize"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:authorize"
+    ],
+    "object": "Part",
+    "businessBinding": "part.part.authorize"
+  },
+  {
+    "id": "Part/view:part.part.permissions/read",
+    "moduleId": "Part",
+    "viewKey": "part.part.permissions",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "part.part.authorization.view",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts",
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:authorize"
+    ],
+    "requirements": [
+      {
+        "role": "view",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "authorization.object.view",
+    "providerModuleId": "Authorization"
+  },
+  {
+    "id": "Workspace/view:workspace.content.permissions/read",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.content.permissions",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "workspace.content.authorization.view",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace",
+      "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:batchAuthorize",
+      "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:authorizeContent"
+    ],
+    "requirements": [
+      {
+        "role": "view",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "authorization.collection.view",
+    "providerModuleId": "Authorization"
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/featureActions/action:authorize",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "featureActions",
+    "actionKey": "authorize",
+    "execution": "",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:authorize"
+    ],
+    "businessBinding": "workspace.folder.authorize",
+    "objectRequirements": [
+      {
+        "object": "WorkspaceFolder",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "document.document"
+      }
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/pageActions/action:batchAuthorize",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "pageActions",
+    "actionKey": "batchAuthorize",
+    "execution": "",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:batchAuthorize"
+    ],
+    "businessBinding": "workspace.folder.authorize",
+    "objectRequirements": [
+      {
+        "object": "WorkspaceFolder",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "document.document"
+      }
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/rowActions/action:authorizeContent",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "rowActions",
+    "actionKey": "authorizeContent",
+    "execution": "",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:authorizeContent"
+    ],
+    "businessBinding": "workspace.folder.authorize",
+    "objectRequirements": [
+      {
+        "object": "WorkspaceFolder",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "authorize"
+        ],
+        "resourceKey": "document.document"
+      }
+    ]
+  }
+]

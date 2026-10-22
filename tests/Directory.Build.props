@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    共享测试支撑源码。只链接进 *.Tests 项目：Persistence.MigrationFixtures 之类的
+    夹具项目不引用 xunit，链接进去会编译失败。
+  -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport\*.cs"
+             Link="TestSupport\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kernel.Tests' Or '$(MSBuildProjectName)' == 'HostApi.Tests' Or '$(MSBuildProjectName)' == 'Organization.Tests' Or '$(MSBuildProjectName)' == 'Identity.Tests' Or '$(MSBuildProjectName)' == 'Authentication.Tests' Or '$(MSBuildProjectName)' == 'Acceptance.Runner'">
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport\SqlServer\*.cs"
+             Link="TestSupport\SqlServer\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'PlatformCrud.Tests' Or '$(MSBuildProjectName)' == 'HostApi.Tests' Or '$(MSBuildProjectName)' == 'Example.Tests' Or '$(MSBuildProjectName)' == 'Organization.Tests' Or '$(MSBuildProjectName)' == 'Identity.Tests' Or '$(MSBuildProjectName)' == 'Authorization.Tests'">
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport\Authorization\StandardCrudTestAccess.cs"
+             Link="TestSupport\Authorization\StandardCrudTestAccess.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport\Authorization\StandardCrudFieldFixture.cs"
+             Link="TestSupport\Authorization\StandardCrudFieldFixture.cs" />
+  </ItemGroup>
+</Project>

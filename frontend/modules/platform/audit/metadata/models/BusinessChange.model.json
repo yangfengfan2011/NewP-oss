@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "BusinessChange": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "EventType",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Resource",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "TargetId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "ActorId",
+        "storage": {
+          "type": "guid"
+        }
+      },
+      {
+        "name": "OccurredAt",
+        "storage": {
+          "type": "datetime"
+        },
+        "contract": {
+          "valueType": "instant"
+        },
+        "display": {
+          "type": "instant",
+          "format": "dateTime"
+        }
+      },
+      {
+        "name": "IpAddress",
+        "storage": { "type": "string", "nullable": true }
+      },
+      {
+        "name": "TraceId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "FieldsJson",
+        "storage": {
+          "type": "text"
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "IX_BusinessChange_Target",
+        "fields": [
+          "Resource",
+          "TargetId",
+          "OccurredAt",
+          "EID"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_BusinessChange_Actor",
+        "fields": [
+          "ActorId",
+          "OccurredAt",
+          "EID"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_BusinessChange_Event",
+        "fields": [
+          "EventType",
+          "OccurredAt",
+          "EID"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_BusinessChange_Time",
+        "fields": [
+          "OccurredAt",
+          "EID"
+        ],
+        "unique": false
+      }
+    ]
+  }
+}

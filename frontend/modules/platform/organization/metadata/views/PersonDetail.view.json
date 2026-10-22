@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dataAccess": { "execution": "organization.person.read", "resources": ["organization.person"] },
+    "key": "organization.person.detail",
+    "dicKey": "PersonDetailView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "detail",
+    "model": "Person",
+    "resourceKey": "organization.person",
+    "lookupBindings": {
+      "organization.companies": {"behavior":"organization.person.company.lookup","dataAccess":{"execution":"organization.person.company.lookup","resources":["organization.company"]}},
+      "organization.departments": {"behavior":"organization.person.department.lookup","dataAccess":{"execution":"organization.person.department.lookup","resources":["organization.department"]}},
+      "organization.positions": { "behavior": "organization.position.lookup", "dataAccess": { "execution": "organization.position.options", "resources": ["organization.position"] } }
+    },
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "PersonNo",
+          "ENAME",
+          "BirthDate"
+        ]
+      },
+      {
+        "key": "organization",
+        "titleKey": "Section_Organization",
+        "fields": [
+          "CompanyId",
+          {
+            "field": "DepartmentId",
+            "rendererKey": "organization.person.reference"
+          },
+          {
+            "field": "PositionId",
+            "rendererKey": "organization.person.reference"
+          }
+        ]
+      },
+      {
+        "key": "employment",
+        "titleKey": "Section_Employment",
+        "fields": [
+          "EmploymentStatus",
+          "EmploymentStartedAt",
+          "EmploymentEndedAt",
+          "IsEnabled"
+        ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Section_Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
+      }
+    ],
+    "featureActions": [
+      { "key": "linkUser", "handlerKey": "linkUser", "titleKey": "Action_LinkUser", "behaviorKey": "organization.person.linkUser", "readBehaviors": ["organization.person.linkUser.lookup"] }
+    ],
+    "summaryBlocks": [
+      "userBinding",
+      "authorizationSummary"
+    ],
+    "pageActions": [
+      {
+        "key": "edit",
+        "labelKey": "Action_Edit",
+        "standardAction": "edit", "dataAccess": { "object": "Person", "actions": ["edit"] }
+      },
+      {
+        "key": "authorize",
+        "labelKey": "Action_Authorize",
+        "handlerKey": "authorize", "dataAccess": {"object":"Person","actions":["authorize"]},
+        "inputKey": "objectAuthorization",
+        "confirmLabelKey": "Action_SaveAuthorization"
+      },
+      {
+        "key": "disable",
+        "labelKey": "Action_Disable",
+        "standardAction": "disable",
+        "variant": "danger",
+        "confirmMessageKey": "Action_Disable_Confirm",
+        "handlerKey": "disable",
+        "inputKey": "disableReason"
+      }
+    ]
+  }
+}

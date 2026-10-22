@@ -1,0 +1,22 @@
+{
+    "pluginId":  "icp.module.audit",
+    "moduleId":  "Audit",
+    "displayName":  "审计日志",
+    "version":  "1.0.0",
+    "description":  "平台审计与日志管理模块",
+    "distribution":  {
+                         "channel":  "internal",
+                         "publisher":  "ICP Platform Team"
+                     },
+    "hostVersion":  {
+                        "min":  "1.0.0",
+                        "max":  "2.0.0"
+                    },
+    "artifacts":  {
+                      "backend":  "backend/plugin.backend.json",
+                      "frontend":  "frontend/plugin.frontend.json"
+                  },
+    "checksums":  {
+                      "sha256Manifest":  "checksums/sha256sums.json"
+                  }
+}

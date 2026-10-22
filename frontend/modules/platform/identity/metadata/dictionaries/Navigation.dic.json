@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Navigation": {
+    "Identity": {
+      "zhs": "身份基础",
+      "en": "Identity"
+    },
+    "IdentityAccounts": {
+      "zhs": "账号管理",
+      "en": "User Accounts"
+    }
+  }
+}

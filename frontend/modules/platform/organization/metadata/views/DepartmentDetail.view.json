@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dataAccess": { "execution": "organization.department.read", "resources": ["organization.department"] },
+    "key": "organization.department.detail",
+    "dicKey": "DepartmentDetailView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "detail",
+    "model": "Department",
+    "resourceKey": "organization.department",
+    "lookupBindings": {
+      "organization.companies": "organization.department.company.lookup",
+      "organization.department.parents": "organization.department.parent.lookup",
+      "organization.department.parent-filter": "organization.department.parent.lookup"
+    },
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "CompanyId",
+          "ParentDepartmentId",
+          "ECODE",
+          "ENAME",
+          "IsEnabled",
+          "SortOrder"
+        ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Section_Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
+      }
+    ]
+  }
+}

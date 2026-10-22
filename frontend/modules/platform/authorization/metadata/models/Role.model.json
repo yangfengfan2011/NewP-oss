@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Role": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
+    "fields": [
+      {
+        "name": "ECODE",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "readonly",
+            "required": true
+          }
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          }
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        },
+        "uiType": "textarea",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        },
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "IsBuiltIn",
+        "storage": {
+          "type": "bool"
+        },
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Role_ECODE",
+        "fields": [
+          "ECODE"
+        ],
+        "unique": true
+      }
+    ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ECODE",
+          "ENAME",
+          "Description"
+        ]
+      }
+    ]
+  }
+}

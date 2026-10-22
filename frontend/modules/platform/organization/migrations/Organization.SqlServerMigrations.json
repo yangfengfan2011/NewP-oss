@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Organization",
+  "modelDigest": "6b1b4c75c7d11a0d512023bbd8923c80db7fc3d989f4cb8f93f8433f8e2c29c1",
+  "bundleChecksum": "0f056849b0543f4194c569cab57e9f87cb382efd2628187ba6ab03f545d4a8a2",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20260812144235_Organization_000001_Foundation",
+      "previousContentDigest": null,
+      "contentDigest": "3698ef812e3f3ec6a6d5f3c2121f14d43d444fb68256bd2efc4fb8804f53e606",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "24a56838c9395ea3c1afa3dfa3cc8549afda2151e2d8515b6f08617d0679425f",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000002",
+      "migrationId": "20260902052903_Organization_000002_GlobalPositionDirectory",
+      "previousContentDigest": "3698ef812e3f3ec6a6d5f3c2121f14d43d444fb68256bd2efc4fb8804f53e606",
+      "contentDigest": "5fc44c9479db53f80fe3ad58f17ce8f2cbb7ef2c84a675d032330441038206b6",
+      "fromModelDigest": "24a56838c9395ea3c1afa3dfa3cc8549afda2151e2d8515b6f08617d0679425f",
+      "toModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
+      "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000003",
+      "migrationId": "20260902063356_Organization_000003_PositionReference",
+      "previousContentDigest": "5fc44c9479db53f80fe3ad58f17ce8f2cbb7ef2c84a675d032330441038206b6",
+      "contentDigest": "702141d62bb2000525881eed5f7922e4a6db3df9c849f36e73296d42694575bd",
+      "fromModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
+      "toModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000004",
+      "migrationId": "20260902110155_Organization_000004_PersonnelTemporalFields",
+      "previousContentDigest": "702141d62bb2000525881eed5f7922e4a6db3df9c849f36e73296d42694575bd",
+      "contentDigest": "f4f665bf9a88f2e72a0b5d1fc989dc4c15603b741f5b10cb014ed62d06589e42",
+      "fromModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
+      "toModelDigest": "b3d160af02f7c6226cd462a79b3bef1e93e1cf7083380d76564273f0e636fe59",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000005",
+      "migrationId": "20260902135016_Organization_000005_RemovePersonRevision",
+      "previousContentDigest": "f4f665bf9a88f2e72a0b5d1fc989dc4c15603b741f5b10cb014ed62d06589e42",
+      "contentDigest": "c4ff9f80fb561970bbb0eaa56037431471edf69fc0811c7274b100d59be69593",
+      "fromModelDigest": "b3d160af02f7c6226cd462a79b3bef1e93e1cf7083380d76564273f0e636fe59",
+      "toModelDigest": "579c6974b008e4695332d34269f1fc5f4d0ed386257015096079776c0d0f4973",
+      "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000006",
+      "migrationId": "20260904033918_Organization_000006_CompanyStandardCrud",
+      "previousContentDigest": "c4ff9f80fb561970bbb0eaa56037431471edf69fc0811c7274b100d59be69593",
+      "contentDigest": "16dc5cb44e993373a1e1fb50464b94f0d07e587af4546c4237173d255aec97ed",
+      "fromModelDigest": "579c6974b008e4695332d34269f1fc5f4d0ed386257015096079776c0d0f4973",
+      "toModelDigest": "2168327921d492bbe85537bb09b5488e7b596bab13c358e644135c56abaef12b",
+      "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000007",
+      "migrationId": "20260904041209_Organization_000007_RootDepartmentStandardCrud",
+      "previousContentDigest": "16dc5cb44e993373a1e1fb50464b94f0d07e587af4546c4237173d255aec97ed",
+      "contentDigest": "69aa92ccaf5c88e19673c9e281ee397fcf9c4533411724a96ec2c4e524a18246",
+      "fromModelDigest": "2168327921d492bbe85537bb09b5488e7b596bab13c358e644135c56abaef12b",
+      "toModelDigest": "808adb10d897941053c08a141480758caa957b6b1b999517bf54a9d1d3f5b2d5",
+      "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000008",
+      "migrationId": "20260904044325_Organization_000008_DepartmentHierarchy",
+      "previousContentDigest": "69aa92ccaf5c88e19673c9e281ee397fcf9c4533411724a96ec2c4e524a18246",
+      "contentDigest": "f61fac98d75d446fb7f27e04b90587d83e6b76042a405b0efc2975a128852725",
+      "fromModelDigest": "808adb10d897941053c08a141480758caa957b6b1b999517bf54a9d1d3f5b2d5",
+      "toModelDigest": "6b1b4c75c7d11a0d512023bbd8923c80db7fc3d989f4cb8f93f8433f8e2c29c1",
+      "compatibility": "backup-restore-only"
+    }
+  ]
+}

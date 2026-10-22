@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Modules.Authorization</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Audit\Contracts\Audit.Contracts.csproj" />
+    <ProjectReference Include="..\Identity\Contracts\Identity.Contracts.csproj" />
+    <ProjectReference Include="Contracts\Authorization.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\..\platform-authorization\PlatformAuthorization.csproj" />
+    <ProjectReference Include="..\..\..\platform-crud\PlatformCrud.csproj" />
+    <ProjectReference Include="..\..\..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\..\..\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\..\..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Contracts\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup><AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute"><_Parameter1>Authorization.Tests</_Parameter1></AssemblyAttribute></ItemGroup>
+</Project>

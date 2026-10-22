@@ -1,0 +1,293 @@
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.Ownership;
+
+namespace ICP.Platform.Modeling.Projection;
+
+public sealed class ModelMetadataProjector
+{
+    private static readonly HashSet<string> EntityFixedFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "EID",
+        "CreatedBy",
+        "CreatedAt",
+        "UpdatedBy",
+        "UpdatedAt",
+        "ENAME",
+        "ECODE"
+    };
+
+    private static readonly HashSet<string> LinkFixedFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LID",
+        "PEID",
+        "CEID",
+        "LCreatedBy",
+        "LCreatedAt",
+        "LUpdatedBy",
+        "LUpdatedAt",
+        "LSequence"
+    };
+
+    /// <summary>
+    /// 将 Model authoring 投影为不含 provider store type 的规范 definition。
+    /// </summary>
+    /// <param name="document">Model authoring 文档。</param>
+    /// <returns>保留字段语义与 display 声明的规范 definition。</returns>
+    public ModelDefinition Project(ModelMetadataDocument document)
+    {
+        return Project(document, null, null);
+    }
+
+    /// <summary>
+    /// 将 Model authoring 投影为指定 provider 的规范 definition。
+    /// </summary>
+    /// <param name="document">Model authoring 文档。</param>
+    /// <param name="typeMap">可选的 provider storage type 映射。</param>
+    /// <param name="provider">需要解析 store type 的 provider；为空时保留 authoring storage type。</param>
+    /// <returns>保留字段语义与 display 声明的规范 definition。</returns>
+    public ModelDefinition Project(
+        ModelMetadataDocument document,
+        StorageTypeMapDocument? typeMap,
+        string? provider)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var fields = ProjectFixedFields(document).ToList();
+
+        foreach (var field in document.Model.Fields)
+        {
+            if (field.Storage is null)
+            {
+                if (IsProjectedByKernel(document.Model.Kind, field.Name))
+                {
+                    // 固定字段的 storage 由内核拥有，但 authoring display 仍必须进入同一规范 definition。
+                    var projectedIndex = fields.FindIndex(candidate =>
+                        string.Equals(candidate.Name, field.Name, StringComparison.OrdinalIgnoreCase));
+                    if (projectedIndex >= 0)
+                    {
+                        fields[projectedIndex] = fields[projectedIndex] with
+                        {
+                            DisplayRule = ProjectDisplayRule(field.Display) ?? fields[projectedIndex].DisplayRule
+                        };
+                    }
+
+                    continue;
+                }
+
+                throw new InvalidOperationException($"Field '{field.Name}' must define storage.");
+            }
+
+            fields.Add(ProjectField(field, typeMap, provider));
+        }
+
+        var indexes = BuildIndexes(document);
+        var foreignKeys = BuildForeignKeys(document);
+
+        return new ModelDefinition(
+            document.Model.Name,
+            document.Model.Name,
+            Enum.Parse<ModelKind>(document.Model.Kind, ignoreCase: true),
+            fields,
+            indexes,
+            OwnerModuleId: document.ModuleId,
+            ForeignKeys: foreignKeys) { LinkQuery = document.Model.LinkQuery, LinkedTypes = document.Model.LinkedTypes };
+    }
+
+    /// <summary>
+    /// 投影平台为当前 Model kind 提供的规范固定字段目录。
+    /// </summary>
+    /// <param name="document">Model authoring 文档。</param>
+    /// <returns>按平台稳定顺序排列的固定字段定义；不包含业务字段。</returns>
+    public IReadOnlyList<FieldDefinition> ProjectFixedFields(ModelMetadataDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var fields = new List<FieldDefinition>();
+        if (string.Equals(document.Model.Kind, "Entity", StringComparison.OrdinalIgnoreCase))
+        {
+            AddEntityFixedFields(fields, document.Model.BuiltinFields);
+        }
+        else if (string.Equals(document.Model.Kind, "Link", StringComparison.OrdinalIgnoreCase))
+        {
+            AddLinkFixedFields(fields, document.Model.BuiltinFields);
+        }
+
+        return fields;
+    }
+
+    // 将单个 authoring 字段投影为不含 UI 布局、但保留字段种类与展示语义的规范 artifact。
+    private static FieldDefinition ProjectField(
+        ModelMetadataField field,
+        StorageTypeMapDocument? typeMap,
+        string? provider)
+    {
+        var storage = field.Storage!;
+        var valueType = ResolveValueType(field.Contract?.ValueType, storage.Type);
+
+        var storeType = storage.Type;
+        if (typeMap is not null && provider is not null)
+        {
+            if (typeMap.Types.TryGetValue(storage.Type, out var typeEntry)
+                && typeEntry.Providers.TryGetValue(provider, out var providerMap))
+            {
+                // provider 专属 storeType 只来自映射文件，不回流到模型文件中。
+                storeType = providerMap.StoreType;
+            }
+        }
+
+        return new FieldDefinition(
+            field.Name,
+            field.Name,
+            ResolveFieldKind(field),
+            valueType,
+            storeType,
+            !storage.Nullable,
+            false,
+            false,
+            ProjectDisplayRule(field.Display)) { OrdinalKey = storage.OrdinalKey };
+    }
+
+    // validator 已完成规则闭合；projector 只把 metadata 形状转换为定义层形状。
+    private static FieldDisplayRuleDefinition? ProjectDisplayRule(ModelMetadataDisplayRule? display) =>
+        display is null
+            ? null
+            : new FieldDisplayRuleDefinition(
+                display.Type,
+                display.TargetModel,
+                display.TargetIdField,
+                display.TargetDisplayField,
+                display.Format);
+
+    private static FieldKind ResolveFieldKind(ModelMetadataField field)
+    {
+        // model 数据源天然表示模型引用；provider 只有在 lookup 控件语义下才表示受控引用展示。
+        // 这里仅影响 DTO 展示伴随字段，不改变 storage 投影或数据库结构。
+        return string.Equals(field.DataSource?.Type, "model", StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(field.DataSource?.Type, "provider", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(field.UiType, "lookup", StringComparison.OrdinalIgnoreCase))
+            ? FieldKind.Reference
+            : FieldKind.Scalar;
+    }
+
+    private static bool IsProjectedByKernel(string modelKind, string fieldName)
+    {
+        return string.Equals(modelKind, "Entity", StringComparison.OrdinalIgnoreCase)
+            ? EntityFixedFields.Contains(fieldName) || EntityOwnershipFields.Contains(fieldName)
+            : LinkFixedFields.Contains(fieldName);
+    }
+
+    // 固定字段的存储定义收口在 projector，避免模块元数据重复声明这些内建事实。
+    private static void AddEntityFixedFields(List<FieldDefinition> fields, IReadOnlyCollection<string> builtinFields)
+    {
+        fields.Add(new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false));
+        fields.Add(new FieldDefinition("CreatedBy", "CreatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true, new FieldDisplayRuleDefinition("user", "IdentityAccount", "EID", "ENAME")));
+        fields.Add(new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.Instant, "datetime", true, false, true, new FieldDisplayRuleDefinition("instant", "", "", "", "dateTime")));
+        fields.Add(new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true, new FieldDisplayRuleDefinition("user", "IdentityAccount", "EID", "ENAME")));
+        fields.Add(new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.Instant, "datetime", true, false, true, new FieldDisplayRuleDefinition("instant", "", "", "", "dateTime")));
+
+        if (builtinFields.Contains("ENAME", StringComparer.OrdinalIgnoreCase))
+        {
+            fields.Add(new FieldDefinition("ENAME", "ENAME", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false));
+        }
+
+        if (builtinFields.Contains("ECODE", StringComparer.OrdinalIgnoreCase))
+        {
+            fields.Add(new FieldDefinition("ECODE", "ECODE", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false));
+        }
+        fields.AddRange(EntityOwnershipFields.Project(builtinFields));
+    }
+
+    // Link 固定字段不仅包含两端引用，也包含关系对象自身的审计字段。
+    private static void AddLinkFixedFields(List<FieldDefinition> fields, IReadOnlyCollection<string> builtinFields)
+    {
+        fields.Add(new FieldDefinition("LID", "LID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false));
+        fields.Add(new FieldDefinition("PEID", "PEID", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false));
+        fields.Add(new FieldDefinition("CEID", "CEID", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false));
+        fields.Add(new FieldDefinition("LCreatedBy", "LCreatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true));
+        fields.Add(new FieldDefinition("LCreatedAt", "LCreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true));
+        fields.Add(new FieldDefinition("LUpdatedBy", "LUpdatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true));
+        fields.Add(new FieldDefinition("LUpdatedAt", "LUpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true));
+
+        if (builtinFields.Contains("LSequence", StringComparer.OrdinalIgnoreCase))
+        {
+            fields.Add(new FieldDefinition("LSequence", "LSequence", FieldKind.Scalar, FieldValueType.Text, "string", false, false, false));
+        }
+    }
+
+    // contract.valueType 是 authoring 对外值语义的真源；缺失时才回退到 storage 类型推断。
+    private static FieldValueType ResolveValueType(string? contractValueType, string storageType)
+    {
+        if (!string.IsNullOrWhiteSpace(contractValueType))
+        {
+            return contractValueType.Trim().ToLowerInvariant() switch
+            {
+                "enum" => FieldValueType.Enum,
+                "integer" => FieldValueType.Integer,
+                "objectid" => FieldValueType.ObjectId,
+                "user" => FieldValueType.User,
+                "bool" => FieldValueType.Boolean,
+                "calendardate" => FieldValueType.CalendarDate,
+                "datetime" => FieldValueType.DateTime,
+                "instant" => FieldValueType.Instant,
+                "description" => FieldValueType.Description,
+                "text" => FieldValueType.Text,
+                _ => FieldValueType.Text
+            };
+        }
+
+        return MapStorageValueType(storageType);
+    }
+
+    private static FieldValueType MapStorageValueType(string storageType)
+    {
+        return storageType.ToLowerInvariant() switch
+        {
+            "string" => FieldValueType.Text,
+            "text" => FieldValueType.Description,
+            "json" => FieldValueType.Description,
+            "bool" => FieldValueType.Boolean,
+            "date" => FieldValueType.CalendarDate,
+            "datetime" => FieldValueType.DateTime,
+            "int" => FieldValueType.Integer,
+            "long" => FieldValueType.Integer,
+            "guid" => FieldValueType.ObjectId,
+            _ => FieldValueType.Text
+        };
+    }
+
+    private static IReadOnlyList<IndexDefinition> BuildIndexes(ModelMetadataDocument document)
+    {
+        var indexes = new List<IndexDefinition>();
+
+        if (string.Equals(document.Model.Kind, "Entity", StringComparison.OrdinalIgnoreCase))
+        {
+            indexes.Add(new IndexDefinition($"UX_{document.Model.Name}_EID", ["EID"], true));
+        }
+        else if (string.Equals(document.Model.Kind, "Link", StringComparison.OrdinalIgnoreCase))
+        {
+            indexes.Add(new IndexDefinition($"UX_{document.Model.Name}_LID", ["LID"], true));
+            indexes.Add(new IndexDefinition($"IX_{document.Model.Name}_PEID", ["PEID"], false));
+            indexes.Add(new IndexDefinition($"IX_{document.Model.Name}_CEID", ["CEID"], false));
+        }
+
+        indexes.AddRange(document.Model.Indexes.Select(index =>
+            new IndexDefinition(index.Name, index.Fields, index.Unique, index.IncludeNullValues)));
+
+        return indexes;
+    }
+
+    // 全局名称负责寻址，显式 principal owner 作为独立归属约束保留。
+    private static IReadOnlyList<ForeignKeyDefinition> BuildForeignKeys(ModelMetadataDocument document) =>
+        document.Model.ForeignKeys
+            .Select(foreignKey => new ForeignKeyDefinition(
+                foreignKey.Name,
+                foreignKey.Fields,
+                foreignKey.PrincipalModel,
+                foreignKey.PrincipalFields,
+                Enum.Parse<ForeignKeyDeleteBehavior>(foreignKey.OnDelete, ignoreCase: true))
+            {
+                PrincipalOwnerModuleId = string.IsNullOrWhiteSpace(foreignKey.PrincipalModuleId) ? null : foreignKey.PrincipalModuleId
+            })
+            .ToArray();
+
+}

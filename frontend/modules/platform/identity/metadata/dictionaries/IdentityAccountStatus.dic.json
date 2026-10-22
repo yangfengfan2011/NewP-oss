@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "IdentityAccountStatus": {
+    "Enabled": {
+      "zhs": "启用",
+      "en": "Enabled"
+    },
+    "Disabled": {
+      "zhs": "停用",
+      "en": "Disabled"
+    },
+    "Deleted": {
+      "zhs": "已删除",
+      "en": "Deleted"
+    }
+  }
+}

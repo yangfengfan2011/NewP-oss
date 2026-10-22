@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0", "type": "model",
+  "WorkspaceObjectCopy": {
+    "kind": "Entity",
+    "fields": [
+      { "name": "ActorId", "storage": { "type": "guid" } },
+      { "name": "State", "storage": { "type": "string" } },
+      { "name": "Input", "storage": { "type": "text" } }
+    ]
+  }
+}

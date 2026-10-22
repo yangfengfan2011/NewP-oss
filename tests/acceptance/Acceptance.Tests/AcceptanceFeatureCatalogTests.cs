@@ -1,0 +1,204 @@
+using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Kernel.PluginPackages;
+using System.Text.Json;
+using Xunit;
+
+namespace ICP.Platform.Acceptance.Tests;
+
+public sealed class AcceptanceFeatureCatalogTests
+{
+    [Fact]
+    public void OrganizationAuthoring_ProducesTheShellFeatureManifestFixture()
+    {
+        var root = GetRepositoryRoot();
+        var documents = ReadMetadataDocuments(root, "Organization");
+        try
+        {
+            var points = CompileFeatureCatalog(root, "Organization", documents);
+            var actual = new MetadataRuntimeManifestBuilder().Build(
+                AppContext.BaseDirectory,
+                ["Organization"],
+                ["Organization"],
+                points);
+            var fixturePath = Path.Combine(
+                root.FullName,
+                "frontend",
+                "packages",
+                "shell",
+                "src",
+                "__tests__",
+                "fixtures",
+                "organization-feature-manifest.json");
+
+            Assert.True(File.Exists(fixturePath), $"Shell feature manifest fixture was not found: {fixturePath}");
+            Assert.Equal(
+                File.ReadAllText(fixturePath).ReplaceLineEndings("\n"),
+                actual.ReplaceLineEndings("\n"));
+        }
+        finally
+        {
+            foreach (var document in documents)
+            {
+                document.Dispose();
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("Organization")]
+    [InlineData("Authorization")]
+    [InlineData("Identity")]
+    [InlineData("Audit")]
+    [InlineData("Example")]
+    public void RealAuthoring_ResolvesEveryGateRequestPosition(string module)
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
+        Assert.NotNull(root);
+        var documents = Directory.EnumerateFiles(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, module), "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonDocument.Parse(File.ReadAllText(path))).ToArray();
+        try
+        {
+            using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, module), "newp.plugin.json")));
+            var custom = FeatureCatalogCompiler.Read(capsule.RootElement, module);
+            var points = FeatureCatalogCompiler.Compile([.. custom,
+                .. StandardFeatureMetadataCompiler.Read(module, documents.Select(document => document.RootElement), custom)]);
+            var catalog = new AcceptanceFeatureCatalog(points);
+            if (module == "Audit")
+            {
+                Assert.Equal("audit.changes", catalog.Behavior(module, "audit.change.read").Key);
+                return;
+            }
+            if (module == "Example")
+            {
+                var entry = catalog.Behavior(module, "example.record.read");
+                Assert.Equal("example.records", entry.Key);
+                Assert.Equal("example.record.create", catalog.Action(entry, "create", "list.pageActions").BehaviorKey);
+                Assert.Equal("example.record.export", catalog.Action(entry, "export", "list").BehaviorKey);
+                Assert.Equal("example", catalog.Behavior(module, "example.runtime-workload.read").Key);
+                return;
+            }
+            if (module == "Identity")
+            {
+                var entry = catalog.Behavior(module, "identity.account.read");
+                Assert.Equal("identity.accounts", entry.Key);
+                Assert.Equal("identity.account.create", catalog.Action(entry, "create", "list.pageActions").BehaviorKey);
+                foreach (var action in new[] { "edit", "enable", "disable", "delete", "credentialReset" })
+                {
+                    var row = catalog.Action(entry, action, "list.rowActions");
+                    var detail = catalog.Action(entry, action, "detail.pageActions");
+                    Assert.NotEqual(row.Position, detail.Position);
+                    Assert.Equal(row.BehaviorKey, detail.BehaviorKey);
+                    Assert.Contains(entry.Position, row.EntryDependencies);
+                }
+                return;
+            }
+            if (module == "Authorization")
+            {
+                var roleEntry = catalog.Behavior(module, "authorization.role.read");
+                Assert.Equal("authorization.roles", roleEntry.Key);
+                var create = catalog.Action(roleEntry, "create", "list.pageActions");
+                Assert.Equal("authorization.role.create", create.BehaviorKey);
+                Assert.Contains(roleEntry.Position, create.EntryDependencies);
+                return;
+            }
+            foreach (var key in new[] { "structure", "companies", "departments", "positions", "persons" })
+                Assert.Contains(catalog.OrganizationTab(key), points);
+            var structure = catalog.OrganizationTab("structure");
+            Assert.Equal("tree:organization.structure", structure.BehaviorKey);
+            Assert.Contains("organization.company.read", catalog.NodeTab(structure, "company", "information").ReadBehaviors);
+            Assert.Contains("organization.department.read", catalog.NodeTab(structure, "department", "information").ReadBehaviors);
+            foreach (var key in new[] { "companies", "departments", "persons" })
+                Assert.Contains(catalog.Action(catalog.OrganizationTab(key), "create", "list.pageActions"), points);
+            var persons = catalog.OrganizationTab("persons");
+            foreach (var key in new[] { "edit", "delete", "disable", "enable" })
+                Assert.Contains(catalog.Action(persons, key, "list.rowActions"), points);
+            Assert.Contains(catalog.Action(persons, "linkUser", "detail.custom"), points);
+        }
+        finally { foreach (var document in documents) document.Dispose(); }
+    }
+
+    [Fact]
+    public void OrganizationPreparation_SelectsActualWriteInsteadOfOtherSourcesAtTheSameFormPosition()
+    {
+        var root = GetRepositoryRoot();
+        var documents = ReadMetadataDocuments(root, "Organization");
+        try
+        {
+            var declarations = JsonSerializer.Deserialize<ActionDataAccessRequirement[]>(File.ReadAllText(Path.Combine(root.FullName,
+                "tests", "Kernel.Tests", "Fixtures", "OrganizationDataAccess.contract.json")), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+            var catalog = new AcceptanceFeatureCatalog(CompileFeatureCatalog(root, "Organization", documents), declarations);
+            foreach (var (tab, resource) in new[] { ("companies", "company"), ("departments", "department"), ("persons", "person") })
+            {
+                var point = catalog.Action(catalog.OrganizationTab(tab), "create", "list.pageActions");
+                var id = catalog.Declaration(point, "organization." + resource + ".create", "standardCrud.create", "organization." + resource);
+                Assert.Equal("organization." + resource + ".create", declarations.Single(item => item.Id == id).Execution);
+                Assert.Throws<InvalidOperationException>(() => catalog.Declaration(point, "organization." + resource + ".read", "standardCrud.read", "organization." + resource));
+            }
+            var departmentCreate = catalog.Action(catalog.OrganizationTab("departments"), "create", "list.pageActions");
+            Assert.Throws<InvalidOperationException>(() => catalog.Declaration(departmentCreate));
+            Assert.Contains(catalog.Action(catalog.OrganizationTab("structure"), "createCompany", "treeActions").Position,
+                declarations.Single(item => item.ViewKey == "organization.company.list" && item.Surface == "pageActions" && item.ActionKey == "create").FeaturePositions);
+        }
+        finally { foreach (var document in documents) document.Dispose(); }
+    }
+
+    [Fact]
+    public void ActionSelection_PreservesEntryAndSurfaceIdentityAndDeclaredDependencies()
+    {
+        var management = Point("management", "navigation", "organization.structure", null);
+        var persons = Point("persons", "tab", "persons", "management");
+        var structure = Point("tree", "tab", "structure", "management");
+        var edit = Point("list-edit", "action", "edit", "persons") with
+        { ActionScope = "list.rowActions", EntryDependencies = ["management", "persons"] };
+        var treeEdit = Point("tree-edit", "action", "edit", "tree") with
+        { ActionScope = "contextMenu", StaticScope = "person" };
+        var catalog = new AcceptanceFeatureCatalog([management, persons, structure, edit, treeEdit]);
+
+        Assert.Equal(edit, catalog.Action(catalog.OrganizationTab("persons"), "edit", "list.rowActions"));
+        Assert.Equal(new[] { "management", "persons", "list-edit" }, catalog.GrantSet(edit));
+        Assert.Empty(catalog.GrantSet());
+        Assert.Throws<InvalidOperationException>(() => catalog.Action(persons, "edit", "contextMenu"));
+    }
+
+    [Fact]
+    public void AmbiguousActionsFailInsteadOfChoosingTheFirstPosition()
+    {
+        var entry = Point("persons", "tab", "persons", "management");
+        var action = Point("one", "action", "edit", "persons") with { ActionScope = "list.rowActions" };
+        var catalog = new AcceptanceFeatureCatalog([entry, action, action with { Position = "two" }]);
+        Assert.Throws<InvalidOperationException>(() => catalog.Action(entry, "edit", "list.rowActions"));
+    }
+
+    private static FeaturePoint Point(string position, string kind, string key, string? parent) =>
+        new(position, "Organization", key, kind, key, parent, "", [], 0);
+
+    private static DirectoryInfo GetRepositoryRoot()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md")))
+        {
+            root = root.Parent;
+        }
+
+        return root ?? throw new InvalidOperationException("无法定位仓库根目录。");
+    }
+
+    private static JsonDocument[] ReadMetadataDocuments(DirectoryInfo root, string module) =>
+        Directory.EnumerateFiles(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, module), "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonDocument.Parse(File.ReadAllText(path)))
+            .ToArray();
+
+    private static IReadOnlyList<FeaturePoint> CompileFeatureCatalog(
+        DirectoryInfo root,
+        string module,
+        IReadOnlyList<JsonDocument> documents)
+    {
+        using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, module), "newp.plugin.json")));
+        var custom = FeatureCatalogCompiler.Read(capsule.RootElement, module);
+        return FeatureCatalogCompiler.Compile([
+            .. custom,
+            .. StandardFeatureMetadataCompiler.Read(module, documents.Select(document => document.RootElement), custom)
+        ]);
+    }
+}

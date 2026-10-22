@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "ValueLists": {
+    "CodeRequired": {
+      "zhs": "值列表编码不能为空。",
+      "en": "Value list code is required."
+    },
+    "NameRequired": {
+      "zhs": "值列表名称不能为空。",
+      "en": "Value list name is required."
+    },
+    "CodeAlreadyExists": {
+      "zhs": "值列表编码 {code} 已存在。",
+      "en": "Value list code {code} already exists."
+    },
+    "ItemNotFound": {
+      "zhs": "值列表项 {id} 不存在。",
+      "en": "Value list item {id} does not exist."
+    }
+  }
+}

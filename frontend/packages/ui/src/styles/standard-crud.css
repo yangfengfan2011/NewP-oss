@@ -1,0 +1,282 @@
+.np-standard-crud-filter-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px;
+}
+
+.np-crud-workspace,
+.np-crud-workspace-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.np-crud-workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 32px;
+  margin-bottom: 8px;
+}
+
+.np-crud-workspace-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.np-crud-workspace-title {
+  margin: 0 !important;
+  font-size: 18px !important;
+  line-height: 26px !important;
+}
+
+.np-crud-workspace-description {
+  margin: 4px 0 0 !important;
+}
+
+.np-crud-workspace-actions {
+  margin-left: auto;
+}
+
+.np-crud-workspace-filter {
+  min-width: 0;
+}
+
+.np-crud-workspace-content {
+  min-width: 0;
+}
+
+.np-crud-search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px;
+  background: var(--np-crud-subtle);
+  border-radius: var(--np-crud-radius);
+}
+
+.np-crud-search-fields {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.np-crud-search-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.np-filter-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.np-filter-field .sh-form-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.np-filter-control {
+  width: 100%;
+}
+
+.np-filter-select {
+  width: 100%;
+}
+
+.np-standard-crud-table {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.np-crud-table-section {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 数据行统一压缩纵向留白，保留按钮尺寸和多行内容的自然高度。 */
+.np-crud-table-section .ant-table-wrapper .ant-table-tbody > tr.ant-table-row > td.ant-table-cell {
+  padding-block: 6px;
+}
+
+.np-standard-crud-table .ant-pro-table {
+  width: 100%;
+}
+
+.np-search-table-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.np-search-table-footer {
+  padding-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.np-search-table-footer .ant-pagination {
+  margin: 0 !important;
+}
+
+/* 独立与内嵌页面共用内容布局；容器仅决定是否提供外层面板。 */
+.np-crud-workspace-panel > .ant-card-body {
+  padding: 16px;
+}
+
+.np-search-table-page .ant-pro-card-body {
+  padding: 0;
+}
+
+.np-search-table-page .ant-pro-table-list-toolbar-container {
+  padding-block: 0 12px;
+  flex-wrap: nowrap;
+  flex-direction: row;
+}
+
+.np-search-table-page .ant-pro-table-list-toolbar-left,
+.np-search-table-page .ant-pro-table-list-toolbar-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.np-search-table-page .ant-pro-table-list-toolbar-left {
+  max-width: none;
+}
+
+.np-search-table-page .ant-pro-table-list-toolbar-right {
+  flex: 0 0 auto;
+}
+
+.np-action-toolbar {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.np-action-toolbar-item,
+.np-action-toolbar-more {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: max-content;
+}
+
+.np-action-toolbar [data-overflowed='true'] {
+  position: absolute;
+  inset: 0 auto auto 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.np-crud-detail-sections {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.np-crud-detail.ant-descriptions .ant-descriptions-header {
+  margin-bottom: 8px;
+}
+
+.np-crud-detail.ant-descriptions .ant-descriptions-header .ant-descriptions-title {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.np-crud-detail.ant-descriptions.ant-descriptions-bordered > .ant-descriptions-view .ant-descriptions-row > .ant-descriptions-item-label,
+.np-crud-detail.ant-descriptions.ant-descriptions-bordered > .ant-descriptions-view .ant-descriptions-row > .ant-descriptions-item-content {
+  padding: 10px 12px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.np-crud-detail.ant-descriptions-bordered .ant-descriptions-item-label {
+  width: 112px;
+  color: var(--np-crud-secondary);
+}
+
+.np-crud-detail.ant-descriptions .ant-descriptions-view {
+  background: var(--np-crud-surface);
+}
+
+.np-crud-detail.ant-descriptions .ant-descriptions-view > table {
+  table-layout: fixed;
+}
+
+.np-crud-workspace-content,
+.np-crud-workspace-panel,
+.np-crud-workspace-panel > .ant-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.np-crud-workspace-filter,
+.np-crud-workspace-header,
+.np-search-table-footer {
+  flex-shrink: 0;
+}
+.np-crud-table-section .np-search-table-page {
+  overflow: hidden;
+}
+.np-crud-table-section .np-search-table-page > .ant-pro-table {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Ant Table 在指定 scroll.y 后内联使用 scroll；仅溢出时显示滚动条，保留表头对齐空间。 */
+.np-crud-table-section .ant-table-wrapper .ant-table-body {
+  overflow-y: auto !important;
+  scrollbar-gutter: stable;
+}
+
+.np-column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+.np-column-resize-handle:hover,
+.np-column-resize-handle:focus-visible {
+  background: rgba(22, 119, 255, 0.25);
+  outline: 1px solid #1677ff;
+}
+
+/* 只计算数据行；悬停和选中状态优先，固定列使用不透明底色避免横向滚动时透字。 */
+.np-crud-table-section .ant-table-tbody > tr:nth-child(even of .ant-table-row):not(.ant-table-row-selected):not(:hover) > td.ant-table-cell:not(.ant-table-cell-row-hover) {
+  background: linear-gradient(var(--np-crud-subtle), var(--np-crud-subtle)), var(--np-crud-row-base);
+}
+
+/* 悬停使用主题浅蓝，与灰色底纹区分；选中行继续使用组件自身的状态颜色。 */
+.np-crud-table-section .ant-table-tbody > tr.ant-table-row:not(.ant-table-row-selected):hover > td.ant-table-cell,
+.np-crud-table-section .ant-table-tbody > tr.ant-table-row:not(.ant-table-row-selected) > td.ant-table-cell-row-hover {
+  background: color-mix(in srgb, var(--np-crud-row-hover) 65%, var(--np-crud-row-base));
+}

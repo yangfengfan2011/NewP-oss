@@ -1,0 +1,130 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "workspace.history.list",
+    "resourceKey": "workspace.history",
+    "mode": "list",
+    "dataAccess": { "execution": "workspace.history.list", "resources": ["workspace.folder", "part.part", "document.document"] },
+    "dicKey": "ObjectHistory",
+    "titleKey": "Title",
+    "descriptionKey": "Help",
+    "query": {
+      "fields": [
+        {
+          "key": "from",
+          "labelKey": "From",
+          "source": "model",
+          "field": "occurredAt"
+        },
+        {
+          "key": "to",
+          "labelKey": "To",
+          "source": "model",
+          "field": "occurredAt"
+        },
+        {
+          "key": "actorId",
+          "labelKey": "ActorId",
+          "source": "model",
+          "field": "actor"
+        },
+        {
+          "key": "eventType",
+          "labelKey": "EventType",
+          "source": "model",
+          "field": "eventType"
+        },
+        {
+          "key": "objectType",
+          "labelKey": "ObjectType",
+          "source": "model",
+          "field": "objectType"
+        },
+        {
+          "key": "ipAddress",
+          "labelKey": "IpAddress",
+          "source": "model",
+          "field": "ipAddress"
+        },
+        {
+          "key": "description",
+          "labelKey": "Description",
+          "source": "model",
+          "field": "description"
+        }
+      ],
+      "defaultPageSize": 20
+    },
+    "columns": [
+      {
+        "key": "occurredAt",
+        "labelKey": "OccurredAt",
+        "source": "projection",
+        "field": "occurredAt"
+      },
+      {
+        "key": "eventType",
+        "labelKey": "EventType",
+        "source": "projection",
+        "field": "eventType"
+      },
+      {
+        "key": "objectType",
+        "labelKey": "ObjectType",
+        "source": "projection",
+        "field": "objectType"
+      },
+      {
+        "key": "actor",
+        "labelKey": "Actor",
+        "source": "projection",
+        "field": "actor"
+      },
+      {
+        "key": "target",
+        "labelKey": "Target",
+        "source": "projection",
+        "field": "target"
+      },
+      {
+        "key": "description",
+        "labelKey": "Description",
+        "source": "projection",
+        "field": "description"
+      },
+      {
+        "key": "ipAddress",
+        "labelKey": "IpAddress",
+        "source": "projection",
+        "field": "ipAddress"
+      }
+    ],
+    "outputActions": [
+      { "key": "exportSelected", "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ] },
+      { "key": "exportAll", "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ] },
+      { "key": "printSelected", "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ] },
+      { "key": "printAll", "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ] }
+    ],
+    "pageActions": [
+      {
+        "key": "output",
+        "labelKey": "Output",
+        "standardAction": "view",
+        "handlerKey": "view",
+        "inputKey": "objectHistoryOutput",
+        "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ]
+      }
+    ],
+    "rowActions": [
+      {
+        "key": "view",
+        "labelKey": "View",
+        "standardAction": "view",
+        "handlerKey": "view",
+        "inputKey": "objectHistoryDetails",
+        "dataAccess": [ { "object": "WorkspaceFolder", "actions": ["read"] }, { "object": "Part", "actions": ["read"] }, { "object": "Document", "actions": ["read"] } ]
+      }
+    ]
+  }
+}

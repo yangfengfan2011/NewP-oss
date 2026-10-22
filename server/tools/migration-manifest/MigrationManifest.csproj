@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Tools.MigrationManifest</RootNamespace>
+    <AssemblyName>MigrationManifest</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\..\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\..\platform-persistence-composition\PlatformPersistence.Composition.csproj" />
+  </ItemGroup>
+
+</Project>

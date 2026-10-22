@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>$id$</id>
+    <version>$version$</version>
+    <authors>$authors$</authors>
+    <developmentDependency>true</developmentDependency>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
+    <readme>README.md</readme>
+    <description>$description$</description>
+    <dependencies>
+      <group targetFramework="net10.0">
+        <dependency id="ICP.Platform.Plugin.Contracts" version="[$version$]" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+    <contentFiles>
+      <files include="any/any/platform-api-release.identity.json" buildAction="None" />
+    </contentFiles>
+  </metadata>
+  <files>
+    <file src="bin\$configuration$\net10.0\ICP.Platform.Plugin.Sdk.dll" target="lib\net10.0" />
+    <file src="Analyzers\bin\$configuration$\net10.0\ICP.Platform.Plugin.Sdk.Analyzers.dll" target="analyzers\dotnet\cs" />
+    <file src="buildTransitive\ICP.Platform.Plugin.Sdk.targets" target="buildTransitive" />
+    <file src="README.md" target="" />
+    <file src="..\plugin-contracts\platform-api-release.identity.json" target="contentFiles\any\any" />
+  </files>
+</package>

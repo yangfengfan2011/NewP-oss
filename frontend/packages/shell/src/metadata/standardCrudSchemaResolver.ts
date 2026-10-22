@@ -1,0 +1,1062 @@
+import type { StandardCrudActionDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { collectStandardCrudQueryFields } from '../standard-crud/standardCrudMetadataQuery';
+
+type MetadataRecord = Record<string, unknown>;
+
+export interface StandardCrudSchemaResolverContext {
+  modelDocuments?: MetadataRecord[];
+  defaultLanguageCatalog?: Record<string, string>;
+}
+
+export interface StandardCrudRuntimeFieldSchema {
+  key: string;
+  labelKey: string;
+  source: 'preset' | 'model';
+  field?: string;
+  preset?: string;
+  operator?: string;
+  fromKey?: string;
+  toKey?: string;
+  dataSourceKey?: string;
+  dependsOn?: string[];
+}
+
+export interface StandardCrudRowActionVisibilitySchema {
+  field: string;
+  operator: 'equals';
+  value: boolean | string | number | null;
+}
+
+export interface StandardCrudRowActionDisabledSchema {
+  field: string;
+  operator: 'notEmpty';
+  reasonKey: string;
+}
+
+export interface StandardCrudActionDataDependencySchema {
+  fields: string[];
+  reasonKey: string;
+}
+
+export interface StandardCrudRuntimeActionSchema {
+  buttonId?: string;
+  dataAccess?: StandardCrudActionDefinition['dataAccess'];
+  key: string;
+  labelKey: string;
+  standardAction?: StandardCrudActionDefinition['standardAction'];
+  variant?: StandardCrudActionDefinition['variant'];
+  requiresSelection?: boolean;
+  confirmMessageKey?: string;
+  confirmLabelKey?: string;
+  navigationTargetKey?: string;
+  handlerKey?: string;
+  inputKey?: string;
+  inputReadSourceKey?: string;
+  visibleWhen?: StandardCrudRowActionVisibilitySchema;
+  disabledWhen?: StandardCrudRowActionDisabledSchema;
+  dataDependency?: StandardCrudActionDataDependencySchema;
+}
+
+export interface StandardCrudRuntimeColumnSchema {
+  key: string;
+  labelKey: string;
+  source: 'model' | 'projection';
+  field: string;
+  width?: number;
+  resizable?: boolean;
+  sortable?: boolean;
+  hideable?: boolean;
+  responsivePriority?: 'high' | 'medium' | 'low';
+  standardAction?: 'view';
+}
+
+export interface StandardCrudAdvancedFilterSectionSchema {
+  key: string;
+  titleKey: string;
+  fields: StandardCrudRuntimeFieldSchema[];
+}
+
+export interface StandardCrudAdvancedFilterSchema {
+  enabled: boolean;
+  titleKey: string;
+  sections: StandardCrudAdvancedFilterSectionSchema[];
+}
+
+export interface StandardCrudRuntimeQuerySchema {
+  fields: StandardCrudRuntimeFieldSchema[];
+  defaults: Array<{ field: string; value: unknown }>;
+  defaultSort?: { field: string; direction: 'asc' | 'desc' };
+  defaultPageSize?: number;
+  advancedFilter?: StandardCrudAdvancedFilterSchema;
+}
+
+export interface StandardCrudPageActionGroupSchema {
+  key: string;
+  labelKey: string;
+  variant?: StandardCrudActionDefinition['variant'];
+  actionKeys: string[];
+}
+
+export interface StandardCrudListRuntimeSchema {
+  viewKey: string;
+  resourceKey: string;
+  idField?: string;
+  dicKey: string;
+  titleKey: string;
+  descriptionKey: string;
+  editorMode: 'drawer' | 'dialog' | 'page';
+  detailViewKey?: string;
+  query: StandardCrudRuntimeQuerySchema;
+  queryFields: StandardCrudRuntimeFieldSchema[];
+  advancedFilter: StandardCrudAdvancedFilterSchema;
+  columnSource: 'metadata' | 'runtime';
+  columns: StandardCrudRuntimeColumnSchema[];
+  pageActions: StandardCrudRuntimeActionSchema[];
+  pageActionGroups?: StandardCrudPageActionGroupSchema[];
+  rowActions: StandardCrudRuntimeActionSchema[];
+  /** 非呈现功能目录中显式绑定 handler 的动作只供受控引用执行。 */
+  featureActions?: StandardCrudRuntimeActionSchema[];
+  /** 只引用当前 List View 的行动作，不另声明执行或权限。 */
+  columnResize?: boolean;
+  rowContextMenu?: string[];
+  rowActionColumn?: 'default' | 'menu';
+  rowActionSets?: Record<string, { column: string[]; contextMenu: string[] }>;
+  exportModes: string[];
+}
+
+export type StandardCrudResolvedDetailFieldKind = 'text' | 'number' | 'boolean' | 'date' | 'enum' | 'lookup';
+
+export interface StandardCrudResolvedDetailFieldCatalogEntry {
+  key: string;
+  kind: StandardCrudResolvedDetailFieldKind;
+  source: 'model';
+  enumKey?: string;
+}
+
+export interface StandardCrudResolvedDetailFieldSchema {
+  key: string;
+  labelKey: string;
+  rendererKey: string;
+  rendererSource: 'standard' | 'binding';
+  enumKey?: string;
+}
+
+export interface StandardCrudResolvedDetailSectionSchema {
+  key: string;
+  titleKey: string;
+  fields: StandardCrudResolvedDetailFieldSchema[];
+}
+
+export interface StandardCrudResolvedDetailSchema {
+  viewKey: string;
+  resourceKey: string;
+  dicKey: string;
+  titleKey: string;
+  descriptionKey: string;
+  fieldCatalog: StandardCrudResolvedDetailFieldCatalogEntry[];
+  sections: StandardCrudResolvedDetailSectionSchema[];
+  summaryBlocks: string[];
+  pageActions: StandardCrudRuntimeActionSchema[];
+}
+
+const supportedStandardActions = new Set(['create', 'view', 'edit', 'refresh', 'delete', 'disable', 'enable', 'submit']);
+const supportedActionVariants = new Set(['default', 'primary', 'danger']);
+const supportedDataSourceTypes = new Set(['enum', 'model', 'provider', 'static']);
+const supportedQueryPresets = new Set(['keyword']);
+const reservedStandardCrudQueryKeys = new Set(['page', 'pageindex', 'pagesize', 'sortby', 'sortdirection', 'fields']);
+function readString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+}
+
+function readArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function readRecordArray(value: unknown): MetadataRecord[] {
+  return readArray<unknown>(value).filter(
+    (item): item is MetadataRecord => typeof item === 'object' && item !== null && !Array.isArray(item),
+  );
+}
+
+function readRecord(value: unknown): MetadataRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as MetadataRecord) : {};
+}
+
+function readActionVisibility(value: unknown): StandardCrudRowActionVisibilitySchema {
+  const record = readRecord(value);
+  const field = readString(record.field);
+  const operator = readString(record.operator);
+
+  return {
+    field,
+    operator: operator as StandardCrudRowActionVisibilitySchema['operator'],
+    value: record.value as StandardCrudRowActionVisibilitySchema['value'],
+  };
+}
+
+function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
+  if (value.requiresSelection !== undefined && typeof value.requiresSelection !== 'boolean') throw new Error('requiresSelection must be a boolean');
+  if (value.inputReadSourceKey !== undefined && (typeof value.inputReadSourceKey !== 'string' || !value.inputReadSourceKey.trim())) throw new Error('INPUT_READ_SOURCE_INVALID');
+  const standardAction = readString(value.standardAction);
+  const variant = readString(value.variant);
+  const confirmMessageKey = readString(value.confirmMessageKey);
+  const confirmLabelKey = readString(value.confirmLabelKey);
+  const handlerKey = readString(value.handlerKey);
+  const inputKey = readString(value.inputKey);
+  const visibleWhen = Object.prototype.hasOwnProperty.call(value, 'visibleWhen')
+    ? readActionVisibility(value.visibleWhen)
+    : undefined;
+  const disabledWhenRecord = readRecord(value.disabledWhen);
+  const disabledWhen = Object.keys(disabledWhenRecord).length > 0 ? {
+    field: readString(disabledWhenRecord.field),
+    operator: readString(disabledWhenRecord.operator) as StandardCrudRowActionDisabledSchema['operator'],
+    reasonKey: readString(disabledWhenRecord.reasonKey),
+  } : undefined;
+  const dataDependencyRecord = readRecord(value.dataDependency);
+  const dataDependency = Object.keys(dataDependencyRecord).length > 0 ? {
+    fields: readArray<unknown>(dataDependencyRecord.fields)
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
+    reasonKey: readString(dataDependencyRecord.reasonKey),
+  } : undefined;
+
+  return {
+    key: readString(value.key),
+    ...(typeof value.buttonId === 'string' ? { buttonId: value.buttonId } : {}),
+    ...(value.dataAccess ? { dataAccess: value.dataAccess as StandardCrudActionDefinition['dataAccess'] } : {}),
+    labelKey: readString(value.labelKey),
+    ...(value.requiresSelection === true ? { requiresSelection: true } : {}),
+    ...(standardAction.length > 0 ? { standardAction: standardAction as StandardCrudRuntimeActionSchema['standardAction'] } : {}),
+    ...(variant.length > 0 ? { variant: variant as StandardCrudRuntimeActionSchema['variant'] } : {}),
+    ...(confirmMessageKey.length > 0 ? { confirmMessageKey } : {}),
+    ...(confirmLabelKey.length > 0 ? { confirmLabelKey } : {}),
+    ...(handlerKey.length > 0 ? { handlerKey } : {}),
+    ...(readString(value.navigationTargetKey) ? { navigationTargetKey: readString(value.navigationTargetKey) } : {}),
+    ...(inputKey.length > 0 ? { inputKey } : {}),
+    ...(typeof value.inputReadSourceKey === 'string' ? { inputReadSourceKey: value.inputReadSourceKey } : {}),
+    ...(visibleWhen ? { visibleWhen } : {}),
+    ...(disabledWhen ? { disabledWhen } : {}),
+    ...(dataDependency ? { dataDependency } : {}),
+  };
+}
+
+function findModelField(model: MetadataRecord, fieldName: string): MetadataRecord {
+  return readRecordArray(model.fields).find((field) => readString(field.name) === fieldName) ?? {};
+}
+
+function resolveFieldDataSourceKey(field: StandardCrudRuntimeFieldSchema, model: MetadataRecord): string | undefined {
+  if (field.dataSourceKey) {
+    return field.dataSourceKey;
+  }
+  if (field.source !== 'model' || !field.field) {
+    return undefined;
+  }
+
+  const modelField = findModelField(model, field.field);
+  const dataSource = readRecord(modelField.dataSource);
+  const dataSourceType = readString(dataSource.type);
+  if (dataSourceType === 'provider' || dataSourceType === 'enum') {
+    return readString(dataSource.key) || undefined;
+  }
+  if (dataSourceType === 'model') {
+    const modelKey = readString(dataSource.model, readString(dataSource.key));
+    return modelKey.length > 0 ? `model.${modelKey}` : undefined;
+  }
+
+  return undefined;
+}
+
+function readField(value: MetadataRecord, model: MetadataRecord = {}): StandardCrudRuntimeFieldSchema {
+  const field: StandardCrudRuntimeFieldSchema = {
+    key: readString(value.key),
+    labelKey: readString(value.labelKey),
+    ...(value.requiresSelection === true ? { requiresSelection: true } : {}),
+    source: value.source === 'model' ? 'model' : 'preset',
+  };
+  const sourceField = readString(value.field);
+  const preset = readString(value.preset);
+  const operator = readString(value.operator);
+  const fromKey = readString(value.fromKey);
+  const toKey = readString(value.toKey);
+  const declaredDataSourceKey = readString(value.dataSourceKey);
+  const dependsOn = readArray<unknown>(value.dependsOn)
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+
+  if (sourceField.length > 0) {
+    field.field = sourceField;
+  }
+  if (preset.length > 0) {
+    field.preset = preset;
+  }
+  if (operator.length > 0) {
+    field.operator = operator;
+  }
+  if (fromKey.length > 0) {
+    field.fromKey = fromKey;
+  }
+  if (toKey.length > 0) {
+    field.toKey = toKey;
+  }
+  const resolvedDataSourceKey = declaredDataSourceKey || resolveFieldDataSourceKey(field, model);
+  if (resolvedDataSourceKey) {
+    field.dataSourceKey = resolvedDataSourceKey;
+  }
+  if (dependsOn.length > 0) {
+    field.dependsOn = dependsOn;
+  }
+
+  return field;
+}
+
+function readEditorMode(value: unknown): StandardCrudListRuntimeSchema['editorMode'] {
+  return value === 'page' || value === 'dialog' || value === 'drawer' ? value : 'drawer';
+}
+
+function readAdvancedFilter(value: unknown, model: MetadataRecord = {}): StandardCrudAdvancedFilterSchema {
+  const record = readRecord(value);
+
+  return {
+    enabled: record.enabled === true,
+    titleKey: readString(record.titleKey),
+    sections: readRecordArray(record.sections)
+      .map((section) => ({
+        key: readString(section.key),
+        titleKey: readString(section.titleKey),
+        fields: readRecordArray(section.fields)
+          .map((field) => readField(field, model))
+          .filter((field) => field.key.length > 0),
+      }))
+      .filter((section) => section.key.length > 0),
+  };
+}
+
+function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
+  const source = readString(value.source);
+  const field = readString(value.field);
+  if (value.resizable !== undefined && typeof value.resizable !== 'boolean') throw new Error('column resizable must be boolean');
+  if (value.width !== undefined && (typeof value.width !== 'number' || !Number.isFinite(value.width) || value.width <= 0)) throw new Error('column width must be positive');
+  const width = typeof value.width === 'number' ? value.width : undefined;
+  const sortable = typeof value.sortable === 'boolean' ? value.sortable : undefined;
+  const hideable = typeof value.hideable === 'boolean' ? value.hideable : undefined;
+  const standardAction = value.standardAction === 'view' ? 'view' : undefined;
+  const responsivePriority = value.responsivePriority === 'high'
+    || value.responsivePriority === 'medium'
+    || value.responsivePriority === 'low'
+    ? value.responsivePriority
+    : undefined;
+
+  return {
+    key: readString(value.key),
+    labelKey: readString(value.labelKey),
+    ...(value.requiresSelection === true ? { requiresSelection: true } : {}),
+    source: source === 'projection' ? 'projection' : 'model',
+    field,
+    ...(width !== undefined ? { width } : {}),
+    ...(typeof value.resizable === 'boolean' ? { resizable: value.resizable } : {}),
+    ...(sortable !== undefined ? { sortable } : {}),
+    ...(hideable !== undefined ? { hideable } : {}),
+    ...(responsivePriority ? { responsivePriority } : {}),
+    ...(standardAction ? { standardAction } : {}),
+  };
+}
+
+function readQuery(value: unknown, model: MetadataRecord): StandardCrudRuntimeQuerySchema {
+  const record = readRecord(value);
+  const defaultSort = readRecord(record.defaultSort);
+  const defaultSortField = readString(defaultSort.field);
+  const defaultSortDirection = defaultSort.direction === 'desc' ? 'desc' : defaultSort.direction === 'asc' ? 'asc' : undefined;
+  const defaultPageSize = typeof record.defaultPageSize === 'number' ? record.defaultPageSize : undefined;
+
+  return {
+    fields: readRecordArray(record.fields)
+      .map((field) => readField(field, model))
+      .filter((field) => field.key.length > 0),
+    defaults: readRecordArray(record.defaults)
+      .map((item) => ({
+        field: readString(item.field),
+        value: item.value,
+      }))
+      .filter((item) => item.field.length > 0),
+    ...(defaultSortField.length > 0 && defaultSortDirection ? { defaultSort: { field: defaultSortField, direction: defaultSortDirection } } : {}),
+    ...(defaultPageSize !== undefined ? { defaultPageSize } : {}),
+  };
+}
+
+function resolveAdvancedFilterSource(view: MetadataRecord, query: MetadataRecord): unknown {
+  return Object.prototype.hasOwnProperty.call(view, 'advancedFilter') ? view.advancedFilter : query.advancedFilter;
+}
+
+function inferResolvedDetailFieldKind(field: MetadataRecord): StandardCrudResolvedDetailFieldKind {
+  const uiType = readString(field.uiType);
+  const dataSource = readRecord(field.dataSource);
+  const dataSourceType = readString(dataSource.type);
+  const contract = readRecord(field.contract);
+  const storageType = readString(readRecord(field.storage).type);
+
+  if (uiType === 'lookup' || dataSourceType === 'model' || dataSourceType === 'provider') {
+    return 'lookup';
+  }
+  if (uiType === 'select' || contract.valueType === 'enum' || dataSourceType === 'enum') {
+    return 'enum';
+  }
+  if (uiType === 'switch' || uiType === 'checkbox' || storageType === 'bool') {
+    return 'boolean';
+  }
+  if (uiType === 'number' || ['byte', 'short', 'int', 'long', 'decimal', 'double', 'float'].includes(storageType)) {
+    return 'number';
+  }
+  if (uiType === 'date' || storageType === 'date' || storageType === 'datetime') {
+    return 'date';
+  }
+
+  return 'text';
+}
+
+function buildResolvedDetailFieldCatalog(model: MetadataRecord): StandardCrudResolvedDetailFieldCatalogEntry[] {
+  const catalog: StandardCrudResolvedDetailFieldCatalogEntry[] = [];
+  const names = new Set<string>();
+  const append = (
+    key: string,
+    kind: StandardCrudResolvedDetailFieldKind,
+    display: Pick<StandardCrudResolvedDetailFieldCatalogEntry, 'enumKey'> = {},
+  ): void => {
+    if (key.length > 0 && names.add(key)) {
+      catalog.push({ key, kind, source: 'model', ...display });
+    }
+  };
+
+  for (const field of readRecordArray(model.fields)) {
+    const key = readString(field.name);
+    const kind = inferResolvedDetailFieldKind(field);
+    const dataSource = readRecord(field.dataSource);
+    const contract = readRecord(field.contract);
+    append(key, kind, {
+      ...(kind === 'enum'
+        ? { enumKey: readString(dataSource.key, readString(contract.clrType)) }
+        : {}),
+    });
+  }
+
+  return catalog;
+}
+
+function resolveStrictDetailView(viewDocuments: MetadataRecord[], viewKey: string): MetadataRecord {
+  const matches = viewDocuments
+    .filter((document) => document.type === 'view')
+    .map((document) => readRecord(document.view))
+    .filter((view) => readString(view.key) === viewKey && readString(view.mode) === 'detail');
+
+  if (matches.length === 0) {
+    throw new Error(`detail view "${viewKey}" is missing`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`detail view "${viewKey}" is declared multiple times`);
+  }
+
+  return matches[0];
+}
+
+function readResolvedDetailField(value: unknown): { field: string; rendererKey?: string } {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return { field: value };
+  }
+
+  const record = readRecord(value);
+  const field = readString(record.field);
+  const rendererKey = readString(record.rendererKey);
+  return { field, ...(rendererKey.length > 0 ? { rendererKey } : {}) };
+}
+
+export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
+  viewDocuments: MetadataRecord[],
+  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
+  context: StandardCrudSchemaResolverContext,
+): StandardCrudResolvedDetailSchema {
+  const viewKey = readString(registration.detailViewKey);
+  if (viewKey.length === 0) {
+    throw new Error(`standard CRUD resource "${registration.resourceKey}" does not declare detailViewKey`);
+  }
+
+  const view = resolveStrictDetailView(viewDocuments, viewKey);
+  const modelKey = readString(view.model);
+  const model = requireModelDocument(viewKey, context.modelDocuments ?? [], modelKey);
+  if (modelKey.length === 0 || Object.keys(model).length === 0) {
+    throw new Error(`view "${viewKey}" references unknown model "${modelKey}"`);
+  }
+
+  const fieldCatalog = buildResolvedDetailFieldCatalog(model);
+  const catalogByKey = new Map(fieldCatalog.map((field) => [field.key, field]));
+  const usedFields = new Set<string>();
+  const rawSections = readArray<unknown>(view.sections);
+  const sections = rawSections.map((value) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error(`detail view "${viewKey}" sections must be objects`);
+    }
+
+    const section = readRecord(value);
+    const sectionKey = readString(section.key);
+    const titleKey = readString(section.titleKey);
+    const rawFields = readArray<unknown>(section.fields);
+    if (sectionKey.length === 0 || titleKey.length === 0 || rawFields.length === 0) {
+      throw new Error(`detail view "${viewKey}" contains an empty detail section`);
+    }
+
+    const fields = rawFields.map((fieldValue): StandardCrudResolvedDetailFieldSchema => {
+      const declaration = readResolvedDetailField(fieldValue);
+      const catalogField = catalogByKey.get(declaration.field);
+      if (!catalogField) {
+        throw new Error(`detail section "${sectionKey}" references unknown model field "${declaration.field}"`);
+      }
+      if (usedFields.has(declaration.field)) {
+        throw new Error(`detail view "${viewKey}" contains duplicate field "${declaration.field}"`);
+      }
+      usedFields.add(declaration.field);
+      if (declaration.rendererKey && !registration.detailFieldRenderers?.[declaration.rendererKey]) {
+        throw new Error(`detail field renderer "${declaration.rendererKey}" is not registered on resource "${registration.resourceKey}"`);
+      }
+
+      return {
+        key: declaration.field,
+        labelKey: `Field_${declaration.field}`,
+        rendererKey: declaration.rendererKey ?? `standard.${catalogField.kind}`,
+        rendererSource: declaration.rendererKey ? 'binding' : 'standard',
+        ...(catalogField.enumKey ? { enumKey: catalogField.enumKey } : {}),
+      };
+    });
+
+    return { key: sectionKey, titleKey, fields };
+  });
+
+  if (sections.length === 0 || usedFields.size === 0) {
+    throw new Error(`detail view "${viewKey}" must contain at least one section and one field`);
+  }
+
+  // 只校验显式 View，不向字段目录或展示结构补字段；固定字段仍由后端 Model 投影拥有。
+  if (readString(model.kind).toLowerCase() === 'entity') {
+    const auditFields = ['CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt'];
+    const lastSection = sections[sections.length - 1];
+    if (lastSection.key !== 'audit'
+      || lastSection.fields.length !== auditFields.length
+      || lastSection.fields.some((field, index) => field.key !== auditFields[index])) {
+      throw new Error(`detail view "${viewKey}" must end with an audit section containing CreatedBy, CreatedAt, UpdatedBy, UpdatedAt`);
+    }
+  }
+
+  const pageActions = readRecordArray(view.pageActions)
+    .map(readAction)
+    .filter((action) => action.key.length > 0);
+  for (const action of pageActions) {
+    assertAction(action, registration);
+    if (action.dataDependency) {
+      if (action.dataDependency.fields.length === 0 || action.dataDependency.reasonKey.length === 0) {
+        throw new Error(`detail action "${action.key}" dataDependency must declare fields and reasonKey`);
+      }
+      for (const fieldKey of action.dataDependency.fields) {
+        if (!catalogByKey.has(fieldKey)) {
+          throw new Error(`detail action "${action.key}" dataDependency references unknown model field "${fieldKey}"`);
+        }
+      }
+      assertDictionaryKey(
+        readString(view.dicKey, registration.resourceKey),
+        action.dataDependency.reasonKey,
+        context.defaultLanguageCatalog,
+      );
+    }
+  }
+
+  return {
+    viewKey,
+    resourceKey: registration.resourceKey,
+    dicKey: readString(view.dicKey, registration.resourceKey),
+    titleKey: readString(view.titleKey, 'Title'),
+    descriptionKey: readString(view.descriptionKey, 'Description'),
+    fieldCatalog,
+    sections,
+    summaryBlocks: readArray<unknown>(view.summaryBlocks).filter((block): block is string => typeof block === 'string'),
+    pageActions,
+  };
+}
+
+function assertRequiredMetadataKey(kind: string, key: string, localKey: string): void {
+  if (localKey.length === 0) {
+    throw new Error(`${kind} "${key}" must declare labelKey`);
+  }
+}
+
+function assertDictionaryKey(dicKey: string, localKey: string, catalog: Record<string, string> | undefined): void {
+  if (!catalog || localKey.length === 0) {
+    return;
+  }
+
+  const fullKey = `${dicKey}.${localKey}`;
+  if (catalog[fullKey] === undefined) {
+    throw new Error(`missing dictionary key "${fullKey}"`);
+  }
+}
+
+function findModelDocument(modelDocuments: MetadataRecord[], modelKey: string): MetadataRecord {
+  const matches = modelDocuments.filter((item) => item?.type === 'model' && Object.prototype.hasOwnProperty.call(item, modelKey));
+  if (matches.length > 1) {
+    throw new Error(`model "${modelKey}" is declared by multiple metadata documents`);
+  }
+  const document = matches[0];
+  return readRecord(document?.[modelKey]);
+}
+
+function requireModelDocument(
+  viewKey: string,
+  modelDocuments: MetadataRecord[] | undefined,
+  modelKey: string,
+): MetadataRecord {
+  if (!modelDocuments) {
+    return {};
+  }
+
+  const model = findModelDocument(modelDocuments, modelKey);
+  if (modelKey.length > 0 && Object.keys(model).length === 0) {
+    throw new Error(`view "${viewKey}" references unknown model "${modelKey}"`);
+  }
+
+  return model;
+}
+
+function collectModelFields(model: MetadataRecord): Set<string> {
+  if (Object.keys(model).length === 0) {
+    return new Set<string>();
+  }
+
+  const names = new Set<string>();
+  for (const field of readRecordArray(model.fields)) {
+    const name = readString(field.name);
+    if (name.length > 0) {
+      names.add(name);
+    }
+  }
+
+  return names;
+}
+
+function collectProviderKeys<TFilter, TRow, TDetail>(
+  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
+): Set<string> {
+  return new Set((registration.lookupProviders ?? []).map((provider) => provider.key));
+}
+
+function assertDataSource(fieldName: string, field: MetadataRecord, providerKeys: Set<string>): void {
+  const dataSource = readRecord(field.dataSource);
+  const type = readString(dataSource.type);
+  if (type.length === 0) {
+    return;
+  }
+
+  if (!supportedDataSourceTypes.has(type)) {
+    throw new Error(`unsupported dataSource type "${type}"`);
+  }
+
+  if (type === 'provider') {
+    const providerKey = readString(dataSource.key);
+    if (!providerKeys.has(providerKey)) {
+      throw new Error(`dataSource provider "${providerKey}" for field "${fieldName}" is not registered`);
+    }
+  }
+
+  if (type === 'model') {
+    const modelKey = readString(dataSource.model, readString(dataSource.key));
+    const providerKey = modelKey.length > 0 ? `model.${modelKey}` : 'model.';
+    if (!providerKeys.has(providerKey)) {
+      throw new Error(`model dataSource provider "${providerKey}" for field "${fieldName}" is not registered`);
+    }
+  }
+}
+
+export function assertStandardCrudModelDataSources<TFilter, TRow, TDetail>(
+  model: MetadataRecord,
+  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
+): void {
+  if (Object.keys(model).length === 0) {
+    return;
+  }
+
+  const providerKeys = collectProviderKeys(registration);
+  for (const field of readRecordArray(model.fields)) {
+    const fieldName = readString(field.name);
+    if (fieldName.length === 0) {
+      continue;
+    }
+
+    assertDataSource(fieldName, field, providerKeys);
+  }
+}
+
+function assertAction<TFilter, TRow, TDetail>(
+  action: StandardCrudRuntimeActionSchema,
+  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
+): void {
+  if (action.standardAction && !supportedStandardActions.has(action.standardAction)) {
+    throw new Error(`unsupported standard action "${action.standardAction}"`);
+  }
+  if (action.variant && !supportedActionVariants.has(action.variant)) {
+    throw new Error(`unsupported action variant "${action.variant}"`);
+  }
+
+  if (action.handlerKey && !registration.actionHandlers?.[action.handlerKey]) {
+    throw new Error(`action handler "${action.handlerKey}" is not registered on resource "${registration.resourceKey}"`);
+  }
+  if (action.inputKey && !registration.actionInputRenderers?.[action.inputKey]) {
+    throw new Error(`action input renderer "${action.inputKey}" is not registered on resource "${registration.resourceKey}"`);
+  }
+}
+
+function assertModelFieldReference(
+  fieldName: string | undefined,
+  modelFields: Set<string>,
+  message: string,
+): void {
+  if (!fieldName || modelFields.size === 0) {
+    return;
+  }
+  if (!modelFields.has(fieldName)) {
+    throw new Error(message);
+  }
+}
+
+function assertActionVisibility(action: StandardCrudRuntimeActionSchema, modelFields: Set<string>): void {
+  if (!action.visibleWhen) {
+    return;
+  }
+  if (action.visibleWhen.field.length === 0) {
+    throw new Error(`row action "${action.key}" visibleWhen must declare field`);
+  }
+  if (action.visibleWhen.operator.length === 0) {
+    throw new Error(`row action "${action.key}" visibleWhen must declare operator`);
+  }
+  if (action.visibleWhen.operator !== 'equals') {
+    throw new Error(`row action "${action.key}" visibleWhen uses unsupported operator "${action.visibleWhen.operator}"`);
+  }
+  if (
+    typeof action.visibleWhen.value !== 'boolean'
+    && typeof action.visibleWhen.value !== 'string'
+    && typeof action.visibleWhen.value !== 'number'
+    && action.visibleWhen.value !== null
+  ) {
+    throw new Error(`row action "${action.key}" visibleWhen value must be a boolean, string, number or null`);
+  }
+  assertModelFieldReference(
+    action.visibleWhen.field,
+    modelFields,
+    `row action "${action.key}" visibleWhen references unknown model field "${action.visibleWhen.field}"`,
+  );
+}
+
+function assertActionDisabledState(action: StandardCrudRuntimeActionSchema, modelFields: Set<string>): void {
+  if (!action.disabledWhen) {
+    return;
+  }
+  if (action.disabledWhen.operator !== 'notEmpty') {
+    throw new Error(`row action "${action.key}" disabledWhen uses unsupported operator "${action.disabledWhen.operator}"`);
+  }
+  if (action.disabledWhen.reasonKey.length === 0) {
+    throw new Error(`row action "${action.key}" disabledWhen must declare reasonKey`);
+  }
+  assertModelFieldReference(
+    action.disabledWhen.field,
+    modelFields,
+    `row action "${action.key}" disabledWhen references unknown model field "${action.disabledWhen.field}"`,
+  );
+}
+
+function assertQuery(
+  query: StandardCrudRuntimeQuerySchema,
+  advancedFilter: StandardCrudAdvancedFilterSchema | undefined,
+  model: MetadataRecord,
+): void {
+  const fields = collectStandardCrudQueryFields(query, advancedFilter);
+  const declaredKeys = new Set(fields.map((field) => field.key));
+  const parameterKeys = new Set(declaredKeys);
+
+  for (const field of fields) {
+    if (reservedStandardCrudQueryKeys.has(field.key.toLowerCase())) {
+      throw new Error(`query field key "${field.key}" is reserved for standard CRUD requests`);
+    }
+    if (field.source === 'preset' && field.preset && !supportedQueryPresets.has(field.preset)) {
+      throw new Error(`unsupported query preset "${field.preset}"`);
+    }
+    if (field.operator && field.operator !== '=' && field.operator !== 'like' && field.operator !== 'dateRange') {
+      throw new Error(`query field "${field.key}" uses unsupported operator "${field.operator}"`);
+    }
+    if (field.operator !== 'dateRange') {
+      if (field.fromKey || field.toKey) {
+        throw new Error(`query field "${field.key}" can only declare range boundary keys for dateRange`);
+      }
+      continue;
+    }
+    if (field.source !== 'model' || !field.field) {
+      throw new Error(`dateRange query field "${field.key}" must reference a model field`);
+    }
+    const modelField = findModelField(model, field.field);
+    if (readString(readRecord(modelField.contract).valueType) !== 'calendarDate') {
+      throw new Error(`dateRange query field "${field.key}" requires a CalendarDate model field`);
+    }
+    if (!field.fromKey || !field.toKey || field.fromKey === field.toKey) {
+      throw new Error(`dateRange query field "${field.key}" must declare distinct fromKey and toKey`);
+    }
+    for (const boundaryKey of [field.fromKey, field.toKey]) {
+      if (reservedStandardCrudQueryKeys.has(boundaryKey.toLowerCase())) {
+        throw new Error(`dateRange boundary key "${boundaryKey}" is reserved for standard CRUD requests`);
+      }
+      if (parameterKeys.has(boundaryKey)) {
+        throw new Error(`dateRange boundary key "${boundaryKey}" conflicts with another query key`);
+      }
+      parameterKeys.add(boundaryKey);
+    }
+  }
+
+  for (const item of query.defaults) {
+    if (!declaredKeys.has(item.field)) {
+      throw new Error(`query default "${item.field}" does not reference a declared query field`);
+    }
+  }
+}
+
+function assertLocalizedFieldLabels(
+  dicKey: string,
+  fields: StandardCrudRuntimeFieldSchema[],
+  catalog: Record<string, string> | undefined,
+): void {
+  for (const field of fields) {
+    assertRequiredMetadataKey('query field', field.key, field.labelKey);
+    assertDictionaryKey(dicKey, field.labelKey, catalog);
+  }
+}
+
+function assertLocalizedActions(
+  dicKey: string,
+  actions: StandardCrudRuntimeActionSchema[],
+  catalog: Record<string, string> | undefined,
+): void {
+  for (const action of actions) {
+    assertRequiredMetadataKey('action', action.key, action.labelKey);
+    assertDictionaryKey(dicKey, action.labelKey, catalog);
+    assertDictionaryKey(dicKey, action.confirmMessageKey ?? '', catalog);
+  }
+}
+
+// 父按钮仅引用已有动作；不生成另一份 handler、授权位置或运行时副作用。
+function readPageActionGroups(value: unknown, actions: StandardCrudRuntimeActionSchema[]): StandardCrudPageActionGroupSchema[] {
+  if (!Array.isArray(value)) throw new Error('pageActionGroups must be an array');
+  const groups = new Set<string>();
+  const groupedActions = new Set<string>();
+  return value.map(item => {
+    const group = readRecord(item);
+    const key = readString(group.key);
+    const labelKey = readString(group.labelKey);
+    const variant = readString(group.variant);
+    if (!key || !labelKey || groups.has(key) || actions.some(action => action.key === key)
+      || Object.keys(group).some(field => !['key', 'labelKey', 'variant', 'actionKeys'].includes(field))) {
+      throw new Error('page action group must have a unique key, label and presentation-only fields');
+    }
+    if (variant && !supportedActionVariants.has(variant)) throw new Error(`unsupported action group variant "${variant}"`);
+    if (!Array.isArray(group.actionKeys) || group.actionKeys.length === 0) throw new Error(`page action group "${key}" must reference actions`);
+    const actionKeys = group.actionKeys.map(actionKey => {
+      const matches = actions.filter(action => action.key === actionKey);
+      if (typeof actionKey !== 'string' || matches.length !== 1 || groupedActions.has(actionKey)
+        || !(matches[0].standardAction === 'create' || matches[0].handlerKey)) {
+        throw new Error(`page action group "${key}" contains an unknown, duplicate or unsupported action`);
+      }
+      groupedActions.add(actionKey);
+      return actionKey;
+    });
+    groups.add(key);
+    return { key, labelKey, actionKeys, ...(variant ? { variant: variant as StandardCrudActionDefinition['variant'] } : {}) };
+  });
+}
+
+/** 列表菜单只引用本视图唯一的行动作；候选校验与宿主解析共用此规则。 */
+export function resolveRowContextMenu(value: unknown, rowActions: readonly { key: string }[], viewKey: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some(key => typeof key !== 'string' || !key.trim()
+    || rowActions.filter(action => action.key === key).length !== 1) || new Set(value).size !== value.length) {
+    throw new Error(`list view "${viewKey}" has invalid row context menu references`);
+  }
+  return [...value] as string[];
+}
+
+export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
+  view: MetadataRecord,
+  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
+  context?: StandardCrudSchemaResolverContext,
+): StandardCrudListRuntimeSchema {
+  if (view.columnResize !== undefined && typeof view.columnResize !== 'boolean') throw new Error('columnResize must be boolean');
+  const queryRecord = readRecord(view.query);
+  const exportConfig = readRecord(view.export);
+  const detailViewKey = readString(view.detailViewKey, registration.detailViewKey ?? '');
+  const viewKey = readString(view.key, registration.listViewKey);
+  const dicKey = readString(view.dicKey, registration.resourceKey);
+  const titleKey = readString(view.titleKey, 'Title');
+  const descriptionKey = readString(view.descriptionKey, 'Description');
+  const modelKey = readString(view.model);
+  const model = modelKey.length > 0 ? requireModelDocument(viewKey, context?.modelDocuments, modelKey) : {};
+  const modelFields = collectModelFields(model);
+  const querySource = readRecord(view.querySource);
+  if (Object.keys(querySource).length > 0 && (querySource.kind !== 'link'
+    || Object.keys(querySource).some(key => !['kind', 'model', 'resourceKey'].includes(key)))) {
+    throw new Error(`list view "${viewKey}" has an unsupported query source`);
+  }
+  const linkModel = querySource.kind === 'link'
+    ? requireModelDocument(viewKey, context?.modelDocuments, readString(querySource.model)) : undefined;
+  const linkQuery = readRecord(linkModel?.linkQuery);
+  const projectionFields = new Set(readRecordArray(linkQuery.columns).map(column => readString(column.field)));
+  if (linkModel && (linkModel.kind !== 'Link' || linkQuery.resourceKey !== querySource.resourceKey || projectionFields.size === 0)) {
+    throw new Error(`list view "${viewKey}" has an invalid Link query source`);
+  }
+  if (linkModel) projectionFields.add('LID');
+  const advancedFilter = readAdvancedFilter(resolveAdvancedFilterSource(view, queryRecord), model);
+  const query = readQuery(queryRecord, model);
+  if (linkModel && query.defaultSort && !readRecordArray(linkQuery.columns).some(column => column.field === query.defaultSort?.field && column.sortable === true)) {
+    throw new Error(`Link list "${viewKey}" has an unsupported default sort`);
+  }
+  if (linkModel && query.fields.some(field => field.source === 'model' && !projectionFields.has(field.field ?? ''))) {
+    throw new Error(`Link list "${viewKey}" contains a query field outside its field catalog`);
+  }
+  query.advancedFilter = advancedFilter;
+  const columnSourceValue = readString(view.columnSource, 'metadata');
+  if (columnSourceValue !== 'metadata' && columnSourceValue !== 'runtime') {
+    throw new Error(`unsupported column source "${columnSourceValue}"`);
+  }
+
+  const schema: StandardCrudListRuntimeSchema = {
+    viewKey,
+    columnResize: view.columnResize === true,
+    resourceKey: registration.resourceKey,
+    ...(linkModel ? { idField: 'LID' } : {}),
+    dicKey,
+    titleKey,
+    descriptionKey,
+    editorMode: readEditorMode(view.editorMode),
+    detailViewKey: detailViewKey.length > 0 ? detailViewKey : undefined,
+    query,
+    queryFields: query.fields,
+    advancedFilter,
+    columnSource: columnSourceValue,
+    columns: readRecordArray(view.columns)
+      .map(readColumn)
+      .filter((column) => column.key.length > 0),
+    pageActions: readRecordArray(view.pageActions)
+      .map(readAction)
+      .filter((action) => action.key.length > 0),
+    featureActions: readRecordArray(view.featureActions).filter(action => typeof action.handlerKey === 'string').map(readAction),
+    rowActions: readRecordArray(view.rowActions)
+      .map(readAction)
+      .filter((action) => action.key.length > 0),
+    exportModes: readArray<unknown>(exportConfig.modes).filter((mode): mode is string => typeof mode === 'string'),
+  };
+
+  if (schema.rowActions.some(action => action.requiresSelection)) throw new Error('requiresSelection is only supported on pageActions');
+  for (const definition of readRecordArray(view.featureActions).filter(action => typeof action.handlerKey === 'string')) {
+    if (definition.behaviorKey !== `${registration.resourceKey}.${String(definition.handlerKey)}`) throw new Error('referenced action behavior differs from its handler');
+  }
+  if (view.rowActionColumn !== undefined && (typeof view.rowActionColumn !== 'string' || !['default', 'menu'].includes(view.rowActionColumn))) throw new Error('Invalid rowActionColumn');
+  schema.rowActionColumn = view.rowActionColumn as 'default' | 'menu' | undefined;
+  if (view.rowActionSets !== undefined) {
+    if (!linkModel || view.rowContextMenu !== undefined || typeof registration.dataAdapter.getRowModelKey !== 'function')
+      throw new Error('rowActionSets requires a Link list with getRowModelKey and cannot coexist with rowContextMenu');
+    const sets = view.rowActionSets;
+    const models = Object.keys(readRecord(linkQuery.endpoints));
+    if (!sets || typeof sets !== 'object' || Array.isArray(sets) || Object.keys(sets).length !== models.length
+      || Object.keys(sets).some(key => !models.includes(key))) throw new Error('rowActionSets must cover the declared Link endpoint models');
+    schema.rowActionSets = Object.fromEntries(Object.entries(sets).map(([key, value]) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).some(name => !['column', 'contextMenu'].includes(name))) throw new Error('Invalid rowActionSets entry');
+      const entry = value as Record<string, unknown>;
+      if (!Array.isArray(entry.column) || !Array.isArray(entry.contextMenu)) throw new Error('rowActionSets requires column and contextMenu arrays');
+      return [key, { column: resolveRowContextMenu(entry.column, schema.rowActions, viewKey)!,
+        contextMenu: resolveRowContextMenu(entry.contextMenu, schema.rowActions, viewKey)! }];
+    }));
+  }
+  schema.rowContextMenu = resolveRowContextMenu(view.rowContextMenu, schema.rowActions, viewKey);
+  if (view.pageActionGroups !== undefined) {
+    schema.pageActionGroups = readPageActionGroups(view.pageActionGroups, schema.pageActions);
+    for (const group of schema.pageActionGroups) assertDictionaryKey(dicKey, group.labelKey, context?.defaultLanguageCatalog);
+  }
+
+  for (const action of schema.pageActions) {
+    if (action.standardAction === 'refresh') {
+      throw new Error(
+        `list view "${viewKey}" page action "${action.key}" cannot declare standard action "refresh"`,
+      );
+    }
+  }
+
+  if (schema.columnSource === 'runtime') {
+    if (!registration.columnProvider) {
+      throw new Error(`runtime column source requires a column provider on resource "${registration.resourceKey}"`);
+    }
+    if (schema.columns.length > 0) {
+      throw new Error('runtime column source cannot declare metadata columns');
+    }
+    if (schema.exportModes.length > 0) {
+      throw new Error('runtime column source does not support export');
+    }
+  }
+
+  assertDictionaryKey(dicKey, titleKey, context?.defaultLanguageCatalog);
+  assertDictionaryKey(dicKey, descriptionKey, context?.defaultLanguageCatalog);
+  assertLocalizedFieldLabels(dicKey, schema.query.fields, context?.defaultLanguageCatalog);
+  assertDictionaryKey(dicKey, schema.advancedFilter.titleKey, context?.defaultLanguageCatalog);
+  for (const section of schema.advancedFilter.sections) {
+    assertRequiredMetadataKey('advanced filter section', section.key, section.titleKey);
+    assertDictionaryKey(dicKey, section.titleKey, context?.defaultLanguageCatalog);
+    assertLocalizedFieldLabels(dicKey, section.fields, context?.defaultLanguageCatalog);
+  }
+  for (const column of schema.columns) {
+    assertRequiredMetadataKey('column', column.key, column.labelKey);
+    assertDictionaryKey(dicKey, column.labelKey, context?.defaultLanguageCatalog);
+    if (column.source === 'projection' && column.field.length === 0) {
+      throw new Error(`projection column "${column.key}" must declare field`);
+    }
+    if (linkModel && (column.source !== 'projection' || !projectionFields.has(column.field))) {
+      throw new Error(`Link list column "${column.key}" is not in its query field catalog`);
+    }
+    if (linkModel && column.sortable && !readRecordArray(linkQuery.columns).some(item => item.field === column.field && item.sortable === true)) {
+      throw new Error(`Link list column "${column.key}" does not support sorting`);
+    }
+    if (column.source === 'model' && column.field.length === 0) {
+      throw new Error(`model column "${column.key}" must declare field`);
+    }
+  }
+  assertLocalizedActions(dicKey, [...schema.pageActions, ...schema.rowActions, ...(schema.featureActions ?? [])], context?.defaultLanguageCatalog);
+
+  for (const action of schema.rowActions) {
+    assertActionVisibility(action, modelFields);
+    assertActionDisabledState(action, modelFields);
+    assertDictionaryKey(dicKey, action.disabledWhen?.reasonKey ?? '', context?.defaultLanguageCatalog);
+  }
+
+  if (Object.keys(model).length > 0) {
+    for (const field of collectStandardCrudQueryFields(schema.query, schema.advancedFilter)) {
+      if (field.source === 'model') {
+        assertModelFieldReference(
+          field.field,
+          linkModel ? projectionFields : modelFields,
+          `query field "${field.key}" references unknown model field "${field.field}"`,
+        );
+      }
+    }
+    for (const column of schema.columns) {
+      if (column.source === 'model') {
+        assertModelFieldReference(
+          column.field,
+          modelFields,
+          `column "${column.key}" references unknown model field "${column.field}"`,
+        );
+      }
+    }
+    assertStandardCrudModelDataSources(model, registration);
+  }
+
+  for (const action of [...schema.pageActions, ...schema.rowActions, ...(schema.featureActions ?? [])]) {
+    assertAction(action, registration);
+  }
+  assertQuery(schema.query, schema.advancedFilter, model);
+
+  return schema;
+}

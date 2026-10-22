@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "DocumentHistory": {
+    "Title": {
+      "zhs": "操作履历",
+      "en": "Operation history"
+    },
+    "Help": {
+      "zhs": "默认最近三个月，按时间倒序显示。时间筛选使用 UTC。",
+      "en": "The last three months, newest first. Enter filter times in UTC."
+    },
+    "From": {
+      "zhs": "开始时间（UTC）",
+      "en": "From (UTC)"
+    },
+    "From_Placeholder": {
+      "zhs": "例如 2026-07-18T00:00:00Z",
+      "en": "For example 2026-07-18T00:00:00Z"
+    },
+    "To": {
+      "zhs": "结束时间（UTC）",
+      "en": "To (UTC)"
+    },
+    "To_Placeholder": {
+      "zhs": "例如 2026-10-18T23:59:59Z",
+      "en": "For example 2026-10-18T23:59:59Z"
+    },
+    "ActorId": {
+      "zhs": "操作者账号标识",
+      "en": "Actor account ID"
+    },
+    "ActorId_Placeholder": {
+      "zhs": "输入操作者账号标识",
+      "en": "Enter actor account ID"
+    },
+    "EventType": {
+      "zhs": "操作",
+      "en": "Operation"
+    },
+    "EventType_Placeholder": {
+      "zhs": "输入事件类型",
+      "en": "Enter event type"
+    },
+    "ObjectType": {
+      "zhs": "对象类型",
+      "en": "Object type"
+    },
+    "ObjectType_Placeholder": {
+      "zhs": "输入规范对象类型",
+      "en": "Enter canonical object type"
+    },
+    "IpAddress": {
+      "zhs": "IP 地址",
+      "en": "IP address"
+    },
+    "IpAddress_Placeholder": {
+      "zhs": "输入完整 IP 地址",
+      "en": "Enter the complete IP address"
+    },
+    "Description": {
+      "zhs": "描述",
+      "en": "Description"
+    },
+    "Description_Placeholder": {
+      "zhs": "输入操作描述关键字",
+      "en": "Enter an operation description keyword"
+    },
+    "OccurredAt": {
+      "zhs": "时间（UTC）",
+      "en": "Time (UTC)"
+    },
+    "Actor": {
+      "zhs": "操作者",
+      "en": "Actor"
+    },
+    "Target": {
+      "zhs": "对象",
+      "en": "Object"
+    },
+    "Output": {
+      "zhs": "输出",
+      "en": "Output"
+    },
+    "View": {
+      "zhs": "详情",
+      "en": "Details"
+    }
+  }
+}

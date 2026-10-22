@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "RolePermission": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "RoleId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "PermissionId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "GrantedAt",
+        "storage": {
+          "type": "datetime"
+        }
+      },
+      {
+        "name": "GrantedBy",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_RolePermission_Role_Permission",
+        "fields": [
+          "RoleId",
+          "PermissionId"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

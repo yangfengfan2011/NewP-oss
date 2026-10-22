@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "ExampleRecord": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ECODE",
+      "ENAME"
+    ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ECODE",
+          "ENAME",
+          "ReviewerUserEID"
+        ]
+      }
+    ],
+    "fields": [
+      {
+        "name": "ECODE",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "readonly"
+          }
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          }
+        }
+      },
+      {
+        "name": "ReviewerUserEID",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        },
+        "contract": {
+          "valueType": "user"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        },
+        "display": {
+          "type": "user",
+          "targetModel": "IdentityAccount",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME"
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_ExampleRecord_ECODE",
+        "fields": [
+          "ECODE"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

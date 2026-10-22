@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "FileUploadLease": {
+    "indexes": [
+      {
+        "name": "IX_FileUploadLease_Expiry",
+        "unique": false,
+        "fields": [
+          "State",
+          "ExpiresAt",
+          "EID"
+        ]
+      },
+      {
+        "name": "IX_FileUploadLease_Actor",
+        "unique": false,
+        "fields": [
+          "ActorId",
+          "State"
+        ]
+      }
+    ],
+    "fields": [
+      {
+        "name": "FileId",
+        "storage": {
+          "type": "guid"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "ActorId",
+        "storage": {
+          "type": "guid"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "UsageOwnerKey",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "ExpiresAt",
+        "storage": {
+          "type": "datetime"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "State",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "ConfirmedUsageId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      }
+    ],
+    "foreignKeys": [
+      {
+        "principalModel": "FileRecord",
+        "principalFields": [
+          "EID"
+        ],
+        "fields": [
+          "FileId"
+        ],
+        "onDelete": "Restrict",
+        "principalModuleId": "Files",
+        "name": "FK_FileUploadLease_FileRecord"
+      }
+    ],
+    "kind": "Entity"
+  }
+}

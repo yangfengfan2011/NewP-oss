@@ -1,0 +1,12 @@
+{
+  "moduleId": "ObjectOperationExtensionProbe",
+  "displayName": "对象操作扩展集成探针",
+  "version": "1.0.0",
+  "description": "只在 HostApi 集成测试中通过正式模块 binding 贡献 Organization 对象横切与嵌套写入探针。",
+  "dependencies": [
+    "Organization"
+  ],
+  "backend": {
+    "behaviorKey": "host-api-tests.object-operation-extension-probe"
+  }
+}

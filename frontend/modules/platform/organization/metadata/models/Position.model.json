@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Position": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME"
+    ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ENAME",
+          "Description",
+          "IsEnabled"
+        ]
+      }
+    ],
+    "fields": [
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          }
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        },
+        "uiType": "textarea",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        },
+        "uiType": "switch",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Position_ENAME",
+        "fields": [
+          "ENAME"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0", "type": "nav", "navigation": { "items": [
+    { "key": "part.parts", "titleKey": "Part.Title", "icon": "module", "path": "/parts", "order": 40, "entryType": "standard-list", "targetKey": "part.part.list", "featureAuthorization": true, "parentModuleId": "Workspace", "parentKey": "workspace", "routeOnly": true },
+    { "key": "part.part.detail", "path": "/parts/:id", "routeOnly": true, "entryType": "standard-crud-detail", "targetKey": "part.part.detail", "featureOwner": "navigation:part.parts" },
+    { "key": "part.part.permissions", "path": "/parts/permissions", "routeOnly": true, "featureAuthorization": false,
+      "page": { "pageKey": "platform.tabs", "parameters": { "viewKey": "part.part.tabs" }, "inputResolverKey": "part.part.record" } },
+    { "key": "part.history", "path": "/parts/history", "routeOnly": true, "parentKey": "part.parts", "featureKey": "part.history",
+      "page": { "pageKey": "platform.list", "parameters": { "viewKey": "part.history.list" }, "inputResolverKey": "part.part.historyInput" } }
+  ] }
+}

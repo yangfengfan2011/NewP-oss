@@ -1,0 +1,6 @@
+{
+  "module": "Document",
+  "readPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+  "transferPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:transfer",
+  "batchPosition": null
+}

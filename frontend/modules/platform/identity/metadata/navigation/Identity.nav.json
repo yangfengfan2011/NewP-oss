@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "identity",
+        "titleKey": "Navigation.Identity",
+        "icon": "identity",
+        "order": 80,
+        "localAdministratorOnly": true
+      },
+      {
+        "key": "identity.accounts",
+        "titleKey": "Navigation.IdentityAccounts",
+        "icon": "user-group",
+        "parentKey": "identity",
+        "path": "/identity/accounts",
+        "order": 90,
+        "entryType": "standard-list",
+        "targetKey": "identity.account.list",
+        "featureAuthorization": true,
+        "localAdministratorOnly": true
+      },
+      {
+        "key": "identity.account.detail",
+        "path": "/identity/accounts/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "identity.account.detail",
+        "featureOwner": "navigation:identity.accounts",
+        "localAdministratorOnly": true
+      }
+    ]
+  }
+}

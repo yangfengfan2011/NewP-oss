@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "type": "settings",
+  "settings": {
+    "ConfigCenter.AuditRetentionDays": {
+      "group": "性能",
+      "displayName": "配置审计保留天数",
+      "description": "配置变更审计记录的默认保留周期",
+      "valueType": "Int",
+      "value": "180",
+      "required": true,
+      "isSensitive": false,
+      "supportsOverride": true
+    },
+    "ConfigCenter.CacheEnabled": {
+      "group": "性能",
+      "displayName": "启用配置缓存",
+      "description": "是否启用配置项的内存缓存",
+      "valueType": "Bool",
+      "value": "true",
+      "required": false,
+      "isSensitive": false,
+      "supportsOverride": true
+    },
+    "ConfigCenter.CacheRefreshIntervalSeconds": {
+      "group": "性能",
+      "displayName": "缓存刷新间隔（秒）",
+      "description": "后台主动刷新配置缓存的轮询间隔",
+      "valueType": "Int",
+      "value": "40",
+      "required": true,
+      "isSensitive": false,
+      "supportsOverride": true
+    },
+    "ConfigCenter.GitSyncTimeoutSeconds": {
+      "group": "性能",
+      "displayName": "Git 同步超时（秒）",
+      "description": "执行元数据 Git 同步时允许的最长等待时间",
+      "valueType": "Int",
+      "value": "90",
+      "required": true,
+      "isSensitive": false,
+      "supportsOverride": false
+    }
+  }
+}

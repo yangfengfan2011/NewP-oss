@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "platform.foundation",
+  "modelDigest": "669ef99fbf52466ccb2cc0702d5739c71c56d91d6d14802df36dfe5a24264d9c",
+  "bundleChecksum": "6c03037218d7a5e92f0c7fb429f1687dfd4cbc53dd03d5fd1c38bece7b8e42a0",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20260812144154_PlatformFoundation",
+      "previousContentDigest": null,
+      "contentDigest": "567d13d1d876229c52d36fba71554433ec2025e981987faa1df3990632bf2dd8",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000002",
+      "migrationId": "20260914114935_AddFunctionalAuthorization",
+      "previousContentDigest": "567d13d1d876229c52d36fba71554433ec2025e981987faa1df3990632bf2dd8",
+      "contentDigest": "ad9b3c6ff3992f256ce40fd3677c0e950511ba2c90c2cad768f5c78e41663dec",
+      "fromModelDigest": "038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
+      "toModelDigest": "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000003",
+      "migrationId": "20260922094146_AddDataScopeRules",
+      "previousContentDigest": "ad9b3c6ff3992f256ce40fd3677c0e950511ba2c90c2cad768f5c78e41663dec",
+      "contentDigest": "b7e2cc3b4fa40ed4d6b51d60b6ca2d6d779234b99392e4bff5cdad7251532884",
+      "fromModelDigest": "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
+      "toModelDigest": "933caa5b7c4905be81b8d500b54974923ce83f50666ef4cd4af806bc3291ed4c",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000004",
+      "migrationId": "20260922105706_AddDataScopeSubjectOptions",
+      "previousContentDigest": "b7e2cc3b4fa40ed4d6b51d60b6ca2d6d779234b99392e4bff5cdad7251532884",
+      "contentDigest": "5e23eae374736094f26ad434fe2bb59d1db9a8b09084fcffa41e5e734497a1f1",
+      "fromModelDigest": "933caa5b7c4905be81b8d500b54974923ce83f50666ef4cd4af806bc3291ed4c",
+      "toModelDigest": "d683e1d11b4142d323425f3414f2afdf9818f6b53e0fc2a6e451734e76eabea5",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000005",
+      "migrationId": "20260923033732_AddDataScopeObjectGrants",
+      "previousContentDigest": "5e23eae374736094f26ad434fe2bb59d1db9a8b09084fcffa41e5e734497a1f1",
+      "contentDigest": "5bbcfbb6debae9d86c91d3e92279800e4562bb09fdb2a57561143841bc42c02c",
+      "fromModelDigest": "d683e1d11b4142d323425f3414f2afdf9818f6b53e0fc2a6e451734e76eabea5",
+      "toModelDigest": "56554470f57d6620d947482f760982f3f6c2473739c2c66696019fefc5aa21a1",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000006",
+      "migrationId": "20261017151541_AddDataScopeObjectExpiry",
+      "previousContentDigest": "5bbcfbb6debae9d86c91d3e92279800e4562bb09fdb2a57561143841bc42c02c",
+      "contentDigest": "30182e0f6f1ac379227acbf40c5757248d32da8b9997404db65bc1b1402c71a0",
+      "fromModelDigest": "56554470f57d6620d947482f760982f3f6c2473739c2c66696019fefc5aa21a1",
+      "toModelDigest": "669ef99fbf52466ccb2cc0702d5739c71c56d91d6d14802df36dfe5a24264d9c",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

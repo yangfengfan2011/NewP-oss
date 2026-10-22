@@ -1,0 +1,614 @@
+diff --git a/es/config-provider/index.js b/es/config-provider/index.js
+index 6d2a3c8472e34b65bc7ae86833255d9384a817f8..da06a8b2a49fff9af5cf7113fd4e12b3890a876a 100644
+--- a/es/config-provider/index.js
++++ b/es/config-provider/index.js
+@@ -17,7 +17,7 @@ import warning, { devUseWarning, WarningContext } from '../_util/warning';
+ import ValidateMessagesContext from '../form/validateMessagesContext';
+ import LocaleProvider, { ANT_MARK } from '../locale';
+ import LocaleContext from '../locale/context';
+-import defaultLocale from '../locale/en_US';
++import defaultLocale from '../form/locale/en_US';
+ import { defaultTheme, DesignTokenContext } from '../theme/context';
+ import defaultSeedToken from '../theme/themes/seed';
+ import { ConfigConsumer, ConfigContext, defaultIconPrefixCls, defaultPrefixCls, Variants } from './context';
+@@ -322,7 +322,7 @@ const ProviderChildren = props => {
+   }), children);
+   const validateMessages = React.useMemo(() => {
+     var _a, _b, _c, _d;
+-    return merge(((_a = defaultLocale.Form) === null || _a === void 0 ? void 0 : _a.defaultValidateMessages) || {}, ((_c = (_b = memoedConfig.locale) === null || _b === void 0 ? void 0 : _b.Form) === null || _c === void 0 ? void 0 : _c.defaultValidateMessages) || {}, ((_d = memoedConfig.form) === null || _d === void 0 ? void 0 : _d.validateMessages) || {}, (form === null || form === void 0 ? void 0 : form.validateMessages) || {});
++    return merge(((_a = defaultLocale) === null || _a === void 0 ? void 0 : _a.defaultValidateMessages) || {}, ((_c = (_b = memoedConfig.locale) === null || _b === void 0 ? void 0 : _b.Form) === null || _c === void 0 ? void 0 : _c.defaultValidateMessages) || {}, ((_d = memoedConfig.form) === null || _d === void 0 ? void 0 : _d.validateMessages) || {}, (form === null || form === void 0 ? void 0 : form.validateMessages) || {});
+   }, [memoedConfig, form === null || form === void 0 ? void 0 : form.validateMessages]);
+   if (Object.keys(validateMessages).length > 0) {
+     childNode = /*#__PURE__*/React.createElement(ValidateMessagesContext.Provider, {
+diff --git a/es/empty/empty.js b/es/empty/empty.js
+index edcd2acc2577099657e2a0da7eaf148a2d7a572d..bf2bb6aeacad69bd8d99a8006d4b62f2e29e6f45 100644
+--- a/es/empty/empty.js
++++ b/es/empty/empty.js
+@@ -3,10 +3,10 @@
+ import * as React from 'react';
+ import { FastColor } from '@ant-design/fast-color';
+-import { useLocale } from '../locale';
++import useLocale from './useLocale';
+ import { useToken } from '../theme/internal';
+ const Empty = () => {
+   const [, token] = useToken();
+-  const [locale] = useLocale('Empty');
++  const [locale] = useLocale();
+   const bgColor = new FastColor(token.colorBgBase);
+   // Dark Theme need more dark of this
+   const themeStyle = bgColor.toHsl().l < 0.5 ? {
+diff --git a/es/empty/index.js b/es/empty/index.js
+index 1e9036093cc8d751455366e2b95259210e18564d..6618d8af42b931c2f76da4675014ddb0a2ace283 100644
+--- a/es/empty/index.js
++++ b/es/empty/index.js
+@@ -12,7 +12,7 @@ import * as React from 'react';
+ import classNames from 'classnames';
+ import { devUseWarning } from '../_util/warning';
+ import { useComponentConfig } from '../config-provider/context';
+-import { useLocale } from '../locale';
++import useLocale from './useLocale';
+ import DefaultEmptyImg from './empty';
+ import SimpleEmptyImg from './simple';
+ import useStyle from './style';
+@@ -44,7 +44,7 @@ const Empty = props => {
+   } = useComponentConfig('empty');
+   const prefixCls = getPrefixCls('empty', customizePrefixCls);
+   const [wrapCSSVar, hashId, cssVarCls] = useStyle(prefixCls);
+-  const [locale] = useLocale('Empty');
++  const [locale] = useLocale();
+   const des = typeof description !== 'undefined' ? description : locale === null || locale === void 0 ? void 0 : locale.description;
+   const alt = typeof des === 'string' ? des : 'empty';
+   const mergedImage = (_a = image !== null && image !== void 0 ? image : contextImage) !== null && _a !== void 0 ? _a : defaultEmptyImg;
+diff --git a/es/empty/locale/en_US.js b/es/empty/locale/en_US.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..3c4be678dd4f65c2de2d9e0e7bb6566a248f7c7d
+--- /dev/null
++++ b/es/empty/locale/en_US.js
+@@ -0,0 +1,4 @@
++const locale = {
++  description: 'No data'
++};
++export default locale;
+diff --git a/es/empty/simple.js b/es/empty/simple.js
+index b495b57493635419009a7147f319445bcdc1b2fc..1aaaf33e163f4795c0a235626fd4cbb67cc87160 100644
+--- a/es/empty/simple.js
++++ b/es/empty/simple.js
+@@ -4,10 +4,10 @@ import * as React from 'react';
+ import { useMemo } from 'react';
+ import { FastColor } from '@ant-design/fast-color';
+ import { useToken } from '../theme/internal';
+-import { useLocale } from '../locale';
++import useLocale from './useLocale';
+ const Simple = () => {
+   const [, token] = useToken();
+-  const [locale] = useLocale('Empty');
++  const [locale] = useLocale();
+   const {
+     colorFill,
+     colorFillTertiary,
+diff --git a/es/empty/useLocale.js b/es/empty/useLocale.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..a5975a121fc95d9b474f15f4efc173c234265405
+--- /dev/null
++++ b/es/empty/useLocale.js
+@@ -0,0 +1,11 @@
++import * as React from 'react';
++import LocaleContext from '../locale/context';
++import defaultLocale from './locale/en_US';
++
++// Empty needs only its own defaults, not the full component locale catalog.
++const useLocale = () => {
++  const fullLocale = React.useContext(LocaleContext);
++  const locale = React.useMemo(() => Object.assign(Object.assign({}, defaultLocale), fullLocale && fullLocale.Empty || {}), [fullLocale]);
++  return [locale];
++};
++export default useLocale;
+diff --git a/es/form/locale/en_US.js b/es/form/locale/en_US.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..d0e08daaffda1ec5e5915eb10763e3bfdf19bc5c
+--- /dev/null
++++ b/es/form/locale/en_US.js
+@@ -0,0 +1,52 @@
++const typeTemplate = '${label} is not a valid ${type}';
++const locale = {
++  optional: '(optional)',
++  defaultValidateMessages: {
++    default: 'Field validation error for ${label}',
++    required: 'Please enter ${label}',
++    enum: '${label} must be one of [${enum}]',
++    whitespace: '${label} cannot be a blank character',
++    date: {
++      format: '${label} date format is invalid',
++      parse: '${label} cannot be converted to a date',
++      invalid: '${label} is an invalid date'
++    },
++    types: {
++      string: typeTemplate,
++      method: typeTemplate,
++      array: typeTemplate,
++      object: typeTemplate,
++      number: typeTemplate,
++      date: typeTemplate,
++      boolean: typeTemplate,
++      integer: typeTemplate,
++      float: typeTemplate,
++      regexp: typeTemplate,
++      email: typeTemplate,
++      url: typeTemplate,
++      hex: typeTemplate
++    },
++    string: {
++      len: '${label} must be ${len} characters',
++      min: '${label} must be at least ${min} characters',
++      max: '${label} must be up to ${max} characters',
++      range: '${label} must be between ${min}-${max} characters'
++    },
++    number: {
++      len: '${label} must be equal to ${len}',
++      min: '${label} must be minimum ${min}',
++      max: '${label} must be maximum ${max}',
++      range: '${label} must be between ${min}-${max}'
++    },
++    array: {
++      len: 'Must be ${len} ${label}',
++      min: 'At least ${min} ${label}',
++      max: 'At most ${max} ${label}',
++      range: 'The amount of ${label} must be between ${min}-${max}'
++    },
++    pattern: {
++      mismatch: '${label} does not match the pattern ${pattern}'
++    }
++  }
++};
++export default locale;
+diff --git a/es/locale/en_US.js b/es/locale/en_US.js
+index b392b356e4c1e5b86031d3b434b1e89992b449ca..a2105712e8a2d4c6efbe1ba74093124ff854b844 100644
+--- a/es/locale/en_US.js
++++ b/es/locale/en_US.js
+@@ -1,8 +1,10 @@
++import Modal from '../modal/locale/en_US';
++import Form from '../form/locale/en_US';
+ import Pagination from "rc-pagination/es/locale/en_US";
+ import Calendar from '../calendar/locale/en_US';
++import Empty from '../empty/locale/en_US';
+ import DatePicker from '../date-picker/locale/en_US';
+ import TimePicker from '../time-picker/locale/en_US';
+-const typeTemplate = '${label} is not a valid ${type}';
+ const localeValues = {
+   locale: 'en',
+   Pagination,
+@@ -37,11 +39,7 @@ const localeValues = {
+     Previous: 'Previous',
+     Finish: 'Finish'
+   },
+-  Modal: {
+-    okText: 'OK',
+-    cancelText: 'Cancel',
+-    justOkText: 'OK'
+-  },
++  Modal,
+   Popconfirm: {
+     okText: 'OK',
+     cancelText: 'Cancel'
+@@ -66,9 +64,7 @@ const localeValues = {
+     previewFile: 'Preview file',
+     downloadFile: 'Download file'
+   },
+-  Empty: {
+-    description: 'No data'
+-  },
++  Empty,
+   Icon: {
+     icon: 'icon'
+   },
+@@ -79,56 +75,7 @@ const localeValues = {
+     expand: 'Expand',
+     collapse: 'Collapse'
+   },
+-  Form: {
+-    optional: '(optional)',
+-    defaultValidateMessages: {
+-      default: 'Field validation error for ${label}',
+-      required: 'Please enter ${label}',
+-      enum: '${label} must be one of [${enum}]',
+-      whitespace: '${label} cannot be a blank character',
+-      date: {
+-        format: '${label} date format is invalid',
+-        parse: '${label} cannot be converted to a date',
+-        invalid: '${label} is an invalid date'
+-      },
+-      types: {
+-        string: typeTemplate,
+-        method: typeTemplate,
+-        array: typeTemplate,
+-        object: typeTemplate,
+-        number: typeTemplate,
+-        date: typeTemplate,
+-        boolean: typeTemplate,
+-        integer: typeTemplate,
+-        float: typeTemplate,
+-        regexp: typeTemplate,
+-        email: typeTemplate,
+-        url: typeTemplate,
+-        hex: typeTemplate
+-      },
+-      string: {
+-        len: '${label} must be ${len} characters',
+-        min: '${label} must be at least ${min} characters',
+-        max: '${label} must be up to ${max} characters',
+-        range: '${label} must be between ${min}-${max} characters'
+-      },
+-      number: {
+-        len: '${label} must be equal to ${len}',
+-        min: '${label} must be minimum ${min}',
+-        max: '${label} must be maximum ${max}',
+-        range: '${label} must be between ${min}-${max}'
+-      },
+-      array: {
+-        len: 'Must be ${len} ${label}',
+-        min: 'At least ${min} ${label}',
+-        max: 'At most ${max} ${label}',
+-        range: 'The amount of ${label} must be between ${min}-${max}'
+-      },
+-      pattern: {
+-        mismatch: '${label} does not match the pattern ${pattern}'
+-      }
+-    }
+-  },
++  Form,
+   Image: {
+     preview: 'Preview'
+   },
+diff --git a/es/modal/locale/en_US.js b/es/modal/locale/en_US.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..f6678291351cb345630ddd794b6241b2b7108c24
+--- /dev/null
++++ b/es/modal/locale/en_US.js
+@@ -0,0 +1,6 @@
++const locale = {
++  okText: 'OK',
++  cancelText: 'Cancel',
++  justOkText: 'OK'
++};
++export default locale;
+diff --git a/es/modal/locale.js b/es/modal/locale.js
+index 1f198f434964b77074bffd92d44860340544b215..42f058ba6835c784c1450a9bdf56163195bbac59 100644
+--- a/es/modal/locale.js
++++ b/es/modal/locale.js
+@@ -1,7 +1,7 @@
+-import defaultLocale from '../locale/en_US';
+-let runtimeLocale = Object.assign({}, defaultLocale.Modal);
++import defaultLocale from './locale/en_US';
++let runtimeLocale = Object.assign({}, defaultLocale);
+ let localeList = [];
+-const generateLocale = () => localeList.reduce((merged, locale) => Object.assign(Object.assign({}, merged), locale), defaultLocale.Modal);
++const generateLocale = () => localeList.reduce((merged, locale) => Object.assign(Object.assign({}, merged), locale), defaultLocale);
+ export function changeConfirmLocale(newLocale) {
+   if (newLocale) {
+     const cloneLocale = Object.assign({}, newLocale);
+@@ -12,7 +12,7 @@ export function changeConfirmLocale(newLocale) {
+       runtimeLocale = generateLocale();
+     };
+   }
+-  runtimeLocale = Object.assign({}, defaultLocale.Modal);
++  runtimeLocale = Object.assign({}, defaultLocale);
+ }
+ export function getConfirmLocale() {
+   return runtimeLocale;
+diff --git a/lib/config-provider/index.js b/lib/config-provider/index.js
+index 4b02cbcc804b31cdaa5950536dd4cc59dd987aef..f302c45af0f23588006a8879f6aa556e869074da 100644
+--- a/lib/config-provider/index.js
++++ b/lib/config-provider/index.js
+@@ -47,7 +47,7 @@ var _warning = _interopRequireWildcard(require("../_util/warning"));
+ var _validateMessagesContext = _interopRequireDefault(require("../form/validateMessagesContext"));
+ var _locale = _interopRequireWildcard(require("../locale"));
+ var _context = _interopRequireDefault(require("../locale/context"));
+-var _en_US = _interopRequireDefault(require("../locale/en_US"));
++var _en_US = _interopRequireDefault(require("../form/locale/en_US"));
+ var _context2 = require("../theme/context");
+ var _seed = _interopRequireDefault(require("../theme/themes/seed"));
+ var _context3 = require("./context");
+@@ -359,7 +359,7 @@ const ProviderChildren = props => {
+   }), children);
+   const validateMessages = React.useMemo(() => {
+     var _a, _b, _c, _d;
+-    return (0, _set.merge)(((_a = _en_US.default.Form) === null || _a === void 0 ? void 0 : _a.defaultValidateMessages) || {}, ((_c = (_b = memoedConfig.locale) === null || _b === void 0 ? void 0 : _b.Form) === null || _c === void 0 ? void 0 : _c.defaultValidateMessages) || {}, ((_d = memoedConfig.form) === null || _d === void 0 ? void 0 : _d.validateMessages) || {}, (form === null || form === void 0 ? void 0 : form.validateMessages) || {});
++    return (0, _set.merge)(((_a = _en_US.default) === null || _a === void 0 ? void 0 : _a.defaultValidateMessages) || {}, ((_c = (_b = memoedConfig.locale) === null || _b === void 0 ? void 0 : _b.Form) === null || _c === void 0 ? void 0 : _c.defaultValidateMessages) || {}, ((_d = memoedConfig.form) === null || _d === void 0 ? void 0 : _d.validateMessages) || {}, (form === null || form === void 0 ? void 0 : form.validateMessages) || {});
+   }, [memoedConfig, form === null || form === void 0 ? void 0 : form.validateMessages]);
+   if (Object.keys(validateMessages).length > 0) {
+     childNode = /*#__PURE__*/React.createElement(_validateMessagesContext.default.Provider, {
+diff --git a/lib/empty/empty.js b/lib/empty/empty.js
+index b64ad5f54d9b2eb1edeff5f7c1ecc81424a88743..1532631184cfba97342ba26172a6107516f1c7f1 100644
+--- a/lib/empty/empty.js
++++ b/lib/empty/empty.js
+@@ -8,11 +8,11 @@ Object.defineProperty(exports, "__esModule", {
+ exports.default = void 0;
+ var React = _interopRequireWildcard(require("react"));
+ var _fastColor = require("@ant-design/fast-color");
+-var _locale = require("../locale");
++var _emptyLocale = require("./useLocale");
+ var _internal = require("../theme/internal");
+ const Empty = () => {
+   const [, token] = (0, _internal.useToken)();
+-  const [locale] = (0, _locale.useLocale)('Empty');
++  const [locale] = (0, _emptyLocale.default)();
+   const bgColor = new _fastColor.FastColor(token.colorBgBase);
+   // Dark Theme need more dark of this
+   const themeStyle = bgColor.toHsl().l < 0.5 ? {
+diff --git a/lib/empty/index.js b/lib/empty/index.js
+index 6f1a2b026d3245ccb103f6a8595c34b9b12e5d02..c722c9fc7f3bdf587000a04b16f3768e291df316 100644
+--- a/lib/empty/index.js
++++ b/lib/empty/index.js
+@@ -11,7 +11,7 @@ var React = _interopRequireWildcard(require("react"));
+ var _classnames = _interopRequireDefault(require("classnames"));
+ var _warning = require("../_util/warning");
+ var _context = require("../config-provider/context");
+-var _locale = require("../locale");
++var _emptyLocale = require("./useLocale");
+ var _empty = _interopRequireDefault(require("./empty"));
+ var _simple = _interopRequireDefault(require("./simple"));
+ var _style = _interopRequireDefault(require("./style"));
+@@ -51,7 +51,7 @@ const Empty = props => {
+   } = (0, _context.useComponentConfig)('empty');
+   const prefixCls = getPrefixCls('empty', customizePrefixCls);
+   const [wrapCSSVar, hashId, cssVarCls] = (0, _style.default)(prefixCls);
+-  const [locale] = (0, _locale.useLocale)('Empty');
++  const [locale] = (0, _emptyLocale.default)();
+   const des = typeof description !== 'undefined' ? description : locale === null || locale === void 0 ? void 0 : locale.description;
+   const alt = typeof des === 'string' ? des : 'empty';
+   const mergedImage = (_a = image !== null && image !== void 0 ? image : contextImage) !== null && _a !== void 0 ? _a : defaultEmptyImg;
+diff --git a/lib/empty/locale/en_US.js b/lib/empty/locale/en_US.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..28adf3b7b86577d5edf576a74bdfe26bdd5725f0
+--- /dev/null
++++ b/lib/empty/locale/en_US.js
+@@ -0,0 +1,8 @@
++"use strict";
++
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.default = void 0;
++const locale = {
++  description: 'No data'
++};
++var _default = exports.default = locale;
+diff --git a/lib/empty/simple.js b/lib/empty/simple.js
+index 7d5cd8e7cd1a8a08e3825ea71c0bcd2924c389d1..c66dadadf436794bf97a25d6d248409a67c339db 100644
+--- a/lib/empty/simple.js
++++ b/lib/empty/simple.js
+@@ -10,10 +10,10 @@ var _react = _interopRequireWildcard(require("react"));
+ var React = _react;
+ var _fastColor = require("@ant-design/fast-color");
+ var _internal = require("../theme/internal");
+-var _locale = require("../locale");
++var _emptyLocale = require("./useLocale");
+ const Simple = () => {
+   const [, token] = (0, _internal.useToken)();
+-  const [locale] = (0, _locale.useLocale)('Empty');
++  const [locale] = (0, _emptyLocale.default)();
+   const {
+     colorFill,
+     colorFillTertiary,
+diff --git a/lib/empty/useLocale.js b/lib/empty/useLocale.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..e5aa0c2c7c10aad57fb3cd011369556d36e241c2
+--- /dev/null
++++ b/lib/empty/useLocale.js
+@@ -0,0 +1,16 @@
++"use strict";
++
++var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.default = void 0;
++var React = require("react");
++var _context = _interopRequireDefault(require("../locale/context"));
++var _en_US = _interopRequireDefault(require("./locale/en_US"));
++
++// Empty needs only its own defaults, not the full component locale catalog.
++const useLocale = () => {
++  const fullLocale = React.useContext(_context.default);
++  const locale = React.useMemo(() => Object.assign(Object.assign({}, _en_US.default), fullLocale && fullLocale.Empty || {}), [fullLocale]);
++  return [locale];
++};
++var _default = exports.default = useLocale;
+diff --git a/lib/form/locale/en_US.js b/lib/form/locale/en_US.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..7857ab0f0a0cbe4ac7971bdbd4cdeeb5bc2f4524
+--- /dev/null
++++ b/lib/form/locale/en_US.js
+@@ -0,0 +1,56 @@
++"use strict";
++
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.default = void 0;
++const typeTemplate = '${label} is not a valid ${type}';
++const locale = {
++  optional: '(optional)',
++  defaultValidateMessages: {
++    default: 'Field validation error for ${label}',
++    required: 'Please enter ${label}',
++    enum: '${label} must be one of [${enum}]',
++    whitespace: '${label} cannot be a blank character',
++    date: {
++      format: '${label} date format is invalid',
++      parse: '${label} cannot be converted to a date',
++      invalid: '${label} is an invalid date'
++    },
++    types: {
++      string: typeTemplate,
++      method: typeTemplate,
++      array: typeTemplate,
++      object: typeTemplate,
++      number: typeTemplate,
++      date: typeTemplate,
++      boolean: typeTemplate,
++      integer: typeTemplate,
++      float: typeTemplate,
++      regexp: typeTemplate,
++      email: typeTemplate,
++      url: typeTemplate,
++      hex: typeTemplate
++    },
++    string: {
++      len: '${label} must be ${len} characters',
++      min: '${label} must be at least ${min} characters',
++      max: '${label} must be up to ${max} characters',
++      range: '${label} must be between ${min}-${max} characters'
++    },
++    number: {
++      len: '${label} must be equal to ${len}',
++      min: '${label} must be minimum ${min}',
++      max: '${label} must be maximum ${max}',
++      range: '${label} must be between ${min}-${max}'
++    },
++    array: {
++      len: 'Must be ${len} ${label}',
++      min: 'At least ${min} ${label}',
++      max: 'At most ${max} ${label}',
++      range: 'The amount of ${label} must be between ${min}-${max}'
++    },
++    pattern: {
++      mismatch: '${label} does not match the pattern ${pattern}'
++    }
++  }
++};
++var _default = exports.default = locale;
+diff --git a/lib/locale/en_US.js b/lib/locale/en_US.js
+index f00a5840b4d7715792648c04564b36a1b27a0aef..a89dd5d0642f83bef51cb279a9ccb1109dfc02eb 100644
+--- a/lib/locale/en_US.js
++++ b/lib/locale/en_US.js
+@@ -9,7 +9,9 @@ var _en_US = _interopRequireDefault(require("rc-pagination/lib/locale/en_US"));
+ var _en_US2 = _interopRequireDefault(require("../calendar/locale/en_US"));
+ var _en_US3 = _interopRequireDefault(require("../date-picker/locale/en_US"));
+ var _en_US4 = _interopRequireDefault(require("../time-picker/locale/en_US"));
+-const typeTemplate = '${label} is not a valid ${type}';
++var _emptyLocale = _interopRequireDefault(require("../empty/locale/en_US"));
++var _formLocale = _interopRequireDefault(require("../form/locale/en_US"));
++var _modalLocale = _interopRequireDefault(require("../modal/locale/en_US"));
+ const localeValues = {
+   locale: 'en',
+   Pagination: _en_US.default,
+@@ -44,11 +46,7 @@ const localeValues = {
+     Previous: 'Previous',
+     Finish: 'Finish'
+   },
+-  Modal: {
+-    okText: 'OK',
+-    cancelText: 'Cancel',
+-    justOkText: 'OK'
+-  },
++  Modal: _modalLocale.default,
+   Popconfirm: {
+     okText: 'OK',
+     cancelText: 'Cancel'
+@@ -73,9 +71,7 @@ const localeValues = {
+     previewFile: 'Preview file',
+     downloadFile: 'Download file'
+   },
+-  Empty: {
+-    description: 'No data'
+-  },
++  Empty: _emptyLocale.default,
+   Icon: {
+     icon: 'icon'
+   },
+@@ -86,56 +82,7 @@ const localeValues = {
+     expand: 'Expand',
+     collapse: 'Collapse'
+   },
+-  Form: {
+-    optional: '(optional)',
+-    defaultValidateMessages: {
+-      default: 'Field validation error for ${label}',
+-      required: 'Please enter ${label}',
+-      enum: '${label} must be one of [${enum}]',
+-      whitespace: '${label} cannot be a blank character',
+-      date: {
+-        format: '${label} date format is invalid',
+-        parse: '${label} cannot be converted to a date',
+-        invalid: '${label} is an invalid date'
+-      },
+-      types: {
+-        string: typeTemplate,
+-        method: typeTemplate,
+-        array: typeTemplate,
+-        object: typeTemplate,
+-        number: typeTemplate,
+-        date: typeTemplate,
+-        boolean: typeTemplate,
+-        integer: typeTemplate,
+-        float: typeTemplate,
+-        regexp: typeTemplate,
+-        email: typeTemplate,
+-        url: typeTemplate,
+-        hex: typeTemplate
+-      },
+-      string: {
+-        len: '${label} must be ${len} characters',
+-        min: '${label} must be at least ${min} characters',
+-        max: '${label} must be up to ${max} characters',
+-        range: '${label} must be between ${min}-${max} characters'
+-      },
+-      number: {
+-        len: '${label} must be equal to ${len}',
+-        min: '${label} must be minimum ${min}',
+-        max: '${label} must be maximum ${max}',
+-        range: '${label} must be between ${min}-${max}'
+-      },
+-      array: {
+-        len: 'Must be ${len} ${label}',
+-        min: 'At least ${min} ${label}',
+-        max: 'At most ${max} ${label}',
+-        range: 'The amount of ${label} must be between ${min}-${max}'
+-      },
+-      pattern: {
+-        mismatch: '${label} does not match the pattern ${pattern}'
+-      }
+-    }
+-  },
++  Form: _formLocale.default,
+   Image: {
+     preview: 'Preview'
+   },
+diff --git a/lib/modal/locale/en_US.js b/lib/modal/locale/en_US.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..b7efd11441c7ec925b69ab8a80b8fc9749c59181
+--- /dev/null
++++ b/lib/modal/locale/en_US.js
+@@ -0,0 +1,10 @@
++"use strict";
++
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.default = void 0;
++const locale = {
++  okText: 'OK',
++  cancelText: 'Cancel',
++  justOkText: 'OK'
++};
++var _default = exports.default = locale;
+diff --git a/lib/modal/locale.js b/lib/modal/locale.js
+index ea22a0a87ceed05193c5ffcc71f1d6e812b183c8..902c061f2561f2be6b97c37052399ec707da6eec 100644
+--- a/lib/modal/locale.js
++++ b/lib/modal/locale.js
+@@ -6,10 +6,10 @@ Object.defineProperty(exports, "__esModule", {
+ });
+ exports.changeConfirmLocale = changeConfirmLocale;
+ exports.getConfirmLocale = getConfirmLocale;
+-var _en_US = _interopRequireDefault(require("../locale/en_US"));
+-let runtimeLocale = Object.assign({}, _en_US.default.Modal);
++var _en_US = _interopRequireDefault(require("./locale/en_US"));
++let runtimeLocale = Object.assign({}, _en_US.default);
+ let localeList = [];
+-const generateLocale = () => localeList.reduce((merged, locale) => Object.assign(Object.assign({}, merged), locale), _en_US.default.Modal);
++const generateLocale = () => localeList.reduce((merged, locale) => Object.assign(Object.assign({}, merged), locale), _en_US.default);
+ function changeConfirmLocale(newLocale) {
+   if (newLocale) {
+     const cloneLocale = Object.assign({}, newLocale);
+@@ -20,7 +20,7 @@ function changeConfirmLocale(newLocale) {
+       runtimeLocale = generateLocale();
+     };
+   }
+-  runtimeLocale = Object.assign({}, _en_US.default.Modal);
++  runtimeLocale = Object.assign({}, _en_US.default);
+ }
+ function getConfirmLocale() {
+   return runtimeLocale;

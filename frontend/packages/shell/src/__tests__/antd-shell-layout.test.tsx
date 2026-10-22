@@ -1,0 +1,134 @@
+import { TestLocalization } from './TestLocalization';
+// @vitest-environment jsdom
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { createRoot, Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import { Header } from '../components/Header';
+import { Sidebar } from '../components/Sidebar';
+import { PageContainer } from '../components/PageContainer';
+import { LocalizationProvider } from '@icp-platform/core';
+
+const logout = vi.fn(() => Promise.resolve());
+
+vi.mock('../contexts/PlatformContext', () => ({
+  usePlatform: () => ({
+    shellView: 'business',
+    setShellView: vi.fn(),
+    canSwitchShellView: true,
+  }),
+}));
+
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    isAuthenticated: true,
+    user: { ename: 'Local Administrator' },
+    hasAnyPermission: () => true,
+    logout,
+  }),
+}));
+
+describe('shell chrome', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  afterEach(async () => {
+    logout.mockClear();
+    if (root) {
+      await act(async () => {
+        root.unmount();
+      });
+    }
+
+    if (container) {
+      container.remove();
+    }
+  });
+
+  it('renders an Ant Design sidebar with collapse control, hierarchy and current-page state', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<TestLocalization>{<MemoryRouter initialEntries={['/organization/persons']}>
+          <Sidebar
+            menus={[
+              {
+                id: 'organization',
+                label: '组织用户',
+                icon: 'organization',
+                children: [
+                  {
+                    id: 'organization-persons',
+                    label: '人员中心',
+                    path: '/organization/persons',
+                    icon: 'person',
+                  },
+                ],
+              },
+            ]}
+            collapsed={false}
+            onCollapse={vi.fn()}
+          />
+        </MemoryRouter>}</TestLocalization>);
+    });
+
+    expect(container.textContent).toContain('导航');
+    expect(container.textContent).toContain('组织用户');
+    expect(container.textContent).toContain('人员中心');
+    expect(container.querySelector('[aria-label="折叠菜单"]')).not.toBeNull();
+    expect(container.querySelector('.ant-layout-sider')).not.toBeNull();
+    expect(container.querySelector('.ant-menu')).not.toBeNull();
+    expect(container.querySelector('.ant-menu-item-selected')?.textContent).toContain('人员中心');
+    expect(container.querySelectorAll('.anticon').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders a minimal full-width platform header chrome', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<TestLocalization>{<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}><Header /></LocalizationProvider>}</TestLocalization>);
+    });
+
+    expect(container.querySelector('.np-header-logo')?.textContent).toBe('ICP');
+    expect(container.textContent).not.toContain('ICP Platform');
+    expect(container.textContent).not.toContain('统一业务与平台工作台');
+    expect(container.textContent).not.toContain('业务视图');
+    expect(container.textContent).not.toContain('平台视图');
+    expect(container.textContent).toContain('Local Administrator');
+    expect(container.textContent).toContain('退出登录');
+    const logoutButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('退出登录'));
+    await act(async () => logoutButton?.click());
+    expect(logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders title, breadcrumb and content in PageContainer', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<TestLocalization>{<MemoryRouter>
+          <PageContainer
+            title="人员中心"
+            breadcrumbItems={[
+              { title: '工作台', path: '/' },
+              { title: '组织用户' },
+              { title: '人员中心' },
+            ]}
+          >
+            <div>人员中心内容</div>
+          </PageContainer>
+        </MemoryRouter>}</TestLocalization>);
+    });
+
+    expect(container.textContent).toContain('工作台');
+    expect(container.textContent).toContain('组织用户');
+    expect(container.textContent).toContain('人员中心内容');
+    expect(container.querySelector('nav[aria-label="面包屑"]')).not.toBeNull();
+  });
+});

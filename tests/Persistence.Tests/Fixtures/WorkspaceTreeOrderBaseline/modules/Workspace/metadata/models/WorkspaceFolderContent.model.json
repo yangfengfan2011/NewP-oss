@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0", "type": "model",
+  "WorkspaceFolderContent": {
+    "kind": "Link",
+    "fields": [{ "name": "ChildModelKey", "contract": { "valueType": "Text" }, "storage": { "type": "string", "ordinalKey": true }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }],
+    "linkedTypes": [{ "parent": "WorkspaceFolder", "child": "WorkspaceFolder" }, { "parent": "WorkspaceFolder", "child": "Part" }, { "parent": "WorkspaceFolder", "child": "Document" }],
+    "indexes": [
+      { "name": "UX_WorkspaceFolderContent_Target", "fields": ["PEID", "ChildModelKey", "CEID"], "unique": true },
+      { "name": "IX_WorkspaceFolderContent_Reverse", "fields": ["ChildModelKey", "CEID", "PEID"], "unique": false }
+    ],
+    "foreignKeys": [{ "name": "FK_WorkspaceFolderContent_Parent", "fields": ["PEID"], "principalModel": "WorkspaceFolder", "principalFields": ["EID"], "onDelete": "Restrict" }],
+    "linkQuery": {
+      "resourceKey": "workspace.content", "readBehavior": "workspace.spaces.access", "policyKey": "workspace.content",
+      "parent": { "referenceField": "PEID", "fixedModelKey": "WorkspaceFolder" },
+      "child": { "referenceField": "CEID", "typeField": "ChildModelKey" },
+      "endpoints": { "WorkspaceFolder": { "resourceKey": "workspace.folder", "constraintKey": "workspace.folder.scope", "titleKey": "Workspace.Folder", "icon": "folder" }, "Part": { "resourceKey": "part.part", "titleKey": "Part.Title", "icon": "module" }, "Document": { "resourceKey": "document.document", "titleKey": "Document.Title", "icon": "module" } },
+      "columns": [
+        { "field": "ObjectType", "valueType": "Text", "operators": ["="], "mappings": { "WorkspaceFolder": "$modelKey", "Part": "$modelKey", "Document": "$modelKey" } },
+        { "field": "Code", "valueType": "Text", "nullable": true, "sortable": true, "operators": ["=", "contains", "isNull"], "mappings": { "WorkspaceFolder": null, "Part": "ECODE", "Document": "ECODE" } },
+        { "field": "Name", "valueType": "Text", "sortable": true, "operators": ["=", "contains"], "mappings": { "WorkspaceFolder": "ENAME", "Part": "ENAME", "Document": "ENAME" } },
+        { "field": "UpdatedBy", "valueType": "User", "mappings": { "WorkspaceFolder": "UpdatedBy", "Part": "UpdatedBy", "Document": "UpdatedBy" } },
+        { "field": "UpdatedAt", "valueType": "Instant", "sortable": true, "mappings": { "WorkspaceFolder": "UpdatedAt", "Part": "UpdatedAt", "Document": "UpdatedAt" } }
+      ]
+    }
+  }
+}

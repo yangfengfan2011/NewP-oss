@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0", "type": "view", "view": {
+    "key": "part.part.list", "dicKey": "Part", "titleKey": "Title", "mode": "list", "model": "Part", "resourceKey": "part.part", "editorMode": "drawer", "detailViewKey": "part.part.detail",
+    "dataAccess": { "execution": "part.part.list", "resources": ["part.part"] },
+    "query": { "fields": [{ "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultSort": { "field": "ECODE", "direction": "asc" }, "defaultPageSize": 20 },
+    "columns": [
+      { "key": "code", "labelKey": "Code", "source": "model", "field": "ECODE", "sortable": true, "hideable": false, "responsivePriority": "high" },
+      { "key": "name", "labelKey": "Name", "source": "model", "field": "ENAME", "standardAction": "view", "sortable": true, "hideable": false, "responsivePriority": "high" },
+      { "key": "updatedBy", "labelKey": "Field_UpdatedBy", "source": "model", "field": "UpdatedBy", "responsivePriority": "medium" },
+      { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "model", "field": "UpdatedAt", "sortable": true, "responsivePriority": "medium" }
+    ],
+    "pageActions": [{ "key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership", "inputReadSourceKey": "part.part.initializeOwnership", "dataAccess": { "object": "Part", "actions": ["edit"] } }, { "key": "create", "labelKey": "Create", "standardAction": "create", "variant": "primary", "dataAccess": { "object": "Part", "actions": ["create"] } }],
+    "featureActions": [{ "key": "initializeOwnership", "titleKey": "InitializeOwnership", "behaviorKey": "part.part.initializeOwnership", "inputReadSourceKey": "part.part.initializeOwnership", "dataAccess": { "object": "Part", "actions": ["edit"] } }, { "key": "authorize", "titleKey": "Authorize", "behaviorKey": "part.part.authorize", "dataAccess": {"object":"Part","actions":["authorize"]} }],
+    "rowActions": [{ "key": "transfer", "labelKey": "Transfer", "handlerKey": "transfer", "inputKey": "transferOwnership", "readBehaviors": ["part.part.read"], "dataAccess": { "object": "Part", "actions": ["edit"] } }, { "key": "viewAuthorization", "labelKey": "Permissions", "standardAction": "view", "navigationTargetKey": "part.part.permissions", "inputReadSourceKey": "part.part.permissions" }, { "key": "authorize", "labelKey": "Authorize", "handlerKey": "authorize", "inputKey": "objectAuthorization", "readBehaviors": ["part.part.read"], "inputReadSourceKey": "part.part.permissions", "dataAccess": { "object": "Part", "actions": ["authorize"] } }, { "key": "initializeOwnership", "labelKey": "InitializeOwnership", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership", "inputReadSourceKey": "part.part.initializeOwnership", "dataAccess": { "object": "Part", "actions": ["edit"] } }, { "key": "history", "labelKey": "History", "standardAction": "view", "navigationTargetKey": "part.history", "dataAccess": { "object": "Part", "actions": ["read"] } }, { "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }]
+  }
+}

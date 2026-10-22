@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "organization",
+        "titleKey": "Navigation.Organization",
+        "icon": "organization",
+        "order": 100
+      },
+      {
+        "key": "organization.personCenter",
+        "featureOwner": "navigation:organization.structure/tab:persons",
+        "titleKey": "Navigation.PersonCenter",
+        "icon": "persons",
+        "parentKey": "organization",
+        "path": "/organization/persons",
+        "order": 110,
+        "entryType": "standard-list",
+        "targetKey": "organization.person.list",
+        "routeOnly": true,
+        "redirectTo": "/organization/structure?tab=persons"
+      },
+      {
+        "key": "organization.companyManagement",
+        "featureOwner": "navigation:organization.structure/tab:companies",
+        "titleKey": "Navigation.CompanyManagement",
+        "icon": "companies",
+        "parentKey": "organization",
+        "path": "/organization/companies",
+        "order": 120,
+        "entryType": "standard-list",
+        "targetKey": "organization.company.list",
+        "routeOnly": true,
+        "redirectTo": "/organization/structure?tab=companies"
+      },
+      {
+        "key": "organization.departmentManagement",
+        "featureOwner": "navigation:organization.structure/tab:departments",
+        "titleKey": "Navigation.DepartmentManagement",
+        "icon": "departments",
+        "parentKey": "organization",
+        "path": "/organization/departments",
+        "order": 130,
+        "entryType": "standard-list",
+        "targetKey": "organization.department.list",
+        "routeOnly": true,
+        "redirectTo": "/organization/structure?tab=departments"
+      },
+      {
+        "key": "organization.positionManagement",
+        "featureOwner": "navigation:organization.structure/tab:positions",
+        "titleKey": "Navigation.PositionManagement",
+        "icon": "positions",
+        "parentKey": "organization",
+        "path": "/organization/positions",
+        "order": 140,
+        "entryType": "standard-list",
+        "targetKey": "organization.position.list",
+        "routeOnly": true,
+        "redirectTo": "/organization/structure?tab=positions"
+      },
+      {
+        "key": "organization.structure",
+        "featureAuthorization": true,
+        "titleKey": "Navigation.OrganizationManagement",
+        "parentKey": "organization",
+        "path": "/organization/structure",
+        "order": 105,
+        "page": {
+          "pageKey": "platform.tabs",
+          "parameters": {
+            "viewKey": "organization.management"
+          }
+        }
+      },
+      {
+        "key": "organization.person.detail",
+        "featureOwner": "navigation:organization.structure/tab:persons",
+        "path": "/organization/persons/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "organization.person.detail"
+      }
+    ]
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dataAccess": {"execution":"organization.structure.read","resources":["organization.company","organization.department","organization.person"]},
+    "key": "organization.structure",
+    "mode": "tree",
+    "dicKey": "OrganizationComposition",
+    "providerKey": "platform.relations",
+    "relationSource": {
+      "nodes": [
+        {
+          "key": "company", "model": "Company", "resourceKey": "organization.company",
+          "idField": "EID", "labelField": "ENAME", "codeField": "ECODE", "sortField": "SortOrder", "enabledField": "IsEnabled",
+          "contextFields": { "id": "EID", "companyId": "EID" }
+        },
+        {
+          "key": "department", "model": "Department", "resourceKey": "organization.department",
+          "idField": "EID", "labelField": "ENAME", "codeField": "ECODE", "sortField": "SortOrder", "enabledField": "IsEnabled",
+          "parents": [
+            { "nodeType": "department", "field": "ParentDepartmentId" },
+            { "nodeType": "company", "field": "CompanyId", "fallback": true }
+          ],
+          "contextFields": { "id": "EID", "companyId": "CompanyId", "parentDepartmentId": "ParentDepartmentId" }
+        },
+        {
+          "key": "person", "model": "Person", "resourceKey": "organization.person",
+          "idField": "EID", "labelField": "ENAME", "codeField": "PersonNo", "sortField": "PersonNo", "enabledField": "IsEnabled",
+          "parents": [
+            { "nodeType": "department", "field": "DepartmentId" },
+            { "nodeType": "company", "field": "CompanyId", "fallback": true }
+          ],
+          "filters": [{ "field": "CompanyId", "operator": "isNotNull" }],
+          "contextFields": { "id": "EID", "companyId": "CompanyId", "departmentId": "DepartmentId" }
+        }
+      ]
+    },
+    "nodeTypes": [
+      {
+        "titleKey": "Company",
+        "key": "company",
+        "pageRef": {
+          "pageKey": "platform.tabs",
+          "parameters": {
+            "viewKey": "organization.company.tabs"
+          }
+        },
+        "contextMenu": [
+          {
+            "key": "edit",
+            "labelKey": "Edit",
+            "standardAction": "edit",
+            "viewKey": "organization.company.list",
+            "inputResolverKey": "organization.node.detail"
+          },
+          {
+            "key": "delete",
+            "labelKey": "Delete",
+            "viewKey": "organization.company.list",
+            "inputResolverKey": "organization.node.detail",
+            "actionKey": "delete"
+          }
+        ]
+      },
+      {
+        "titleKey": "Department",
+        "key": "department",
+        "pageRef": {
+          "pageKey": "platform.tabs",
+          "parameters": {
+            "viewKey": "organization.department.tabs"
+          }
+        },
+        "contextMenu": [
+          {
+            "key": "edit",
+            "labelKey": "Edit",
+            "standardAction": "edit",
+            "viewKey": "organization.department.list",
+            "inputResolverKey": "organization.node.detail"
+          },
+          {
+            "key": "delete",
+            "labelKey": "Delete",
+            "viewKey": "organization.department.list",
+            "inputResolverKey": "organization.node.detail",
+            "actionKey": "delete"
+          }
+        ]
+      },
+      {
+        "titleKey": "Person",
+        "key": "person",
+        "pageRef": {
+          "pageKey": "platform.detail",
+          "parameters": { "viewKey": "organization.person.detail" },
+          "inputResolverKey": "organization.node.detail"
+        },
+        "contextMenu": [
+          {
+            "key": "edit",
+            "labelKey": "Edit",
+            "standardAction": "edit",
+            "viewKey": "organization.person.list",
+            "inputResolverKey": "organization.node.detail"
+          },
+          {
+            "key": "delete",
+            "labelKey": "Delete",
+            "actionKey": "delete",
+            "viewKey": "organization.person.list",
+            "inputResolverKey": "organization.node.detail"
+          }
+        ]
+      }
+    ],
+    "titleKey": "Structure",
+    "treeActions": [
+      {
+        "key": "createCompany",
+        "labelKey": "CreateCompany",
+        "viewKey": "organization.company.list",
+        "standardAction": "create"
+      },
+      {
+        "key": "secondCreate",
+        "labelKey": "Department",
+        "viewKey": "organization.department.list",
+        "actionKey": "create"
+      }
+    ]
+  }
+}

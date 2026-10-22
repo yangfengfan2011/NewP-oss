@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "example.group",
+        "titleKey": "Navigation.Example",
+        "icon": "module",
+        "order": 999
+      },
+      {
+        "key": "example",
+        "titleKey": "Navigation.RuntimeWorkload",
+        "icon": "module",
+        "parentKey": "example.group",
+        "path": "/examples/standard-crud/runtime-columns",
+        "order": 10,
+        "entryType": "standard-list",
+        "targetKey": "example.runtime-workload.list",
+        "featureAuthorization": true
+      },
+      {
+        "key": "example.records",
+        "titleKey": "Navigation.ExampleRecords",
+        "icon": "module",
+        "parentKey": "example.group",
+        "path": "/examples/standard-crud/persistent-records",
+        "order": 20,
+        "entryType": "standard-list",
+        "targetKey": "example.record.list",
+        "featureAuthorization": true
+      },
+      {
+        "key": "example.record.detail",
+        "path": "/examples/standard-crud/persistent-records/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "example.record.detail",
+        "featureOwner": "navigation:example.records"
+      }
+    ]
+  }
+}

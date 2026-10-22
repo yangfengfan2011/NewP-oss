@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "PlatformAuthentication": {
+    "RequiredField": { "zhs": "请输入{field}。", "en": "Enter {field}." },
+    "BrandBadge": {
+      "zhs": "阶段一视觉基础",
+      "en": "Shared workspace"
+    },
+    "BrandDescription": {
+      "zhs": "统一业务运营与平台治理入口，提供清晰、稳定、轻量的企业级 Shell 体验。",
+      "en": "One place for business operations and platform administration."
+    },
+    "BrandPortal": {
+      "zhs": "统一进入业务门户与平台门户",
+      "en": "Access business and platform portals"
+    },
+    "BrandGovernance": {
+      "zhs": "支持权限治理、配置管理与审计巡检",
+      "en": "Manage permissions, configuration, and audits"
+    },
+    "BrandFoundation": {
+      "zhs": "为后续模块接入提供稳定的共享视觉基础",
+      "en": "A consistent experience across modules"
+    },
+    "LoginTitle": {
+      "zhs": "登录平台",
+      "en": "Sign in to the platform"
+    },
+    "LoginDescription": {
+      "zhs": "请使用现有账号凭据登录统一 Shell。",
+      "en": "Sign in with your existing account credentials."
+    },
+    "Account": {
+      "zhs": "登录账号（ECODE）",
+      "en": "Account (ECODE)"
+    },
+    "AccountPlaceholder": {
+      "zhs": "请输入登录账号",
+      "en": "Enter your account"
+    },
+    "Password": {
+      "zhs": "密码",
+      "en": "Password"
+    },
+    "PasswordPlaceholder": {
+      "zhs": "请输入密码",
+      "en": "Enter your password"
+    },
+    "SignIn": {
+      "zhs": "登录",
+      "en": "Sign in"
+    },
+    "SigningIn": {
+      "zhs": "登录中...",
+      "en": "Signing in…"
+    },
+    "SignOut": {
+      "zhs": "退出登录",
+      "en": "Sign out"
+    },
+    "SecurityStep": {
+      "zhs": "安全步骤",
+      "en": "Security step"
+    },
+    "FirstPasswordTitle": {
+      "zhs": "先完成首次改密",
+      "en": "Change your temporary password"
+    },
+    "RestrictedDescription": {
+      "zhs": "当前临时会话只允许修改密码、查看当前账号或退出。完成后会自动建立普通会话。",
+      "en": "This temporary session only allows password changes, viewing your account, and signing out. Changing your password starts a regular session."
+    },
+    "SetPassword": {
+      "zhs": "设置正式密码",
+      "en": "Set your password"
+    },
+    "PasswordRules": {
+      "zhs": "密码长度为 8–64 个字符，不能全部为空白，也不能与当前密码相同。",
+      "en": "Use 8–64 characters. The password cannot be entirely whitespace or the same as your current password."
+    },
+    "CurrentPassword": {
+      "zhs": "当前临时密码",
+      "en": "Current temporary password"
+    },
+    "NewPassword": {
+      "zhs": "新密码",
+      "en": "New password"
+    },
+    "ConfirmPassword": {
+      "zhs": "确认新密码",
+      "en": "Confirm new password"
+    },
+    "PasswordMismatch": {
+      "zhs": "两次输入的新密码不一致。",
+      "en": "The new passwords do not match."
+    },
+    "UpdatingPassword": {
+      "zhs": "正在更新…",
+      "en": "Updating…"
+    },
+    "CompletePassword": {
+      "zhs": "完成改密",
+      "en": "Change password"
+    },
+    "Retry": {
+      "zhs": "重试",
+      "en": "Retry"
+    },
+    "LoadingDictionary": {
+      "zhs": "正在加载界面语言…",
+      "en": "Loading interface translations…"
+    },
+    "DictionaryUnavailable": {
+      "zhs": "界面词典暂时不可用。登录仍可使用，业务页面将在恢复后开放。",
+      "en": "Interface translations are unavailable. You can still sign in; business pages will be available after recovery."
+    },
+    "SessionUnavailable": {
+      "zhs": "认证服务暂时不可用",
+      "en": "Authentication is temporarily unavailable"
+    },
+    "SessionDescription": {
+      "zhs": "当前登录状态无法验证，已保留本地主体；恢复服务后可安全重试。",
+      "en": "Your sign-in status could not be verified. Your local session is preserved; retry when the service recovers."
+    },
+    "RuntimeUnavailable": {
+      "zhs": "模块运行时加载失败",
+      "en": "Module runtime could not be loaded"
+    },
+    "RuntimeDescription": {
+      "zhs": "本次模块快照未生效，页面没有进入部分加载状态。",
+      "en": "The module snapshot was not activated. Retry to load the complete workspace."
+    }
+  }
+}

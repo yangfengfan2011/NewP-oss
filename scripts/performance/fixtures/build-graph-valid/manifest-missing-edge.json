@@ -1,0 +1,7 @@
+{
+  "index.html": {
+    "file": "assets/main.js",
+    "isEntry": true,
+    "dynamicImports": ["missing-route.ts"]
+  }
+}

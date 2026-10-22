@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Identity",
+  "dataExecutions": [
+    {"key":"identity.account.displayNames","moduleId":"Identity","provider":"identity.backend","boundary":"internal","featureBehaviors":[],"requirements":[{"role":"targets","stage":"read","shape":"objects","resources":["identity.account"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}],"fixedBindings":[{"kind":"internal","identity":"identity.account.displayNames","caller":"ICP.Platform.Modules.Identity.Application.IdentityUserDisplayNameDirectory"}]},
+    {"key":"identity.account.list","moduleId":"Identity","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["identity.account.read"],"resourceKey":"identity.account"},
+    {"key":"identity.account.read","moduleId":"Identity","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["identity.account.read"],"resourceKey":"identity.account"}
+  ],
+  "displayName": "身份基础",
+  "version": "1.0.0",
+  "description": "平台用户账号与本地凭据基础模块",
+  "entryAssembly": "../../IdentityModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "backend": {
+    "behaviorKey": "identity.backend"
+  },
+  "frontend": {
+    "behaviorKey": "identity.frontend",
+    "entry": "identity",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "identity.account.list",
+      "identity.account.detail"
+    ]
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/IdentityAccount.model.json",
+      "metadata/models/LocalCredential.model.json",
+      "metadata/models/IdentitySecurityEvent.model.json"
+    ],
+    "migrations": {
+      "sqlServer": {
+        "assembly": "migrations/Identity.SqlServerMigrations.dll",
+        "manifest": "migrations/Identity.SqlServerMigrations.json"
+      }
+    }
+  }
+}

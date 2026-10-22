@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "IdentityAccount": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ECODE",
+      "ENAME"
+    ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ECODE",
+          "ENAME"
+        ]
+      }
+    ],
+    "fields": [
+      {
+        "name": "ECODE",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "readonly"
+          }
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          }
+        }
+      },
+      {
+        "name": "NormalizedECODE",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "Status",
+        "storage": { "type": "string" },
+        "contract": { "valueType": "enum", "clrType": "ICP.Platform.Identity.Contracts.IdentityAccountStatus" },
+        "uiType": "select",
+        "dataSource": { "type": "enum", "key": "IdentityAccountStatus" }
+      },
+      {
+        "name": "IsLocalAdministrator",
+        "storage": { "type": "bool" },
+        "uiType": "switch"
+      },
+      {
+        "name": "IsPersonnelBound",
+        "storage": { "type": "bool" },
+        "uiType": "switch"
+      },
+      {
+        "name": "PersonnelDisableHold",
+        "storage": { "type": "bool" },
+        "uiType": "switch"
+      },
+      {
+        "name": "Revision",
+        "storage": { "type": "long" },
+        "contract": { "valueType": "integer" }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_IdentityAccount_NormalizedECODE",
+        "fields": ["NormalizedECODE"],
+        "unique": true
+      }
+    ]
+  }
+}

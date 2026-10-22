@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Plugin.Contracts</RootNamespace>
+    <AssemblyName>ICP.Platform.Plugin.Contracts</AssemblyName>
+    <PackageId>ICP.Platform.Plugin.Contracts</PackageId>
+    <Version>1.0.0</Version>
+    <Description>Stable contracts for the NewP standard-data plugin authoring interface.</Description>
+    <Authors>ICP Platform Team</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+    <None Include="platform-api-release.identity.json"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="contentFiles/any/any" />
+    <None Include="Schemas\*.schema.json"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="contentFiles/any/any/schemas" />
+  </ItemGroup>
+
+</Project>

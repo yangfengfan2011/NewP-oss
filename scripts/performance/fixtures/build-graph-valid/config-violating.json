@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "1.0",
+  "scenarios": {
+    "anonymous": {
+      "roots": [
+        { "manifestKey": "index.html" }
+      ]
+    },
+    "authenticatedHome": {
+      "roots": [
+        { "manifestKey": "index.html" },
+        { "sourceRegex": "modules/(?:example/demo|platform/audit)/src/index\\.ts$" }
+      ]
+    },
+    "personnelRoute": {
+      "roots": [
+        { "manifestKey": "index.html" },
+        { "sourceRegex": "modules/(?:example/demo|platform/audit)/src/index\\.ts$" },
+        { "sourceContains": "modules/platform/organization/src/standard-crud/personStandardCrudResource.tsx" }
+      ],
+      "relativeTo": "authenticatedHome"
+    }
+  },
+  "bindingEntries": [
+    { "sourceRegex": "modules/(?:example/demo|platform/audit)/src/index\\.ts$" }
+  ],
+  "forbiddenDependencies": [
+    {
+      "id": "fixture-shared-package",
+      "sourceRegex": "node_modules/shared/index\\.js$",
+      "scenarios": ["anonymous", "authenticatedHome"]
+    },
+    {
+      "id": "fixture-module-binding-eager",
+      "sourceRegex": "node_modules/shared/index\\.js$",
+      "scenarios": ["authenticatedHome"],
+      "enforcement": "report-only",
+      "attribution": "module-binding-eager"
+    }
+  ],
+  "budgets": {
+    "maxChunkMinifiedBytes": 10,
+    "maxBindingEntryGzipBytes": 10,
+    "maxAllBindingEntriesGzipBytes": 20,
+    "scenarios": {
+      "anonymous": {
+        "maxMinifiedBytes": 20,
+        "maxGzipBytes": 20
+      },
+      "authenticatedHome": {
+        "maxMinifiedBytes": 30,
+        "maxGzipBytes": 30
+      },
+      "personnelRoute": {
+        "maxDeltaGzipBytes": 10
+      }
+    }
+  }
+}

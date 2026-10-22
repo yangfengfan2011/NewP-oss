@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "MetadataConfigCenter",
+  "displayName": "元数据配置中心",
+  "version": "1.0.0",
+  "description": "元数据配置中心内建模块",
+  "entryAssembly": "../../MetadataConfigCenterModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "frontend": {
+    "enabled": false
+  }
+}

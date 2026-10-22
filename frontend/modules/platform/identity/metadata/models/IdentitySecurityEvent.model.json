@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "IdentitySecurityEvent": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "TargetAccountEID",
+        "storage": { "type": "guid" }
+      },
+      {
+        "name": "EventType",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "Reason",
+        "storage": { "type": "text" }
+      },
+      {
+        "name": "OccurredAt",
+        "storage": { "type": "datetime" },
+        "contract": { "valueType": "instant" },
+        "display": { "type": "instant", "format": "dateTime" }
+      },
+      {
+        "name": "TraceId",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "ActorKind",
+        "storage": { "type": "string" },
+        "contract": { "valueType": "enum", "clrType": "IdentitySecurityActorKind" }
+      },
+      {
+        "name": "ActorAccountEID",
+        "storage": { "type": "guid", "nullable": true }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "IX_IdentitySecurityEvent_TargetAccount_OccurredAt",
+        "fields": ["TargetAccountEID", "OccurredAt"],
+        "unique": false
+      }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_IdentitySecurityEvent_TargetIdentityAccount",
+        "fields": ["TargetAccountEID"],
+        "principalModuleId": "Identity",
+        "principalModel": "IdentityAccount",
+        "principalFields": ["EID"],
+        "onDelete": "Restrict"
+      },
+      {
+        "name": "FK_IdentitySecurityEvent_ActorIdentityAccount",
+        "fields": ["ActorAccountEID"],
+        "principalModuleId": "Identity",
+        "principalModel": "IdentityAccount",
+        "principalFields": ["EID"],
+        "onDelete": "Restrict"
+      }
+    ]
+  }
+}

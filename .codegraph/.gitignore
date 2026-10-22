@@ -1,0 +1,6 @@
+codegraph.db
+*.db-shm
+*.db-wal
+daemon.pid
+daemon.log
+writer.pid

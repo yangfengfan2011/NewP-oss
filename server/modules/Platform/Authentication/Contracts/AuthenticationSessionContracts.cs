@@ -1,0 +1,233 @@
+namespace ICP.Platform.Authentication.Contracts;
+
+/// <summary>
+/// 认证会话的受支持类型。
+/// </summary>
+public enum AuthenticationSessionType
+{
+    /// <summary>允许访问普通受保护入口的会话。</summary>
+    Regular,
+
+    /// <summary>只允许首次改密白名单入口的会话。</summary>
+    Restricted
+}
+
+/// <summary>
+/// 会话注册表对凭据摘要的验证结论。
+/// </summary>
+public enum AuthenticationSessionValidationStatus
+{
+    /// <summary>会话存在且当前有效。</summary>
+    Active,
+
+    /// <summary>注册表中不存在该摘要。</summary>
+    Unknown,
+
+    /// <summary>会话已经撤销。</summary>
+    Revoked,
+
+    /// <summary>会话已经超过固定有效期。</summary>
+    Expired,
+
+    /// <summary>会话所属账号不存在或当前不允许认证。</summary>
+    AccountUnavailable,
+
+    /// <summary>注册表或账号目录当前无法完成可信校验。</summary>
+    StoreUnavailable
+}
+
+/// <summary>
+/// 新会话写入注册表所需的非秘密事实。
+/// </summary>
+public sealed record AuthenticationSessionRegistration
+{
+    /// <summary>会话所属 User EID。</summary>
+    public required string AccountEid { get; init; }
+
+    /// <summary>会话类型。</summary>
+    public AuthenticationSessionType Type { get; init; }
+
+    /// <summary>服务端解析的非空操作者标识。</summary>
+    public required string ActorId { get; init; }
+
+    /// <summary>登录显式提交的 IANA 时区；省略或 null 时由 Authentication 使用部署默认值。</summary>
+    public string? TimeZoneId { get; init; }
+}
+
+/// <summary>
+/// 新认证会话的一次性签发结果；Credential 只能交付给当前调用者，不得持久化或记录日志。
+/// </summary>
+public sealed record AuthenticationSessionIssuance
+{
+    /// <summary>仅本次签发返回的 256-bit 不透明凭据。</summary>
+    public required string Credential { get; init; }
+
+    /// <summary>不包含凭据的会话快照。</summary>
+    public required AuthenticationSessionSnapshot Session { get; init; }
+}
+
+/// <summary>
+/// 标记一个成功 HTTP 结果需要由 Host 交付新的认证会话 Cookie。
+/// 会话凭据只供 Host 集成读取，不得进入序列化响应、日志或持久化查询。
+/// </summary>
+public interface IAuthenticationSessionCookieResponse
+{
+    /// <summary>取得仅供 Host 写入受保护 Cookie 的一次性会话凭据。</summary>
+    string GetSessionCredential();
+
+    /// <summary>取得新会话的固定过期 UTC 时间。</summary>
+    DateTime GetSessionExpiresAtUtc();
+}
+
+/// <summary>
+/// 不包含会话凭据的注册表快照。
+/// </summary>
+public sealed record AuthenticationSessionSnapshot
+{
+    /// <summary>认证会话 EID。</summary>
+    public required string SessionEid { get; init; }
+
+    /// <summary>会话所属 User EID。</summary>
+    public required string AccountEid { get; init; }
+
+    /// <summary>会话类型。</summary>
+    public AuthenticationSessionType Type { get; init; }
+
+    /// <summary>登录时冻结并由 Authentication 验证的规范 IANA 时区。</summary>
+    public required string TimeZoneId { get; init; }
+
+    /// <summary>固定过期 UTC 时间。</summary>
+    public DateTime ExpiresAtUtc { get; init; }
+
+    /// <summary>可选的撤销 UTC 时间。</summary>
+    public DateTime? RevokedAtUtc { get; init; }
+
+    /// <summary>可选的稳定撤销原因。</summary>
+    public string? RevocationReason { get; init; }
+}
+
+/// <summary>
+/// 会话凭据摘要的验证结果。
+/// </summary>
+public sealed record AuthenticationSessionValidation
+{
+    /// <summary>验证状态。</summary>
+    public AuthenticationSessionValidationStatus Status { get; init; }
+
+    /// <summary>命中注册表时返回的不含凭据快照。</summary>
+    public AuthenticationSessionSnapshot? Session { get; init; }
+
+    /// <summary>存储故障时供 Host 稳定映射的失败码。</summary>
+    public string? FailureCode { get; init; }
+}
+
+/// <summary>Authentication 会话能力对外暴露的稳定失败码。</summary>
+public static class AuthenticationSessionFailureCodes
+{
+    /// <summary>会话注册表或账号目录当前不可用。</summary>
+    public const string StoreUnavailable = "AUTH_SESSION_STORE_UNAVAILABLE";
+
+    /// <summary>账号当前不满足已登记的登录资格。</summary>
+    public const string AdmissionDenied = "AUTH_ADMISSION_DENIED";
+
+    /// <summary>普通账号的准入拥有者尚未装配，不能确认资格。</summary>
+    public const string AdmissionUnavailable = "AUTH_ADMISSION_UNAVAILABLE";
+
+    /// <summary>登录提交或部署配置的时区不是有效 IANA 标识。</summary>
+    public const string InvalidTimeZone = "AUTH_SESSION_TIME_ZONE_INVALID";
+}
+
+/// <summary>Authentication 会话向已验证主体投影的稳定 claim 名。</summary>
+public static class AuthenticationSessionClaimTypes
+{
+    /// <summary>Host验证令牌后投影的服务端会话标识，不接受客户端业务payload提供。 </summary>
+    public const string SessionEid = "authentication_session_eid";
+
+    /// <summary>当前认证会话在登录时冻结的规范 IANA 时区。</summary>
+    public const string TimeZoneId = "authentication_session_time_zone_id";
+}
+
+/// <summary>
+/// Authentication 会话注册在稳定输入校验失败时返回的异常。
+/// </summary>
+public sealed class AuthenticationSessionException : InvalidOperationException
+{
+    /// <summary>使用稳定失败码创建会话异常。</summary>
+    public AuthenticationSessionException(string failureCode)
+        : base(failureCode)
+    {
+        FailureCode = failureCode;
+    }
+
+    /// <summary>供 Host 映射为稳定问题响应的失败码。</summary>
+    public string FailureCode { get; }
+}
+
+/// <summary>
+/// 撤销一个会话所需的事实。
+/// </summary>
+public sealed record AuthenticationSessionRevocation
+{
+    /// <summary>目标会话 EID。</summary>
+    public required string SessionEid { get; init; }
+
+    /// <summary>稳定撤销原因。</summary>
+    public required string Reason { get; init; }
+
+    /// <summary>服务端解析的非空操作者标识。</summary>
+    public required string ActorId { get; init; }
+}
+
+/// <summary>
+/// 撤销一个账号全部会话所需的事实。
+/// </summary>
+public sealed record AccountAuthenticationSessionsRevocation
+{
+    /// <summary>目标 User EID。</summary>
+    public required string AccountEid { get; init; }
+
+    /// <summary>稳定撤销原因。</summary>
+    public required string Reason { get; init; }
+
+    /// <summary>服务端解析的非空操作者标识。</summary>
+    public required string ActorId { get; init; }
+}
+
+/// <summary>
+/// Authentication 提供的深会话注册表 seam。
+/// 写方法只登记共享事务中的变化，不自行保存。
+/// </summary>
+public interface IAuthenticationSessionRegistry
+{
+    /// <summary>在会话轮换的协调事务内确认服务端来源会话属于目标账号且未撤销、未过期；标识本身不是认证凭据。</summary>
+    ValueTask<bool> IsActiveAsync(string sessionEid, string accountEid, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Source session validation is required for rotation.");
+
+    /// <summary>
+    /// 生成一次性 256-bit 凭据，并只登记其不可逆摘要。
+    /// </summary>
+    ValueTask<AuthenticationSessionIssuance> RegisterAsync(
+        AuthenticationSessionRegistration registration,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 使用调用方持有的一次性凭据读取当前会话有效性。
+    /// </summary>
+    ValueTask<AuthenticationSessionValidation> ValidateAsync(
+        string credential,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 登记当前认证会话的撤销变化。
+    /// </summary>
+    ValueTask<bool> RevokeCurrentAsync(
+        AuthenticationSessionRevocation revocation,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 登记目标账号全部认证会话的撤销变化。
+    /// </summary>
+    ValueTask<int> RevokeAllAsync(
+        AccountAuthenticationSessionsRevocation revocation,
+        CancellationToken cancellationToken = default);
+}

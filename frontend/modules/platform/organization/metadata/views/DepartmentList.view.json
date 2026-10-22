@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dataAccess": { "execution": "organization.department.list", "resources": ["organization.department"] },
+    "key": "organization.department.list",
+    "dicKey": "DepartmentListView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "list",
+    "model": "Department",
+    "resourceKey": "organization.department",
+    "lookupBindings": {
+      "organization.companies": {"behavior":"organization.department.company.lookup","dataAccess":{"execution":"organization.department.company.lookup","resources":["organization.company"]}},
+      "organization.department.parents": {"behavior":"organization.department.parent.lookup","dataAccess":{"execution":"organization.department.parent.lookup","resources":["organization.department"]}},
+      "organization.department.parent-filter": {"behavior":"organization.department.parent.lookup","dataAccess":{"execution":"organization.department.parent.lookup","resources":["organization.department"]}}
+    },
+    "editorMode": "drawer",
+    "detailViewKey": "organization.department.detail",
+    "query": {
+      "fields": [
+        { "key": "keyword", "labelKey": "Query_Keyword", "source": "preset", "preset": "keyword", "operator": "like" },
+        { "key": "companyId", "labelKey": "Query_Company", "source": "model", "field": "CompanyId", "operator": "=" },
+        { "key": "parentDepartmentId", "labelKey": "Query_ParentDepartment", "source": "model", "field": "ParentDepartmentId", "operator": "=", "dataSourceKey": "organization.department.parent-filter", "dependsOn": ["companyId"] },
+        { "key": "isEnabled", "labelKey": "Query_IsEnabled", "source": "model", "field": "IsEnabled", "operator": "=" }
+      ],
+      "defaultSort": { "field": "SortOrder", "direction": "asc" },
+      "defaultPageSize": 20
+    },
+    "advancedFilter": { "enabled": false, "sections": [] },
+    "columns": [
+      { "key": "company", "labelKey": "Column_Company", "source": "model", "field": "CompanyId", "sortable": true, "hideable": false, "responsivePriority": "high" },
+      { "key": "code", "labelKey": "Column_Code", "source": "model", "field": "ECODE", "sortable": true, "hideable": false, "responsivePriority": "high" },
+      { "key": "name", "labelKey": "Column_Name", "source": "model", "field": "ENAME", "standardAction": "view", "sortable": true, "hideable": false, "responsivePriority": "high" },
+      { "key": "parentDepartment", "labelKey": "Column_ParentDepartment", "source": "model", "field": "ParentDepartmentId", "responsivePriority": "medium" },
+      { "key": "isEnabled", "labelKey": "Column_IsEnabled", "source": "model", "field": "IsEnabled", "sortable": true, "responsivePriority": "high" },
+      { "key": "sortOrder", "labelKey": "Column_SortOrder", "source": "model", "field": "SortOrder", "sortable": true, "responsivePriority": "medium" },
+      { "key": "updatedAt", "labelKey": "Column_UpdatedAt", "source": "model", "field": "UpdatedAt", "sortable": true, "responsivePriority": "low" }
+    ],
+    "pageActions": [
+      { "key": "create", "labelKey": "Action_Create", "standardAction": "create", "dataAccess": { "object": "Department", "actions": ["create"] }, "variant": "primary" }
+    ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "organization.department.authorize" }
+    ],
+    "rowActions": [
+      { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "dataAccess": {"object":"Department","actions":["authorize"]}, "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },
+      { "key": "edit", "labelKey": "Action_Edit", "standardAction": "edit", "dataAccess": { "object": "Department", "actions": ["edit"] } },
+      { "key": "delete", "labelKey": "Action_Delete", "standardAction": "delete", "dataAccess": { "object": "Department", "actions": ["delete"] }, "variant": "danger", "confirmMessageKey": "Action_Delete_Confirm" }
+    ]
+  }
+}

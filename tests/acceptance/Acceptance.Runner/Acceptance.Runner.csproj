@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Acceptance</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.61.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Acceptance.InteractiveTerminal\Acceptance.InteractiveTerminal.csproj"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\apps\host-api\HostApi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\TestSupport\Authorization\RuntimeFeatureCatalogTestSupport.cs"
+             Link="TestSupport\Authorization\RuntimeFeatureCatalogTestSupport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Acceptance.HistoricalMigrations/Example.Stage2.SqlServerMigrations/Example.Stage2.SqlServerMigrations.csproj" />
+    <ProjectReference Include="../../Acceptance.HistoricalMigrations/Example.Stage3.SqlServerMigrations/Example.Stage3.SqlServerMigrations.csproj" />
+    <ProjectReference Include="../../Acceptance.HistoricalMigrations/Organization.Foundation.SqlServerMigrations/Organization.Foundation.SqlServerMigrations.csproj" />
+    <ProjectReference Include="../../Acceptance.HistoricalMigrations/Platform.Foundation.SqlServerMigrations/Platform.Foundation.SqlServerMigrations.csproj" />
+    <Content Include="../../Acceptance.HistoricalMigrations/Authoring/**/*.json" Link="AcceptanceHistory/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

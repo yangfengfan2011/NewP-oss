@@ -1,0 +1,334 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "PersonListView": {
+    "Title": {
+      "zhs": "人员中心",
+      "en": "Person Center"
+    },
+    "Description": {
+      "zhs": "维护组织模块中的人员基础信息。",
+      "en": "Manage person master data in the organization module."
+    },
+    "Section_Basic": {
+      "zhs": "基础信息",
+      "en": "Basic"
+    },
+    "Section_Organization": {
+      "zhs": "组织信息",
+      "en": "Organization"
+    },
+    "Section_Employment": {
+      "zhs": "任职信息",
+      "en": "Employment"
+    },
+    "Field_PersonNo": {
+      "zhs": "人员编号",
+      "en": "Person No."
+    },
+    "Field_PersonNo_Placeholder": {
+      "zhs": "请输入人员编号",
+      "en": "Enter person no."
+    },
+    "Field_ENAME": {
+      "zhs": "姓名",
+      "en": "Name"
+    },
+    "Field_ENAME_Placeholder": {
+      "zhs": "请输入姓名",
+      "en": "Enter name"
+    },
+    "Field_BirthDate": {
+      "zhs": "出生日期",
+      "en": "Birth Date"
+    },
+    "Field_BirthDate_Placeholder": {
+      "zhs": "请选择出生日期",
+      "en": "Select birth date"
+    },
+    "Field_CompanyId": {
+      "zhs": "所属公司",
+      "en": "Company"
+    },
+    "Field_CompanyId_Placeholder": {
+      "zhs": "请选择所属公司",
+      "en": "Select company"
+    },
+    "Field_DepartmentId": {
+      "zhs": "所属部门",
+      "en": "Department"
+    },
+    "Field_DepartmentId_Placeholder": {
+      "zhs": "请选择所属部门",
+      "en": "Select department"
+    },
+    "Field_PositionId": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
+    "Field_PositionId_Placeholder": {
+      "zhs": "请选择岗位",
+      "en": "Select position"
+    },
+    "Field_EmploymentStatus": {
+      "zhs": "任职状态",
+      "en": "Employment Status"
+    },
+    "Field_EmploymentStatus_Placeholder": {
+      "zhs": "请选择任职状态",
+      "en": "Select employment status"
+    },
+    "Field_EmploymentStartedAt": {
+      "zhs": "任职开始时间",
+      "en": "Employment Started At"
+    },
+    "Field_EmploymentStartedAt_Placeholder": {
+      "zhs": "请选择任职开始时间",
+      "en": "Select employment start time"
+    },
+    "Field_EmploymentEndedAt": {
+      "zhs": "任职结束时间",
+      "en": "Employment Ended At"
+    },
+    "Field_EmploymentEndedAt_Placeholder": {
+      "zhs": "请选择任职结束时间",
+      "en": "Select employment end time"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Query_Keyword": {
+      "zhs": "关键字",
+      "en": "Keyword"
+    },
+    "Query_Keyword_Placeholder": {
+      "zhs": "按工号 / 姓名搜索",
+      "en": "Search by person no. / name"
+    },
+    "Query_Company": {
+      "zhs": "公司",
+      "en": "Company"
+    },
+    "Query_Company_Placeholder": {
+      "zhs": "全部公司",
+      "en": "All companies"
+    },
+    "Query_Department": {
+      "zhs": "部门",
+      "en": "Department"
+    },
+    "Query_Department_Placeholder": {
+      "zhs": "全部部门",
+      "en": "All departments"
+    },
+    "Query_Position": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
+    "Query_Position_Placeholder": {
+      "zhs": "全部岗位",
+      "en": "All positions"
+    },
+    "Query_EmploymentStatus": {
+      "zhs": "任职状态",
+      "en": "Employment Status"
+    },
+    "Query_EmploymentStatus_Placeholder": {
+      "zhs": "全部任职状态",
+      "en": "All employment statuses"
+    },
+    "Query_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Query_IsEnabled_Placeholder": {
+      "zhs": "全部启用状态",
+      "en": "All enabled states"
+    },
+    "Query_BirthDateRange": {
+      "zhs": "出生日期范围",
+      "en": "Birth Date Range"
+    },
+    "Query_BirthDateRange_Placeholder": {
+      "zhs": "请选择出生日期范围",
+      "en": "Select birth date range"
+    },
+    "AdvancedFilter_Title": {
+      "zhs": "高级筛选",
+      "en": "Advanced Filter"
+    },
+    "AdvancedFilter_Organization": {
+      "zhs": "组织信息",
+      "en": "Organization"
+    },
+    "AdvancedFilter_Person": {
+      "zhs": "人员信息",
+      "en": "Person Information"
+    },
+    "AdvancedFilter_Status": {
+      "zhs": "状态条件",
+      "en": "Status Conditions"
+    },
+    "Column_PersonNo": {
+      "zhs": "人员编号",
+      "en": "Person No."
+    },
+    "Column_Name": {
+      "zhs": "姓名",
+      "en": "Name"
+    },
+    "Column_BirthDate": {
+      "zhs": "出生日期",
+      "en": "Birth Date"
+    },
+    "Column_CompanyName": {
+      "zhs": "公司",
+      "en": "Company"
+    },
+    "Column_DepartmentName": {
+      "zhs": "部门",
+      "en": "Department"
+    },
+    "Column_PositionName": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
+    "Column_EmploymentStatus": {
+      "zhs": "任职状态",
+      "en": "Employment Status"
+    },
+    "Column_EmploymentStartedAt": {
+      "zhs": "入职时间",
+      "en": "Employment Start Time"
+    },
+    "Column_EmploymentEndedAt": {
+      "zhs": "离职时间",
+      "en": "Employment End Time"
+    },
+    "Column_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Action_Create": {
+      "zhs": "新建人员",
+      "en": "Create Person"
+    },
+    "Action_View": {
+      "zhs": "查看",
+      "en": "View"
+    },
+    "Action_Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "Action_Delete": {
+      "zhs": "删除",
+      "en": "Delete"
+    },
+    "Action_Delete_Confirm": {
+      "zhs": "确认删除该人员吗？",
+      "en": "Delete this person?"
+    },
+    "Action_Delete_BoundDisabled": {
+      "zhs": "已绑定用户账号，永久禁止删除",
+      "en": "A person permanently bound to a user account cannot be deleted"
+    },
+    "Action_Disable": {
+      "zhs": "停用",
+      "en": "Disable"
+    },
+    "Action_Disable_Confirm": {
+      "zhs": "停用会同时停用绑定账号并终止其会话，请填写停用原因。",
+      "en": "Disabling this person also disables the linked account and terminates its sessions. Enter a reason."
+    },
+    "Action_Enable": {
+      "zhs": "启用",
+      "en": "Enable"
+    },
+    "Action_Enable_Confirm": {
+      "zhs": "启用人员不会自动恢复绑定账号或已终止会话，确认继续？",
+      "en": "Enabling this person will not restore the linked account or terminated sessions. Continue?"
+    },
+    "Action_Processing": {
+      "zhs": "处理中...",
+      "en": "Processing..."
+    },
+    "Action_More": {
+      "zhs": "更多",
+      "en": "More"
+    },
+    "Action_ApplyAdvanced": {
+      "zhs": "应用筛选",
+      "en": "Apply Filter"
+    },
+    "Action_ResetAdvanced": {
+      "zhs": "重置条件",
+      "en": "Reset Conditions"
+    },
+    "Action_AdvancedFilter": {
+      "zhs": "高级筛选",
+      "en": "Advanced Filter"
+    },
+    "Toolbar_ColumnSettings": {
+      "zhs": "列设置",
+      "en": "Column Settings"
+    },
+    "Toolbar_BatchActions": {
+      "zhs": "批量操作",
+      "en": "Batch Actions"
+    },
+    "Drawer_View": {
+      "zhs": "查看人员",
+      "en": "View Person"
+    },
+    "Drawer_Edit": {
+      "zhs": "编辑人员",
+      "en": "Edit Person"
+    },
+    "Drawer_Create": {
+      "zhs": "新建人员",
+      "en": "Create Person"
+    },
+    "Action_ViewFullDetail": {
+      "zhs": "查看完整详情",
+      "en": "View Full Details"
+    },
+    "Export_Current": {
+      "zhs": "导出本页",
+      "en": "Export Current Page"
+    },
+    "Export_All": {
+      "zhs": "导出筛选结果",
+      "en": "Export Filtered Results"
+    },
+    "Pagination_Prev": {
+      "zhs": "上一页",
+      "en": "Previous"
+    },
+    "Pagination_Next": {
+      "zhs": "下一页",
+      "en": "Next"
+    },
+    "Field_EID": {
+      "zhs": "唯一标识",
+      "en": "Unique ID"
+    },
+    "Field_AccountEID": {
+      "zhs": "绑定账号标识",
+      "en": "Linked Account ID"
+    },
+    "Field_AccountBoundAt": {
+      "zhs": "账号绑定时间",
+      "en": "Account Linked At"
+    },
+    "Field_AccountBoundBy": {
+      "zhs": "账号绑定人",
+      "en": "Account Linked By"
+    },
+    "Field_AccountBindingReason": {
+      "zhs": "账号绑定原因",
+      "en": "Account Link Reason"
+    }
+  }
+}

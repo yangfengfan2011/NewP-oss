@@ -1,0 +1,11 @@
+{
+  "moduleId": "PluginWithInvalidHash",
+  "displayName": "Plugin With Invalid Hash",
+  "version": "1.0.0",
+  "entryAssembly": "PluginWithInvalidHash.dll",
+  "entryAssemblySha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "moduleId": "Authorization",
+  "dataExecutions": [
+    {"key":"authorization.workbench.read","moduleId":"Authorization","provider":"authorization.backend","boundary":"entry","featureBehaviors":["authorization.workbench.read"],"branches":["catalog","detail"],"requirements":[{"role":"query","stage":"read","shape":"query","resources":["authorization.role"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null,"branch":"catalog"},{"role":"target","stage":"read","shape":"object","resources":["authorization.role"],"anyOf":[["read"]],"minimumCount":1,"maximumCount":1,"branch":"detail"}]},
+    {"key":"authorization.role.list","moduleId":"Authorization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["authorization.role.read"],"resourceKey":"authorization.role"},
+    {"key":"authorization.role.read","moduleId":"Authorization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["authorization.role.read"],"resourceKey":"authorization.role"}
+  ],
+  "displayName": "权限管理",
+  "version": "1.4.0",
+  "description": "开发期内建插件清单",
+  "entryAssembly": "../../AuthorizationModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "frontend": {
+    "behaviorKey": "authorization.frontend",
+    "entry": "authorization",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "authorization.workbench",
+      "authorization.role.list",
+      "authorization.role.detail",
+      "authorization.dataScope"
+    ]
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/Permission.model.json",
+      "metadata/models/FunctionPoint.model.json",
+      "metadata/models/RoleFunctionGrant.model.json",
+      "metadata/models/Role.model.json",
+      "metadata/models/RolePermission.model.json",
+      "metadata/models/UserRole.model.json",
+      "metadata/models/DataScopeRuleNode.model.json",
+      "metadata/models/DataScopeRuleSubject.model.json",
+      "metadata/models/DataScopeObjectSubject.model.json",
+      "metadata/models/DataScopeObjectAction.model.json"
+    ]
+  },
+  "schemaVersion": "1.0",
+  "backend": {
+    "behaviorKey": "authorization.backend"
+  },
+  "dataExecutionProviders": [
+    {
+      "key": "authorization.collection.view", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "execution-owner",
+      "requirements": [
+        { "role": "view", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read"]] }
+      ]
+    },
+    {
+      "key": "authorization.object.view", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "resource-owner",
+      "requirements": [
+        { "role": "view", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read"]] }
+      ]
+    }
+  ],
+  "features": [
+    {
+      "key": "authorization.workbench",
+      "kind": "navigation",
+      "title": "功能授权",
+      "titleKey": "RoleView.WorkbenchTitle",
+      "behaviorKey": "authorization.workbench.read"
+    },
+    {
+      "key": "save",
+      "kind": "action",
+      "title": "保存授权",
+      "titleKey": "RoleView.Save",
+      "parentKey": "authorization.workbench",
+      "behaviorKey": "authorization.workbench.save"
+    },
+    {
+      "key": "authorization.dataScope",
+      "kind": "navigation",
+      "title": "数据范围规则",
+      "titleKey": "Navigation.DataScope",
+      "behaviorKey": "authorization.dataScope.read"
+    },
+    {
+      "key": "dataScope.save",
+      "kind": "action",
+      "title": "保存规则",
+      "titleKey": "DataScope.SaveRoot",
+      "parentKey": "authorization.dataScope",
+      "behaviorKey": "authorization.dataScope.save"
+    }
+  ],
+  "dataActions": [
+    {
+      "key": "read",
+      "title": "读取",
+      "behaviorKey": "data.read",
+      "requiresRead": false
+    },
+    {
+      "key": "create",
+      "title": "新建",
+      "behaviorKey": "data.create",
+      "requiresRead": false
+    },
+    {
+      "key": "edit",
+      "title": "编辑",
+      "behaviorKey": "data.edit",
+      "requiresRead": true
+    },
+    {
+      "key": "delete",
+      "title": "删除",
+      "behaviorKey": "data.delete",
+      "requiresRead": true
+    },
+    {
+      "key": "authorize",
+      "title": "授权",
+      "behaviorKey": "data.authorize",
+      "requiresRead": true
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Document",
+  "modelDigest": "520944d147894440d460239ab7b1e24036c7922b7d65c9a77ba3cd0006dee0a1",
+  "bundleChecksum": "62d35cef97920a7f4f3cc46d64a506cfb9767bd10afafacb01f66478096d4d86",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20261008110912_Document_000001_Metadata",
+      "previousContentDigest": null,
+      "contentDigest": "f68a87c2e0cd006fcbff6cb4bd49d21af6c46ea6a54982a2d7efd448baa870ea",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "a5f8051ba73e301ddfed4bc91bfe5fa1a9a954a97a1d099e45cc329effc0dacb",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000002",
+      "migrationId": "20261013143224_Document_000002_InitialIdentity",
+      "previousContentDigest": "f68a87c2e0cd006fcbff6cb4bd49d21af6c46ea6a54982a2d7efd448baa870ea",
+      "contentDigest": "2463a9c3d5398efe240d69e2d6ff1f96b98cdc1f5fda784bb5125da4b68b9e12",
+      "fromModelDigest": "a5f8051ba73e301ddfed4bc91bfe5fa1a9a954a97a1d099e45cc329effc0dacb",
+      "toModelDigest": "f01e63de7a6d9705f65ca55ca9dcfebf2e81425d8e31f1c71ebb643c33d6fabd",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000003",
+      "migrationId": "20261013164637_Document_000003_FileLink",
+      "previousContentDigest": "2463a9c3d5398efe240d69e2d6ff1f96b98cdc1f5fda784bb5125da4b68b9e12",
+      "contentDigest": "1656afb793e00ebae00d0e95b2f79f70a5d05b42861e60fa3f99f2a2c84b518e",
+      "fromModelDigest": "f01e63de7a6d9705f65ca55ca9dcfebf2e81425d8e31f1c71ebb643c33d6fabd",
+      "toModelDigest": "5c466185e2c02bb337f167a12222cca2705cdc50a09c55cc2ab727b4978a7a11",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000004",
+      "migrationId": "20261017110042_Document_000004_EntityOwnership",
+      "previousContentDigest": "1656afb793e00ebae00d0e95b2f79f70a5d05b42861e60fa3f99f2a2c84b518e",
+      "contentDigest": "5597a92de80489c90ec256c7cf6641a03d924ae9b07e2e404885742345420e66",
+      "fromModelDigest": "5c466185e2c02bb337f167a12222cca2705cdc50a09c55cc2ab727b4978a7a11",
+      "toModelDigest": "520944d147894440d460239ab7b1e24036c7922b7d65c9a77ba3cd0006dee0a1",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

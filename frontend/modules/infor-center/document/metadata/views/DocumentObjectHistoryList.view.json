@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "document.history.list",
+    "resourceKey": "document.history",
+    "mode": "list",
+    "dataAccess": { "execution": "document.history.list", "resources": ["document.document"] },
+    "dicKey": "DocumentHistory",
+    "titleKey": "Title",
+    "descriptionKey": "Help",
+    "query": {
+      "fields": [
+        {
+          "key": "from",
+          "labelKey": "From",
+          "source": "model",
+          "field": "occurredAt"
+        },
+        {
+          "key": "to",
+          "labelKey": "To",
+          "source": "model",
+          "field": "occurredAt"
+        },
+        {
+          "key": "actorId",
+          "labelKey": "ActorId",
+          "source": "model",
+          "field": "actor"
+        },
+        {
+          "key": "eventType",
+          "labelKey": "EventType",
+          "source": "model",
+          "field": "eventType"
+        },
+        {
+          "key": "objectType",
+          "labelKey": "ObjectType",
+          "source": "model",
+          "field": "objectType"
+        },
+        {
+          "key": "ipAddress",
+          "labelKey": "IpAddress",
+          "source": "model",
+          "field": "ipAddress"
+        },
+        {
+          "key": "description",
+          "labelKey": "Description",
+          "source": "model",
+          "field": "description"
+        }
+      ],
+      "defaultPageSize": 20
+    },
+    "columns": [
+      {
+        "key": "occurredAt",
+        "labelKey": "OccurredAt",
+        "source": "projection",
+        "field": "occurredAt"
+      },
+      {
+        "key": "eventType",
+        "labelKey": "EventType",
+        "source": "projection",
+        "field": "eventType"
+      },
+      {
+        "key": "objectType",
+        "labelKey": "ObjectType",
+        "source": "projection",
+        "field": "objectType"
+      },
+      {
+        "key": "actor",
+        "labelKey": "Actor",
+        "source": "projection",
+        "field": "actor"
+      },
+      {
+        "key": "target",
+        "labelKey": "Target",
+        "source": "projection",
+        "field": "target"
+      },
+      {
+        "key": "description",
+        "labelKey": "Description",
+        "source": "projection",
+        "field": "description"
+      },
+      {
+        "key": "ipAddress",
+        "labelKey": "IpAddress",
+        "source": "projection",
+        "field": "ipAddress"
+      }
+    ],
+    "outputActions": [
+      { "key": "exportSelected", "dataAccess": { "object": "Document", "actions": ["read"] } },
+      { "key": "exportAll", "dataAccess": { "object": "Document", "actions": ["read"] } },
+      { "key": "printSelected", "dataAccess": { "object": "Document", "actions": ["read"] } },
+      { "key": "printAll", "dataAccess": { "object": "Document", "actions": ["read"] } }
+    ],
+    "pageActions": [
+      {
+        "key": "output",
+        "labelKey": "Output",
+        "standardAction": "view",
+        "handlerKey": "view",
+        "inputKey": "objectHistoryOutput",
+        "dataAccess": { "object": "Document", "actions": ["read"] }
+      }
+    ],
+    "rowActions": [
+      {
+        "key": "view",
+        "labelKey": "View",
+        "standardAction": "view",
+        "handlerKey": "view",
+        "inputKey": "objectHistoryDetails",
+        "dataAccess": { "object": "Document", "actions": ["read"] }
+      }
+    ],
+    "detailContributions": [
+      {
+        "key": "document.object.history",
+        "dataAccess": { "object": "Document", "actions": ["read"] },
+        "targetViewKey": "document.document.detail",
+        "navigationKey": "document.history",
+        "pageRef": {
+          "pageKey": "platform.list",
+          "parameters": {
+            "viewKey": "document.history.list",
+            "anchorModelKey": "Document"
+          },
+          "inputResolverKey": "document.document.historyInput"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.HostApi</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="module-composition.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="modules\**\plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Development-time staging only; runtime module composition is manifest-driven. -->
+    <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\..\server\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\server\platform-authorization\PlatformAuthorization.csproj" />
+    <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
+    <ProjectReference Include="..\..\server\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\..\server\platform-presentation\PlatformPresentation.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence-composition\PlatformPersistence.Composition.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.sqlserver\PlatformPersistence.EfCore.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.oracle\PlatformPersistence.EfCore.OracleMigrations.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.mysql\PlatformPersistence.EfCore.MySqlMigrations.csproj" />
+    <ProjectReference Include="..\..\server\plugin-platform\PluginPlatform.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="../../server/platform-modeling/metadata/storage-types.json" Link="server/platform-modeling/metadata/storage-types.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 原位工程按 owner 目录发现；归组不新增逐组件 Host 接线。 -->
+    <NewpModuleProject Include="../../server/modules/**/*.csproj" Exclude="../../server/modules/**/obj/**;../../server/modules/**/bin/**">
+      <OwnerDirectory>$([System.IO.Path]::GetDirectoryName('%(FullPath)'))</OwnerDirectory>
+      <!-- Contracts 与 Migrations.* 是组件的辅助工程目录；其他工程直接归属所在目录。 -->
+      <OwnerDirectory Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(OwnerDirectory)', '[/\\](Contracts|Migrations\.[^/\\]+)$'))">$([System.IO.Path]::GetDirectoryName('%(OwnerDirectory)'))</OwnerDirectory>
+      <NewpModuleOwner>$([System.IO.Path]::GetFileName('%(OwnerDirectory)'))</NewpModuleOwner>
+    </NewpModuleProject>
+    <ProjectReference Include="@(NewpModuleProject)" />
+  </ItemGroup>
+  <!-- 发行裁剪按显式组件身份进行；不得将未交付实现预装到独立安装验证目标。 -->
+  <ItemGroup Condition="'$(NewpExcludedModuleIds)' != ''">
+    <NewpExcludedModule Include="$(NewpExcludedModuleIds.Split(','))">
+      <NewpModuleOwner>$([System.String]::Copy('%(Identity)').Trim())</NewpModuleOwner>
+    </NewpExcludedModule>
+    <ProjectReference Remove="@(NewpExcludedModule)" MatchOnMetadata="NewpModuleOwner" MatchOnMetadataOptions="CaseSensitive" />
+  </ItemGroup>
+</Project>

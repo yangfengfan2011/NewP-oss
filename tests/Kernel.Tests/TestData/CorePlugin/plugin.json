@@ -1,0 +1,11 @@
+{
+  "moduleId": "Core",
+  "displayName": "Core Plugin",
+  "version": "1.0.0",
+  "description": "A core dependency plugin for discovery tests",
+  "entryAssembly": "Core.dll",
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  }
+}

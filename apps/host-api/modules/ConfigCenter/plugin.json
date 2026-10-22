@@ -1,0 +1,21 @@
+{
+  "moduleId": "ConfigCenter",
+  "displayName": "配置中心",
+  "version": "1.0.0",
+  "description": "开发期内建插件清单",
+  "entryAssembly": "../../ConfigCenter.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "frontend": {
+    "enabled": false
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/ConfigItem.model.json",
+      "metadata/models/ValueListItem.model.json"
+    ]
+  }
+}

@@ -1,0 +1,1312 @@
+{
+  "packageSha256": "D9DCA61A658E68F3DC9352CC04AE7BAEB2239A16ADBA4A50A8D0B7F960A46500",
+  "blueprint": {
+    "schemaVersion": "1.0",
+    "profile": "standard-data.v1",
+    "moduleId": "Partner.AssetCatalog",
+    "displayName": "\u8D44\u4EA7\u76EE\u5F55",
+    "version": "1.0.0",
+    "description": "Partner-owned standard asset catalog",
+    "dependencies": [],
+    "composition": {
+      "members": []
+    },
+    "compatibility": {
+      "platformApi": {
+        "minInclusive": "1.0.0",
+        "maxExclusive": "2.0.0"
+      },
+      "persistence": {
+        "contract": "ef-migrations.v1",
+        "providers": [
+          "sqlServer"
+        ]
+      }
+    },
+    "standardData": {
+      "resources": [
+        {
+          "key": "Asset",
+          "pluralName": "Assets",
+          "displayName": "\u8D44\u4EA7",
+          "displayField": "Name",
+          "fields": [
+            {
+              "name": "Code",
+              "type": "string",
+              "required": true,
+              "unique": true
+            },
+            {
+              "name": "Name",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "PurchasedAt",
+              "type": "date",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    "navigation": {
+      "slot": "extensions",
+      "group": "\u6269\u5C55\u793A\u4F8B",
+      "menu": "\u8D44\u4EA7\u76EE\u5F55",
+      "order": 100
+    },
+    "persistence": {
+      "models": [
+        "metadata/models/Asset.model.json"
+      ],
+      "migrations": {
+        "sqlServer": {
+          "assembly": "migrations/sqlserver/Partner.AssetCatalog.Migrations.dll",
+          "manifest": "migrations/sqlserver/migrations.json"
+        }
+      }
+    }
+  },
+  "projection": {
+    "moduleSlug": "partner-asset-catalog",
+    "resources": [
+      {
+        "resourceKey": "Asset",
+        "apiRoute": "/api/plugins/partner-asset-catalog/assets",
+        "pageRoute": "/plugins/partner-asset-catalog/assets",
+        "schemaName": "np_partner_asset_catalog",
+        "tableName": "Assets",
+        "uniqueIndexes": [
+          "UX_Assets_Code"
+        ],
+        "detailViewKey": null
+      }
+    ]
+  },
+  "documents": {
+    "models/Asset.model.json": {
+      "schemaVersion": "1.0",
+      "type": "model",
+      "Asset": {
+        "kind": "Entity",
+        "sections": [
+          {
+            "key": "basic",
+            "titleKey": "Section_Basic",
+            "fields": [
+              "Code",
+              "Name",
+              "PurchasedAt"
+            ]
+          }
+        ],
+        "fields": [
+          {
+            "name": "Code",
+            "storage": {
+              "type": "string",
+              "nullable": false
+            },
+            "uiType": "text",
+            "form": {
+              "create": {
+                "mode": "editable",
+                "required": true
+              },
+              "edit": {
+                "mode": "editable",
+                "required": true
+              }
+            }
+          },
+          {
+            "name": "Name",
+            "storage": {
+              "type": "string",
+              "nullable": false
+            },
+            "uiType": "text",
+            "form": {
+              "create": {
+                "mode": "editable",
+                "required": true
+              },
+              "edit": {
+                "mode": "editable",
+                "required": true
+              }
+            }
+          },
+          {
+            "name": "PurchasedAt",
+            "storage": {
+              "type": "date",
+              "nullable": true
+            },
+            "uiType": "date",
+            "form": {
+              "create": {
+                "mode": "editable",
+                "required": false
+              },
+              "edit": {
+                "mode": "editable",
+                "required": false
+              }
+            }
+          },
+          {
+            "name": "EID",
+            "form": {
+              "create": {
+                "mode": "hidden"
+              },
+              "edit": {
+                "mode": "hidden"
+              }
+            },
+            "contract": {
+              "valueType": "objectId"
+            },
+            "storage": {
+              "type": "string",
+              "nullable": false
+            },
+            "uiType": "text"
+          },
+          {
+            "name": "CreatedBy",
+            "form": {
+              "create": {
+                "mode": "hidden"
+              },
+              "edit": {
+                "mode": "hidden"
+              }
+            },
+            "contract": {
+              "valueType": "user"
+            },
+            "display": {
+              "type": "user",
+              "targetModel": "IdentityAccount",
+              "targetIdField": "EID",
+              "targetDisplayField": "ENAME",
+              "format": ""
+            },
+            "storage": {
+              "type": "string",
+              "nullable": false
+            },
+            "uiType": "text"
+          },
+          {
+            "name": "CreatedAt",
+            "form": {
+              "create": {
+                "mode": "hidden"
+              },
+              "edit": {
+                "mode": "hidden"
+              }
+            },
+            "contract": {
+              "valueType": "instant"
+            },
+            "display": {
+              "type": "instant",
+              "targetModel": "",
+              "targetIdField": "",
+              "targetDisplayField": "",
+              "format": "dateTime"
+            },
+            "storage": {
+              "type": "datetime",
+              "nullable": false
+            },
+            "uiType": "dateTime"
+          },
+          {
+            "name": "UpdatedBy",
+            "form": {
+              "create": {
+                "mode": "hidden"
+              },
+              "edit": {
+                "mode": "hidden"
+              }
+            },
+            "contract": {
+              "valueType": "user"
+            },
+            "display": {
+              "type": "user",
+              "targetModel": "IdentityAccount",
+              "targetIdField": "EID",
+              "targetDisplayField": "ENAME",
+              "format": ""
+            },
+            "storage": {
+              "type": "string",
+              "nullable": false
+            },
+            "uiType": "text"
+          },
+          {
+            "name": "UpdatedAt",
+            "form": {
+              "create": {
+                "mode": "hidden"
+              },
+              "edit": {
+                "mode": "hidden"
+              }
+            },
+            "contract": {
+              "valueType": "instant"
+            },
+            "display": {
+              "type": "instant",
+              "targetModel": "",
+              "targetIdField": "",
+              "targetDisplayField": "",
+              "format": "dateTime"
+            },
+            "storage": {
+              "type": "datetime",
+              "nullable": false
+            },
+            "uiType": "dateTime"
+          }
+        ]
+      }
+    },
+    "navigation/standard-data.nav.json": {
+      "schemaVersion": "1.0",
+      "type": "nav",
+      "navigation": {
+        "items": [
+          {
+            "key": "partner-asset-catalog",
+            "titleKey": "\u6269\u5C55\u793A\u4F8B",
+            "icon": "database",
+            "order": 100
+          },
+          {
+            "key": "partner-asset-catalog.asset",
+            "titleKey": "\u8D44\u4EA7",
+            "icon": "table",
+            "parentKey": "partner-asset-catalog",
+            "path": "/plugins/partner-asset-catalog/assets",
+            "order": 100,
+            "entryType": "standard-list",
+            "targetKey": "partner-asset-catalog.asset.list",
+            "featureAuthorization": true
+          }
+        ]
+      }
+    },
+    "views/AssetDetail.view.json": {
+      "schemaVersion": "1.0",
+      "type": "view",
+      "view": {
+        "key": "partner.asset.detail",
+        "dicKey": "AssetDetailView",
+        "titleKey": "\u8D44\u4EA7\u8BE6\u60C5",
+        "mode": "detail",
+        "model": "Asset",
+        "sections": [
+          {
+            "key": "basic",
+            "titleKey": "\u57FA\u672C\u4FE1\u606F",
+            "fields": [
+              "Code",
+              "Name",
+              "PurchasedAt"
+            ]
+          }
+        ],
+        "summaryBlocks": [],
+        "pageActions": []
+      }
+    },
+    "views/AssetList.view.json": {
+      "schemaVersion": "1.0",
+      "type": "view",
+      "view": {
+        "key": "partner-asset-catalog.asset.list",
+        "dicKey": "AssetListView",
+        "titleKey": "\u8D44\u4EA7",
+        "mode": "list",
+        "model": "Asset",
+        "resourceKey": "Partner.AssetCatalog.Asset",
+        "dataAccess": {
+          "execution": "Partner.AssetCatalog.Asset.list",
+          "resources": [
+            "Partner.AssetCatalog.Asset"
+          ]
+        },
+        "editorMode": "drawer",
+        "featureActions": [
+          {
+            "key": "authorize",
+            "titleKey": "Authorize",
+            "behaviorKey": "Partner.AssetCatalog.Asset.authorize",
+            "dataAccess": {
+              "object": "Asset",
+              "actions": [
+                "authorize"
+              ]
+            }
+          }
+        ],
+        "columns": [
+          {
+            "key": "code",
+            "labelKey": "Code",
+            "source": "model",
+            "field": "Code",
+            "sortable": true
+          },
+          {
+            "key": "name",
+            "labelKey": "Name",
+            "source": "model",
+            "field": "Name",
+            "sortable": true
+          },
+          {
+            "key": "purchased-at",
+            "labelKey": "PurchasedAt",
+            "source": "model",
+            "field": "PurchasedAt",
+            "sortable": true
+          }
+        ],
+        "pageActions": [
+          {
+            "key": "create",
+            "labelKey": "Action_Create",
+            "standardAction": "create",
+            "variant": "primary",
+            "dataAccess": {
+              "object": "Asset",
+              "actions": [
+                "create"
+              ]
+            }
+          }
+        ],
+        "rowActions": [
+          {
+            "key": "edit",
+            "labelKey": "Action_Edit",
+            "standardAction": "edit",
+            "dataAccess": {
+              "object": "Asset",
+              "actions": [
+                "edit"
+              ]
+            },
+            "inputReadSourceKey": "Partner.AssetCatalog.Asset.read"
+          }
+        ]
+      }
+    }
+  },
+  "dataAccess": [
+    {
+      "id": "Partner.AssetCatalog/view:Partner.AssetCatalog.Asset.read/read",
+      "moduleId": "Partner.AssetCatalog",
+      "viewKey": "Partner.AssetCatalog.Asset.read",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "Partner.AssetCatalog.Asset.read",
+      "resources": [
+        "Partner.AssetCatalog.Asset"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset/surface:list.rowActions/action:edit"
+      ],
+      "requirements": [
+        {
+          "role": "target",
+          "stage": "read",
+          "shape": "object",
+          "resources": [
+            "Partner.AssetCatalog.Asset"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        }
+      ],
+      "provider": "standardCrud.read"
+    },
+    {
+      "id": "Partner.AssetCatalog/view:partner-asset-catalog.asset.list/featureActions/action:authorize",
+      "moduleId": "Partner.AssetCatalog",
+      "viewKey": "partner-asset-catalog.asset.list",
+      "surface": "featureActions",
+      "actionKey": "authorize",
+      "execution": "",
+      "resources": [
+        "Partner.AssetCatalog.Asset"
+      ],
+      "actions": [
+        "authorize"
+      ],
+      "featurePositions": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset/surface:list.custom/action:authorize"
+      ],
+      "object": "Asset",
+      "businessBinding": "Partner.AssetCatalog.Asset.authorize"
+    },
+    {
+      "id": "Partner.AssetCatalog/view:partner-asset-catalog.asset.list/pageActions/action:create",
+      "moduleId": "Partner.AssetCatalog",
+      "viewKey": "partner-asset-catalog.asset.list",
+      "surface": "pageActions",
+      "actionKey": "create",
+      "execution": "",
+      "resources": [
+        "Partner.AssetCatalog.Asset"
+      ],
+      "actions": [
+        "create"
+      ],
+      "featurePositions": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset/surface:list.pageActions/action:create"
+      ],
+      "object": "Asset",
+      "businessBinding": "Partner.AssetCatalog.Asset.create"
+    },
+    {
+      "id": "Partner.AssetCatalog/view:partner-asset-catalog.asset.list/read",
+      "moduleId": "Partner.AssetCatalog",
+      "viewKey": "partner-asset-catalog.asset.list",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "Partner.AssetCatalog.Asset.list",
+      "resources": [
+        "Partner.AssetCatalog.Asset"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset"
+      ],
+      "requirements": [
+        {
+          "role": "query",
+          "stage": "read",
+          "shape": "query",
+          "resources": [
+            "Partner.AssetCatalog.Asset"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 0,
+          "maximumCount": null
+        }
+      ],
+      "provider": "standardCrud.list"
+    },
+    {
+      "id": "Partner.AssetCatalog/view:partner-asset-catalog.asset.list/rowActions/action:edit",
+      "moduleId": "Partner.AssetCatalog",
+      "viewKey": "partner-asset-catalog.asset.list",
+      "surface": "rowActions",
+      "actionKey": "edit",
+      "execution": "",
+      "resources": [
+        "Partner.AssetCatalog.Asset"
+      ],
+      "actions": [
+        "edit"
+      ],
+      "featurePositions": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset/surface:list.rowActions/action:edit"
+      ],
+      "object": "Asset",
+      "businessBinding": "Partner.AssetCatalog.Asset.update"
+    }
+  ],
+  "features": [
+    {
+      "position": "Partner.AssetCatalog/navigation:partner-asset-catalog",
+      "moduleId": "Partner.AssetCatalog",
+      "key": "partner-asset-catalog",
+      "kind": "navigation",
+      "title": "\u6269\u5C55\u793A\u4F8B",
+      "parentPosition": null,
+      "behaviorKey": "",
+      "entryDependencies": [],
+      "order": 0,
+      "referenceKey": "navigation:partner-asset-catalog",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": null,
+      "staticScopeTitleKey": null,
+      "actionScope": null,
+      "readBehaviors": [],
+      "container": true
+    },
+    {
+      "position": "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset",
+      "moduleId": "Partner.AssetCatalog",
+      "key": "partner-asset-catalog.asset",
+      "kind": "navigation",
+      "title": "\u8D44\u4EA7",
+      "parentPosition": "Partner.AssetCatalog/navigation:partner-asset-catalog",
+      "behaviorKey": "Partner.AssetCatalog.Asset.read",
+      "entryDependencies": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:partner-asset-catalog.asset",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": null,
+      "staticScopeTitleKey": null,
+      "actionScope": null,
+      "readBehaviors": [
+        "Partner.AssetCatalog.Asset.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset/surface:list.custom/action:authorize",
+      "moduleId": "Partner.AssetCatalog",
+      "key": "authorize",
+      "kind": "action",
+      "title": "Authorize",
+      "parentPosition": "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset",
+      "behaviorKey": "Partner.AssetCatalog.Asset.authorize",
+      "entryDependencies": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog",
+        "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:partner-asset-catalog.asset/surface:list.custom/action:authorize",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "AssetListView.Authorize",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.custom",
+      "readBehaviors": [],
+      "container": false
+    },
+    {
+      "position": "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset/surface:list.pageActions/action:create",
+      "moduleId": "Partner.AssetCatalog",
+      "key": "create",
+      "kind": "action",
+      "title": "Action_Create",
+      "parentPosition": "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset",
+      "behaviorKey": "Partner.AssetCatalog.Asset.create",
+      "entryDependencies": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog",
+        "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:partner-asset-catalog.asset/surface:list.pageActions/action:create",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "AssetListView.Action_Create",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "Partner.AssetCatalog.Asset.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset/surface:list.rowActions/action:edit",
+      "moduleId": "Partner.AssetCatalog",
+      "key": "edit",
+      "kind": "action",
+      "title": "Action_Edit",
+      "parentPosition": "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset",
+      "behaviorKey": "Partner.AssetCatalog.Asset.update",
+      "entryDependencies": [
+        "Partner.AssetCatalog/navigation:partner-asset-catalog",
+        "Partner.AssetCatalog/navigation:partner-asset-catalog/navigation:partner-asset-catalog.asset"
+      ],
+      "order": 0,
+      "referenceKey": "navigation:partner-asset-catalog.asset/surface:list.rowActions/action:edit",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "AssetListView.Action_Edit",
+      "staticScopeTitleKey": null,
+      "actionScope": "list.rowActions",
+      "readBehaviors": [
+        "Partner.AssetCatalog.Asset.read"
+      ],
+      "container": false
+    }
+  ],
+  "nativeCatalog": {
+    "schemaVersion": "1.0",
+    "snapshotId": "2752ba3a5d3a5af41f66e0a2a08c09d59a6c8b672baf219223c571db24bcefe1",
+    "compilerContractVersion": "1.0",
+    "planHash": "2752ba3a5d3a5af41f66e0a2a08c09d59a6c8b672baf219223c571db24bcefe1",
+    "compositionGraph": [
+      {
+        "moduleId": "Audit",
+        "version": "1.1.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "Authentication",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "Authorization",
+        "version": "1.4.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "ConfigCenter",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "Demo",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": null,
+        "members": []
+      },
+      {
+        "moduleId": "Document",
+        "version": "1.6.0",
+        "enabled": true,
+        "parentModuleId": "InforCenter",
+        "members": []
+      },
+      {
+        "moduleId": "Example",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": null,
+        "members": []
+      },
+      {
+        "moduleId": "Files",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "Identity",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "InforCenter",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": null,
+        "members": [
+          "Document",
+          "Part",
+          "Workspace"
+        ]
+      },
+      {
+        "moduleId": "MetadataConfigCenter",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "ModuleTemplateSample",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": null,
+        "members": []
+      },
+      {
+        "moduleId": "Organization",
+        "version": "1.1.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "Part",
+        "version": "1.6.0",
+        "enabled": true,
+        "parentModuleId": "InforCenter",
+        "members": []
+      },
+      {
+        "moduleId": "Partner.AssetCatalog",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": null,
+        "members": []
+      },
+      {
+        "moduleId": "Platform",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": null,
+        "members": [
+          "Audit",
+          "Authentication",
+          "Authorization",
+          "ConfigCenter",
+          "Files",
+          "Identity",
+          "MetadataConfigCenter",
+          "Organization",
+          "PluginOps"
+        ]
+      },
+      {
+        "moduleId": "PluginOps",
+        "version": "1.0.0",
+        "enabled": true,
+        "parentModuleId": "Platform",
+        "members": []
+      },
+      {
+        "moduleId": "Workspace",
+        "version": "1.6.0",
+        "enabled": true,
+        "parentModuleId": "InforCenter",
+        "members": []
+      }
+    ],
+    "platformCompositionModuleId": "Platform",
+    "requiredModuleIds": [
+      "Audit",
+      "Authentication",
+      "Authorization",
+      "ConfigCenter",
+      "Files",
+      "Identity",
+      "MetadataConfigCenter",
+      "Organization",
+      "Platform",
+      "PluginOps"
+    ],
+    "projections": {
+      "frontend": "/plugins/frontend-plugin-manifest.json",
+      "metadata": "/plugins/metadata-runtime-manifest.json",
+      "localization": "/plugins/localization-manifest.json",
+      "projectionHash": "2752ba3a5d3a5af41f66e0a2a08c09d59a6c8b672baf219223c571db24bcefe1"
+    },
+    "modules": [
+      {
+        "moduleId": "Audit",
+        "version": "1.1.0",
+        "displayName": "\u4E1A\u52A1\u53D8\u66F4\u8BB0\u5F55",
+        "description": "\u53EF\u4FE1\u4E1A\u52A1\u53D8\u66F4\u8BB0\u5F55\u4E0E\u65E2\u6709\u8BBF\u95EE\u89C2\u6D4B",
+        "dependencies": [
+          "Authorization",
+          "Identity"
+        ],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": {
+          "entryAssembly": "../../AuditModule.dll",
+          "behaviorKey": "audit.backend"
+        },
+        "frontend": {
+          "moduleId": "audit",
+          "url": null,
+          "behaviorKey": "audit.frontend",
+          "bindingMode": "behavior-bindings",
+          "bindings": [
+            "audit.change.detail",
+            "audit.change.list"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Audit/metadata",
+        "modelKeys": [
+          "BusinessChange"
+        ]
+      },
+      {
+        "moduleId": "Authentication",
+        "version": "1.0.0",
+        "displayName": "\u8BA4\u8BC1\u4F1A\u8BDD",
+        "description": "\u5E73\u53F0\u670D\u52A1\u7AEF\u8BA4\u8BC1\u4F1A\u8BDD\u6CE8\u518C\u8868\u6A21\u5757",
+        "dependencies": [
+          "Identity"
+        ],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": {
+          "entryAssembly": "../../AuthenticationModule.dll",
+          "behaviorKey": "authentication.backend"
+        },
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/Authentication/metadata",
+        "modelKeys": [
+          "AuthenticationSession"
+        ]
+      },
+      {
+        "moduleId": "Authorization",
+        "version": "1.4.0",
+        "displayName": "\u6743\u9650\u7BA1\u7406",
+        "description": "\u5F00\u53D1\u671F\u5185\u5EFA\u63D2\u4EF6\u6E05\u5355",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": {
+          "entryAssembly": "../../AuthorizationModule.dll",
+          "behaviorKey": "authorization.backend"
+        },
+        "frontend": {
+          "moduleId": "authorization",
+          "url": null,
+          "behaviorKey": "authorization.frontend",
+          "bindingMode": "behavior-bindings",
+          "bindings": [
+            "authorization.dataScope",
+            "authorization.role.detail",
+            "authorization.role.list",
+            "authorization.workbench"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Authorization/metadata",
+        "modelKeys": [
+          "DataScopeObjectAction",
+          "DataScopeObjectSubject",
+          "DataScopeRuleNode",
+          "DataScopeRuleSubject",
+          "FunctionPoint",
+          "Permission",
+          "Role",
+          "RoleFunctionGrant",
+          "RolePermission",
+          "UserRole"
+        ]
+      },
+      {
+        "moduleId": "ConfigCenter",
+        "version": "1.0.0",
+        "displayName": "\u914D\u7F6E\u4E2D\u5FC3",
+        "description": "\u5F00\u53D1\u671F\u5185\u5EFA\u63D2\u4EF6\u6E05\u5355",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": {
+          "entryAssembly": "../../ConfigCenter.dll",
+          "behaviorKey": null
+        },
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/ConfigCenter/metadata",
+        "modelKeys": [
+          "ConfigItem",
+          "ValueListItem"
+        ]
+      },
+      {
+        "moduleId": "Demo",
+        "version": "1.0.0",
+        "displayName": "\u6F14\u793A\u6A21\u5757",
+        "description": "\u5F00\u53D1\u671F\u5185\u5EFA\u63D2\u4EF6\u6E05\u5355",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": null,
+        "backend": {
+          "entryAssembly": "../../DemoModule.dll",
+          "behaviorKey": null
+        },
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/Demo/metadata",
+        "modelKeys": []
+      },
+      {
+        "moduleId": "Document",
+        "version": "1.6.0",
+        "displayName": "\u56FE\u6587\u6863",
+        "description": "\u72EC\u7ACB\u56FE\u6587\u6863\u5143\u6570\u636E",
+        "dependencies": [
+          "Audit",
+          "Authentication",
+          "Authorization",
+          "Files",
+          "Identity",
+          "Organization"
+        ],
+        "compositionMembers": [],
+        "parentModuleId": "InforCenter",
+        "backend": {
+          "entryAssembly": "../../DocumentModule.dll",
+          "behaviorKey": "document.backend"
+        },
+        "frontend": {
+          "moduleId": "document",
+          "url": null,
+          "behaviorKey": "document.frontend",
+          "bindingMode": "behavior-bindings",
+          "bindings": [
+            "document.document.detail",
+            "document.document.historyInput",
+            "document.document.list",
+            "document.document.permissions",
+            "document.document.record",
+            "document.history.list"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Document/metadata",
+        "modelKeys": [
+          "Document",
+          "DocumentFileLink",
+          "DocumentIteration",
+          "DocumentVersion"
+        ]
+      },
+      {
+        "moduleId": "Example",
+        "version": "1.0.0",
+        "displayName": "\u529F\u80FD\u793A\u4F8B",
+        "description": "\u529F\u80FD\u793A\u4F8B \u6A21\u5757",
+        "dependencies": [
+          "Authorization",
+          "Identity"
+        ],
+        "compositionMembers": [],
+        "parentModuleId": null,
+        "backend": {
+          "entryAssembly": "../../ExampleModule.dll",
+          "behaviorKey": "example.backend"
+        },
+        "frontend": {
+          "moduleId": "example",
+          "url": null,
+          "behaviorKey": "example.frontend",
+          "bindingMode": "behavior-bindings",
+          "bindings": [
+            "example.record.detail",
+            "example.record.list",
+            "example.runtime-workload.list"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Example/metadata",
+        "modelKeys": [
+          "ExampleRecord"
+        ]
+      },
+      {
+        "moduleId": "Files",
+        "version": "1.0.0",
+        "displayName": "\u6587\u4EF6\u670D\u52A1",
+        "description": "\u5E73\u53F0\u79C1\u6709\u5185\u5BB9\u3001\u6682\u5B58\u4E0E\u4F7F\u7528\u751F\u547D\u5468\u671F\u670D\u52A1",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": {
+          "entryAssembly": "../../FilesModule.dll",
+          "behaviorKey": "files.backend"
+        },
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/Files/metadata",
+        "modelKeys": [
+          "FileCopyLease",
+          "FileRecord",
+          "FileUploadLease",
+          "FileUsage"
+        ]
+      },
+      {
+        "moduleId": "Identity",
+        "version": "1.0.0",
+        "displayName": "\u8EAB\u4EFD\u57FA\u7840",
+        "description": "\u5E73\u53F0\u7528\u6237\u8D26\u53F7\u4E0E\u672C\u5730\u51ED\u636E\u57FA\u7840\u6A21\u5757",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": {
+          "entryAssembly": "../../IdentityModule.dll",
+          "behaviorKey": "identity.backend"
+        },
+        "frontend": {
+          "moduleId": "identity",
+          "url": null,
+          "behaviorKey": "identity.frontend",
+          "bindingMode": "behavior-bindings",
+          "bindings": [
+            "identity.account.detail",
+            "identity.account.list"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Identity/metadata",
+        "modelKeys": [
+          "IdentityAccount",
+          "IdentitySecurityEvent",
+          "LocalCredential"
+        ]
+      },
+      {
+        "moduleId": "InforCenter",
+        "version": "1.0.0",
+        "displayName": "InforCenter",
+        "description": "\u5DE5\u4F5C\u7A7A\u95F4\u3001\u96F6\u7EC4\u4EF6\u4E0E\u56FE\u6587\u6863\u7684\u7EC4\u5408\u7EC4\u4EF6",
+        "dependencies": [],
+        "compositionMembers": [
+          "Document",
+          "Part",
+          "Workspace"
+        ],
+        "parentModuleId": null,
+        "backend": null,
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/InforCenter/metadata",
+        "modelKeys": []
+      },
+      {
+        "moduleId": "MetadataConfigCenter",
+        "version": "1.0.0",
+        "displayName": "\u5143\u6570\u636E\u914D\u7F6E\u4E2D\u5FC3",
+        "description": "\u5143\u6570\u636E\u914D\u7F6E\u4E2D\u5FC3\u5185\u5EFA\u6A21\u5757",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": {
+          "entryAssembly": "../../MetadataConfigCenterModule.dll",
+          "behaviorKey": null
+        },
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/MetadataConfigCenter/metadata",
+        "modelKeys": []
+      },
+      {
+        "moduleId": "ModuleTemplateSample",
+        "version": "1.0.0",
+        "displayName": "\u6A21\u5757\u6A21\u677F\u793A\u4F8B",
+        "description": "\u5F00\u53D1\u671F\u5185\u5EFA\u63D2\u4EF6\u6E05\u5355",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": null,
+        "backend": {
+          "entryAssembly": "../../ModuleTemplateSampleModule.dll",
+          "behaviorKey": null
+        },
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/ModuleTemplateSample/metadata",
+        "modelKeys": []
+      },
+      {
+        "moduleId": "Organization",
+        "version": "1.1.0",
+        "displayName": "\u7EC4\u7EC7\u7ED3\u6784",
+        "description": "\u7EC4\u7EC7\u7ED3\u6784\u7BA1\u7406\u6A21\u5757",
+        "dependencies": [
+          "Audit",
+          "Authentication",
+          "Identity"
+        ],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": {
+          "entryAssembly": "../../OrganizationModule.dll",
+          "behaviorKey": "organization.backend"
+        },
+        "frontend": {
+          "moduleId": "organization",
+          "url": null,
+          "behaviorKey": "organization.frontend",
+          "bindingMode": "behavior-bindings",
+          "bindings": [
+            "organization.company.direct",
+            "organization.company.list",
+            "organization.department.direct",
+            "organization.department.global",
+            "organization.department.list",
+            "organization.node.detail",
+            "organization.person.detail",
+            "organization.person.list",
+            "organization.position.list",
+            "organization.tree.global"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Organization/metadata",
+        "modelKeys": [
+          "Company",
+          "Department",
+          "Person",
+          "Position"
+        ]
+      },
+      {
+        "moduleId": "Part",
+        "version": "1.6.0",
+        "displayName": "\u96F6\u7EC4\u4EF6",
+        "description": "\u72EC\u7ACB\u96F6\u7EC4\u4EF6\u5143\u6570\u636E",
+        "dependencies": [
+          "Audit",
+          "Authentication",
+          "Authorization",
+          "Identity",
+          "Organization"
+        ],
+        "compositionMembers": [],
+        "parentModuleId": "InforCenter",
+        "backend": {
+          "entryAssembly": "../../PartModule.dll",
+          "behaviorKey": "part.backend"
+        },
+        "frontend": {
+          "moduleId": "part",
+          "url": null,
+          "behaviorKey": "part.frontend",
+          "bindingMode": "behavior-bindings",
+          "bindings": [
+            "part.history.list",
+            "part.part.detail",
+            "part.part.historyInput",
+            "part.part.list",
+            "part.part.permissions",
+            "part.part.record"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Part/metadata",
+        "modelKeys": [
+          "Part"
+        ]
+      },
+      {
+        "moduleId": "Partner.AssetCatalog",
+        "version": "1.0.0",
+        "displayName": "\u8D44\u4EA7\u76EE\u5F55",
+        "description": "Partner-owned standard asset catalog",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": null,
+        "backend": null,
+        "frontend": {
+          "projectionUrl": "/plugins/runtime/modules/Partner.AssetCatalog/projections/standard-data.json",
+          "blueprintUrl": "/plugins/runtime/modules/Partner.AssetCatalog/authoring/newp.plugin.json",
+          "behaviorKey": "standard-data.v1",
+          "bindingMode": "standard-data",
+          "bindings": [
+            "Partner.AssetCatalog.Asset"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Partner.AssetCatalog/metadata",
+        "modelKeys": [
+          "Asset"
+        ]
+      },
+      {
+        "moduleId": "Platform",
+        "version": "1.0.0",
+        "displayName": "\u5E73\u53F0\u7EC4\u5408",
+        "description": "\u5E73\u53F0\u7EA7 metadata \u4E0E localization \u7EC4\u5408\u80F6\u56CA",
+        "dependencies": [],
+        "compositionMembers": [
+          "Audit",
+          "Authentication",
+          "Authorization",
+          "ConfigCenter",
+          "Files",
+          "Identity",
+          "MetadataConfigCenter",
+          "Organization",
+          "PluginOps"
+        ],
+        "parentModuleId": null,
+        "backend": null,
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/Platform/metadata",
+        "modelKeys": []
+      },
+      {
+        "moduleId": "PluginOps",
+        "version": "1.0.0",
+        "displayName": "\u63D2\u4EF6\u8FD0\u7EF4",
+        "description": "\u63D2\u4EF6\u8FD0\u7EF4\u524D\u7AEF\u5185\u5EFA\u6A21\u5757",
+        "dependencies": [],
+        "compositionMembers": [],
+        "parentModuleId": "Platform",
+        "backend": null,
+        "frontend": null,
+        "metadataBasePath": "/plugins/runtime/modules/PluginOps/metadata",
+        "modelKeys": []
+      },
+      {
+        "moduleId": "Workspace",
+        "version": "1.6.0",
+        "displayName": "\u5DE5\u4F5C\u7A7A\u95F4",
+        "description": "\u516C\u5171\u7A7A\u95F4\u4E0E\u5F53\u524D\u8D26\u53F7\u4E2A\u4EBA\u7A7A\u95F4",
+        "dependencies": [
+          "Audit",
+          "Document",
+          "Part"
+        ],
+        "compositionMembers": [],
+        "parentModuleId": "InforCenter",
+        "backend": {
+          "entryAssembly": "../../WorkspaceModule.dll",
+          "behaviorKey": "workspace.backend"
+        },
+        "frontend": {
+          "moduleId": "workspace",
+          "url": null,
+          "behaviorKey": "workspace.frontend",
+          "bindingMode": "behavior-bindings",
+          "bindings": [
+            "workspace.content.historyInput",
+            "workspace.content.permissions",
+            "workspace.content.properties",
+            "workspace.content.propertiesInput",
+            "workspace.content.receivedObject",
+            "workspace.content.receivedProperties",
+            "workspace.content.record",
+            "workspace.folder.content",
+            "workspace.folder.list",
+            "workspace.folder.reference",
+            "workspace.history.list",
+            "workspace.references.list",
+            "workspace.references.object",
+            "workspace.spaces",
+            "workspace.transfers.list",
+            "workspace.tree.current"
+          ]
+        },
+        "metadataBasePath": "/plugins/runtime/modules/Workspace/metadata",
+        "modelKeys": [
+          "WorkspaceFolder",
+          "WorkspaceFolderContent",
+          "WorkspaceObjectCopy",
+          "WorkspaceSpace",
+          "WorkspaceTransferNotification"
+        ]
+      }
+    ]
+  }
+}

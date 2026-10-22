@@ -1,0 +1,154 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Department": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": ["CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "SortOrder", "IsEnabled"]
+      }
+    ],
+    "fields": [
+      {
+        "name": "CompanyId",
+        "storage": {
+          "type": "guid"
+        },
+        "uiType": "lookup",
+        "form": {
+          "create": { "mode": "editable", "required": true },
+          "edit": { "mode": "readonly" }
+        },
+        "dataSource": {
+          "type": "provider",
+          "key": "organization.companies"
+        },
+        "display": {
+          "type": "reference",
+          "targetModel": "Company",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME"
+        }
+      },
+      {
+        "name": "ParentDepartmentId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        },
+        "uiType": "lookup",
+        "form": {
+          "create": { "mode": "editable" },
+          "edit": { "mode": "editable" }
+        },
+        "dataSource": {
+          "type": "provider",
+          "key": "organization.department.parents",
+          "dependsOn": ["CompanyId"]
+        },
+        "display": {
+          "type": "reference",
+          "targetModel": "Department",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME"
+        }
+      },
+      {
+        "name": "ECODE",
+        "uiType": "text",
+        "form": {
+          "create": { "mode": "editable", "required": true },
+          "edit": { "mode": "readonly" }
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": { "mode": "editable", "required": true },
+          "edit": { "mode": "editable", "required": true }
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        },
+        "uiType": "switch",
+        "form": {
+          "create": { "mode": "hidden" },
+          "edit": { "mode": "editable" }
+        }
+      },
+      {
+        "name": "SortOrder",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": { "mode": "editable", "required": true },
+          "edit": { "mode": "editable", "required": true }
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "IX_Department_Company",
+        "fields": [
+          "CompanyId"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_Department_Parent",
+        "fields": [
+          "ParentDepartmentId"
+        ],
+        "unique": false
+      },
+      {
+        "name": "UX_Department_Company_ECODE",
+        "fields": [
+          "CompanyId",
+          "ECODE"
+        ],
+        "unique": true
+      },
+      {
+        "name": "UX_Department_Company_Parent_ENAME",
+        "fields": ["CompanyId", "ParentDepartmentId", "ENAME"],
+        "unique": true,
+        "includeNullValues": true
+      }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_Department_Company",
+        "fields": [
+          "CompanyId"
+        ],
+        "principalModuleId": "Organization",
+        "principalModel": "Company",
+        "principalFields": [
+          "EID"
+        ],
+        "onDelete": "Restrict"
+      },
+      {
+        "name": "FK_Department_Company_ParentDepartment",
+        "fields": ["CompanyId", "ParentDepartmentId"],
+        "principalModuleId": "Organization",
+        "principalModel": "Department",
+        "principalFields": ["CompanyId", "EID"],
+        "onDelete": "Restrict"
+      }
+    ]
+  }
+}

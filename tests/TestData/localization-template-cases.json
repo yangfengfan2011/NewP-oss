@@ -1,0 +1,10 @@
+[
+  { "template": "{name}: {count}", "args": { "name": "人员", "count": 12 }, "expected": "人员: 12" },
+  { "template": "{value}/{value}", "args": { "value": "A" }, "expected": "A/A" },
+  { "template": "{flag}|{number}|{empty}", "args": { "flag": true, "number": 1.25, "empty": null }, "expected": "true|1.25|" },
+  { "template": "{missing} {value}", "args": { "value": "B" }, "expected": "{missing} B" },
+  { "template": "{value}", "args": { "value": "{missing}" }, "expected": "{missing}" },
+  { "template": "{{value}}", "args": { "value": "C" }, "expected": "{C}" },
+  { "template": "literal braces {}", "args": {}, "expected": "literal braces {}" },
+  { "template": "{zero}|{flag}|{text}", "args": { "zero": 0, "flag": false, "text": "" }, "expected": "0|false|" }
+]

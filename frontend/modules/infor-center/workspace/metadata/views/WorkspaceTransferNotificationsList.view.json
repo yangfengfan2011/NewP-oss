@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0", "type": "view",
+  "view": {
+    "key": "workspace.transfers.list", "resourceKey": "workspace.transfers", "mode": "list", "dicKey": "Workspace",
+    "titleKey": "TransferNotifications", "descriptionKey": "TransferNotificationsHelp",
+    "query": { "fields": [], "defaultPageSize": 20 },
+    "columns": [
+      { "key": "occurredAt", "labelKey": "TransferOccurredAt", "source": "projection", "field": "occurredAt" },
+      { "key": "senderName", "labelKey": "TransferSender", "source": "projection", "field": "senderName" },
+      { "key": "targetName", "labelKey": "TransferTarget", "source": "projection", "field": "targetName" }
+    ],
+    "pageActions": [],
+    "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view", "navigationTargetKey": "workspace.transfers.object" }],
+    "export": { "enabled": false }
+  }
+}

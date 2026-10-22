@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0", "type": "dic",
+  "DataScope": {
+    "Action_workspaceCopy": { "zhs": "复制文件夹引用", "en": "Copy folder references" }
+  }
+}

@@ -1,0 +1,1039 @@
+{
+  "company": {
+    "schemaVersion": "1.0",
+    "type": "model",
+    "Company": {
+      "kind": "Entity",
+      "builtinFields": [
+        "ENAME",
+        "ECODE"
+      ],
+      "sections": [
+        {
+          "key": "basic",
+          "titleKey": "Section_Basic",
+          "fields": [
+            "ECODE",
+            "ENAME",
+            "SortOrder",
+            "IsEnabled"
+          ]
+        }
+      ],
+      "fields": [
+        {
+          "name": "ECODE",
+          "uiType": "text",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "readonly"
+            }
+          },
+          "contract": {
+            "valueType": "text"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          }
+        },
+        {
+          "name": "ENAME",
+          "uiType": "text",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "editable",
+              "required": true
+            }
+          },
+          "contract": {
+            "valueType": "text"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          }
+        },
+        {
+          "name": "IsEnabled",
+          "storage": {
+            "type": "bool"
+          },
+          "uiType": "switch",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          }
+        },
+        {
+          "name": "SortOrder",
+          "storage": {
+            "type": "string"
+          },
+          "uiType": "text",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "editable",
+              "required": true
+            }
+          }
+        },
+        {
+          "name": "EID",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "objectId"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text"
+        },
+        {
+          "name": "CreatedBy",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "user"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text",
+          "display": {
+            "type": "user",
+            "targetModel": "IdentityAccount",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME",
+            "format": ""
+          }
+        },
+        {
+          "name": "CreatedAt",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "instant"
+          },
+          "storage": {
+            "type": "datetime",
+            "nullable": false
+          },
+          "uiType": "dateTime",
+          "display": {
+            "type": "instant",
+            "targetModel": "",
+            "targetIdField": "",
+            "targetDisplayField": "",
+            "format": "dateTime"
+          }
+        },
+        {
+          "name": "UpdatedBy",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "user"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text",
+          "display": {
+            "type": "user",
+            "targetModel": "IdentityAccount",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME",
+            "format": ""
+          }
+        },
+        {
+          "name": "UpdatedAt",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "instant"
+          },
+          "storage": {
+            "type": "datetime",
+            "nullable": false
+          },
+          "uiType": "dateTime",
+          "display": {
+            "type": "instant",
+            "targetModel": "",
+            "targetIdField": "",
+            "targetDisplayField": "",
+            "format": "dateTime"
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "UX_Company_ECODE",
+          "fields": [
+            "ECODE"
+          ],
+          "unique": true
+        },
+        {
+          "name": "UX_Company_ENAME",
+          "fields": [
+            "ENAME"
+          ],
+          "unique": true
+        }
+      ]
+    }
+  },
+  "department": {
+    "schemaVersion": "1.0",
+    "type": "model",
+    "Department": {
+      "kind": "Entity",
+      "builtinFields": [
+        "ENAME",
+        "ECODE"
+      ],
+      "sections": [
+        {
+          "key": "basic",
+          "titleKey": "Section_Basic",
+          "fields": [
+            "CompanyId",
+            "ParentDepartmentId",
+            "ECODE",
+            "ENAME",
+            "SortOrder",
+            "IsEnabled"
+          ]
+        }
+      ],
+      "fields": [
+        {
+          "name": "CompanyId",
+          "storage": {
+            "type": "guid"
+          },
+          "uiType": "lookup",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "readonly"
+            }
+          },
+          "dataSource": {
+            "type": "provider",
+            "key": "organization.companies"
+          },
+          "display": {
+            "type": "reference",
+            "targetModel": "Company",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME"
+          }
+        },
+        {
+          "name": "ParentDepartmentId",
+          "storage": {
+            "type": "guid",
+            "nullable": true
+          },
+          "uiType": "lookup",
+          "form": {
+            "create": {
+              "mode": "editable"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          },
+          "dataSource": {
+            "type": "provider",
+            "key": "organization.department.parents",
+            "dependsOn": [
+              "CompanyId"
+            ]
+          },
+          "display": {
+            "type": "reference",
+            "targetModel": "Department",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME"
+          }
+        },
+        {
+          "name": "ECODE",
+          "uiType": "text",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "readonly"
+            }
+          },
+          "contract": {
+            "valueType": "text"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          }
+        },
+        {
+          "name": "ENAME",
+          "uiType": "text",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "editable",
+              "required": true
+            }
+          },
+          "contract": {
+            "valueType": "text"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          }
+        },
+        {
+          "name": "IsEnabled",
+          "storage": {
+            "type": "bool"
+          },
+          "uiType": "switch",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          }
+        },
+        {
+          "name": "SortOrder",
+          "storage": {
+            "type": "string"
+          },
+          "uiType": "text",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "editable",
+              "required": true
+            }
+          }
+        },
+        {
+          "name": "EID",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "objectId"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text"
+        },
+        {
+          "name": "CreatedBy",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "user"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text",
+          "display": {
+            "type": "user",
+            "targetModel": "IdentityAccount",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME",
+            "format": ""
+          }
+        },
+        {
+          "name": "CreatedAt",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "instant"
+          },
+          "storage": {
+            "type": "datetime",
+            "nullable": false
+          },
+          "uiType": "dateTime",
+          "display": {
+            "type": "instant",
+            "targetModel": "",
+            "targetIdField": "",
+            "targetDisplayField": "",
+            "format": "dateTime"
+          }
+        },
+        {
+          "name": "UpdatedBy",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "user"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text",
+          "display": {
+            "type": "user",
+            "targetModel": "IdentityAccount",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME",
+            "format": ""
+          }
+        },
+        {
+          "name": "UpdatedAt",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "instant"
+          },
+          "storage": {
+            "type": "datetime",
+            "nullable": false
+          },
+          "uiType": "dateTime",
+          "display": {
+            "type": "instant",
+            "targetModel": "",
+            "targetIdField": "",
+            "targetDisplayField": "",
+            "format": "dateTime"
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "IX_Department_Company",
+          "fields": [
+            "CompanyId"
+          ],
+          "unique": false
+        },
+        {
+          "name": "IX_Department_Parent",
+          "fields": [
+            "ParentDepartmentId"
+          ],
+          "unique": false
+        },
+        {
+          "name": "UX_Department_Company_ECODE",
+          "fields": [
+            "CompanyId",
+            "ECODE"
+          ],
+          "unique": true
+        },
+        {
+          "name": "UX_Department_Company_Parent_ENAME",
+          "fields": [
+            "CompanyId",
+            "ParentDepartmentId",
+            "ENAME"
+          ],
+          "unique": true,
+          "includeNullValues": true
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Department_Company",
+          "fields": [
+            "CompanyId"
+          ],
+          "principalModuleId": "Organization",
+          "principalModel": "Company",
+          "principalFields": [
+            "EID"
+          ],
+          "onDelete": "Restrict"
+        },
+        {
+          "name": "FK_Department_Company_ParentDepartment",
+          "fields": [
+            "CompanyId",
+            "ParentDepartmentId"
+          ],
+          "principalModuleId": "Organization",
+          "principalModel": "Department",
+          "principalFields": [
+            "CompanyId",
+            "EID"
+          ],
+          "onDelete": "Restrict"
+        }
+      ]
+    }
+  },
+  "person": {
+    "schemaVersion": "1.0",
+    "type": "model",
+    "Person": {
+      "kind": "Entity",
+      "builtinFields": [
+        "ENAME"
+      ],
+      "sections": [
+        {
+          "key": "basic",
+          "titleKey": "Section_Basic",
+          "fields": [
+            "PersonNo",
+            "ENAME",
+            "BirthDate"
+          ]
+        },
+        {
+          "key": "organization",
+          "titleKey": "Section_Organization",
+          "fields": [
+            "CompanyId",
+            "DepartmentId",
+            "PositionId"
+          ]
+        },
+        {
+          "key": "employment",
+          "titleKey": "Section_Employment",
+          "fields": [
+            "EmploymentStatus",
+            "EmploymentStartedAt",
+            "EmploymentEndedAt",
+            "IsEnabled"
+          ]
+        }
+      ],
+      "fields": [
+        {
+          "name": "PersonNo",
+          "storage": {
+            "type": "string"
+          },
+          "uiType": "text",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "readonly"
+            }
+          }
+        },
+        {
+          "name": "ENAME",
+          "uiType": "text",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "required": true
+            },
+            "edit": {
+              "mode": "editable",
+              "required": true
+            }
+          },
+          "contract": {
+            "valueType": "text"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          }
+        },
+        {
+          "name": "BirthDate",
+          "storage": {
+            "type": "date",
+            "nullable": true
+          },
+          "contract": {
+            "valueType": "calendarDate"
+          },
+          "uiType": "date",
+          "form": {
+            "create": {
+              "mode": "editable"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          },
+          "display": {
+            "type": "calendarDate",
+            "format": "date"
+          }
+        },
+        {
+          "name": "CompanyId",
+          "storage": {
+            "type": "guid",
+            "nullable": true
+          },
+          "uiType": "lookup",
+          "form": {
+            "create": {
+              "mode": "editable"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          },
+          "dataSource": {
+            "type": "provider",
+            "key": "organization.companies"
+          },
+          "display": {
+            "type": "reference",
+            "targetModel": "Company",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME"
+          }
+        },
+        {
+          "name": "DepartmentId",
+          "storage": {
+            "type": "guid",
+            "nullable": true
+          },
+          "uiType": "lookup",
+          "form": {
+            "create": {
+              "mode": "editable"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          },
+          "dataSource": {
+            "type": "provider",
+            "key": "organization.departments",
+            "dependsOn": [
+              "CompanyId"
+            ]
+          }
+        },
+        {
+          "name": "PositionId",
+          "storage": {
+            "type": "guid",
+            "nullable": true
+          },
+          "uiType": "lookup",
+          "form": {
+            "create": {
+              "mode": "editable"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          },
+          "dataSource": {
+            "type": "provider",
+            "key": "organization.positions"
+          }
+        },
+        {
+          "name": "EmploymentStatus",
+          "storage": {
+            "type": "string",
+            "nullable": true
+          },
+          "contract": {
+            "valueType": "enum",
+            "clrType": "EmploymentStatus"
+          },
+          "uiType": "select",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "defaultValue": "FullTime",
+              "required": true
+            },
+            "edit": {
+              "mode": "editable",
+              "required": true
+            }
+          },
+          "dataSource": {
+            "type": "enum",
+            "key": "EmploymentStatus"
+          }
+        },
+        {
+          "name": "EmploymentStartedAt",
+          "storage": {
+            "type": "datetime",
+            "nullable": true
+          },
+          "contract": {
+            "valueType": "instant"
+          },
+          "uiType": "dateTime",
+          "form": {
+            "create": {
+              "mode": "editable"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          },
+          "display": {
+            "type": "instant",
+            "format": "dateTime"
+          }
+        },
+        {
+          "name": "EmploymentEndedAt",
+          "storage": {
+            "type": "datetime",
+            "nullable": true
+          },
+          "contract": {
+            "valueType": "instant"
+          },
+          "uiType": "dateTime",
+          "form": {
+            "create": {
+              "mode": "editable"
+            },
+            "edit": {
+              "mode": "editable"
+            }
+          },
+          "display": {
+            "type": "instant",
+            "format": "dateTime"
+          }
+        },
+        {
+          "name": "IsEnabled",
+          "storage": {
+            "type": "bool"
+          },
+          "uiType": "switch",
+          "form": {
+            "create": {
+              "mode": "editable",
+              "defaultValue": true
+            },
+            "edit": {
+              "mode": "readonly"
+            }
+          }
+        },
+        {
+          "name": "AccountEID",
+          "storage": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        {
+          "name": "AccountBoundAt",
+          "storage": {
+            "type": "datetime",
+            "nullable": true
+          }
+        },
+        {
+          "name": "AccountBoundBy",
+          "storage": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        {
+          "name": "AccountBindingReason",
+          "storage": {
+            "type": "text",
+            "nullable": true
+          }
+        },
+        {
+          "name": "EID",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "objectId"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text"
+        },
+        {
+          "name": "CreatedBy",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "user"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text",
+          "display": {
+            "type": "user",
+            "targetModel": "IdentityAccount",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME",
+            "format": ""
+          }
+        },
+        {
+          "name": "CreatedAt",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "instant"
+          },
+          "storage": {
+            "type": "datetime",
+            "nullable": false
+          },
+          "uiType": "dateTime",
+          "display": {
+            "type": "instant",
+            "targetModel": "",
+            "targetIdField": "",
+            "targetDisplayField": "",
+            "format": "dateTime"
+          }
+        },
+        {
+          "name": "UpdatedBy",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "user"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": false
+          },
+          "uiType": "text",
+          "display": {
+            "type": "user",
+            "targetModel": "IdentityAccount",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME",
+            "format": ""
+          }
+        },
+        {
+          "name": "UpdatedAt",
+          "form": {
+            "create": {
+              "mode": "hidden"
+            },
+            "edit": {
+              "mode": "hidden"
+            }
+          },
+          "contract": {
+            "valueType": "instant"
+          },
+          "storage": {
+            "type": "datetime",
+            "nullable": false
+          },
+          "uiType": "dateTime",
+          "display": {
+            "type": "instant",
+            "targetModel": "",
+            "targetIdField": "",
+            "targetDisplayField": "",
+            "format": "dateTime"
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "UX_Person_AccountEID",
+          "fields": [
+            "AccountEID"
+          ],
+          "unique": true
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Person_Company",
+          "fields": [
+            "CompanyId"
+          ],
+          "principalModuleId": "Organization",
+          "principalModel": "Company",
+          "principalFields": [
+            "EID"
+          ],
+          "onDelete": "Restrict"
+        },
+        {
+          "name": "FK_Person_Company_Department",
+          "fields": [
+            "CompanyId",
+            "DepartmentId"
+          ],
+          "principalModuleId": "Organization",
+          "principalModel": "Department",
+          "principalFields": [
+            "CompanyId",
+            "EID"
+          ],
+          "onDelete": "Restrict"
+        },
+        {
+          "name": "FK_Person_Position",
+          "fields": [
+            "PositionId"
+          ],
+          "principalModuleId": "Organization",
+          "principalModel": "Position",
+          "principalFields": [
+            "EID"
+          ],
+          "onDelete": "Restrict"
+        }
+      ]
+    }
+  }
+}

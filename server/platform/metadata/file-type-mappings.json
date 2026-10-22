@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "mappings": {
+    "settings": {
+      "adapter": "SettingDefinitionAuthoringAdapter",
+      "mergeMode": "replace"
+    },
+    "enum": {
+      "adapter": "EnumerationAuthoringAdapter",
+      "mergeMode": "replace"
+    },
+    "model": {
+      "adapter": "ModelAuthoringAdapter",
+      "mergeMode": "replace"
+    },
+    "nav": {
+      "adapter": "NavigationAuthoringAdapter",
+      "mergeMode": "replace"
+    },
+    "dic": {
+      "adapter": "DictionaryAuthoringAdapter",
+      "mergeMode": "dic-entry"
+    }
+  }
+}

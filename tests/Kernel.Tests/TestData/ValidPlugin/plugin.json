@@ -1,0 +1,12 @@
+{
+  "moduleId": "TestPlugin",
+  "displayName": "Test Plugin",
+  "version": "1.0.0",
+  "description": "A test plugin",
+  "entryAssembly": "TestPlugin.dll",
+  "dependencies": ["Core"],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "partner.asset.detail",
+    "dicKey": "AssetDetailView",
+    "titleKey": "资产详情",
+    "mode": "detail",
+    "model": "Asset",
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "基本信息",
+        "fields": [
+          "Code",
+          "Name",
+          "PurchasedAt"
+        ]
+      }
+    ],
+    "summaryBlocks": [],
+    "pageActions": []
+  }
+}

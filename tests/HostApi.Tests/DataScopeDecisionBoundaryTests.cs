@@ -1,0 +1,188 @@
+using System.Reflection;
+using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using ICP.Platform.Modules.Workspace;
+using ICP.Platform.Modules.Authorization.Services;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Kernel.ModulePlanning;
+using Xunit;
+
+namespace ICP.Platform.HostApi.Tests;
+
+/// <summary>按实际调用指令审计底层裁决消费者；动作改成变量或常量不会逃过调用边界。</summary>
+[Trait("Category", "ModuleMetadataConsumer")]
+public sealed class DataScopeDecisionBoundaryTests
+{
+    private static readonly IReadOnlyDictionary<short, OpCode> OpCodesByValue = typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static)
+        .Select(field => (OpCode)field.GetValue(null)!).ToDictionary(code => code.Value);
+
+    [Fact]
+    public void ProductionDecisionCalls_RemainInsideAuthorizationOrTheCompleteReadBoundary()
+    {
+        var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));
+        var assemblies = candidates.Where(candidate => candidate.BackendEntry is not null).Select(candidate =>
+                Assembly.LoadFrom(Path.GetFullPath(Path.Combine(candidate.PackageRoot, candidate.BackendEntry!))))
+            .Append(typeof(StandardCrudDefaultWriter).Assembly).Distinct().ToArray();
+        var calls = FindCalls(assemblies).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+        Assert.NotEmpty(calls);
+        // Authorization拥有通用判权实现；其他组件只可保留完整read/写后read，不能按业务调用名单豁免写动作。
+        var outsideAuthorization = FindCalls(assemblies, method => method.DeclaringType!.Assembly != typeof(ObjectActionAccess).Assembly).ToArray();
+        Assert.All(outsideAuthorization, call => Assert.True(IsReadBoundaryOrigin(call), call));
+        // 事实清单只诊断实现变化，不是上面owner/read规则的许可来源；业务通用接口调用无需逐项登记。
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
+        var inventoryFile = Path.Combine(root!.FullName, "tests", "HostApi.Tests", "Fixtures", "DataScopeDecisionCalls.json");
+        var inventory = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(inventoryFile))!;
+        Assert.All(inventory, item => Assert.False(string.IsNullOrWhiteSpace(item.Value)));
+        Assert.True(inventory.Keys.Order(StringComparer.Ordinal).SequenceEqual(calls), JsonSerializer.Serialize(calls));
+    }
+
+    [Fact]
+    public void CompleteReadBoundary_IsAnActuallyRegisteredResolverConsumedByItsFixedInternalContract()
+    {
+        var services = new ServiceCollection();
+        new WorkspaceModule().ConfigureServices(services);
+        var registration = Assert.Single(services, service => service.ImplementationType == typeof(WorkspacePermissionTargetReadResolver));
+        Assert.Equal(typeof(IDataExecutionTargetResolver), registration.ServiceType);
+        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+        var result = new CanonicalModulePlanCompiler().Compile("complete-read-boundary",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
+        var owner = Assert.Single(result.Plan!.Modules, module => module.ModuleId == "Workspace");
+        var execution = Assert.Single(owner.DataExecutions, item => item.Key == WorkspacePermissionTargetReadResolver.Execution);
+        Assert.Equal("internal", execution.Boundary);
+        var source = Assert.Single(execution.FixedBindings);
+        Assert.Equal("ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveTargetsAsync", source.Caller);
+        var role = Assert.Single(execution.Requirements);
+        Assert.Equal("workspace.permission.target.fullRead", role.ReadResolverKey);
+        Assert.Equal("read", Assert.Single(Assert.Single(role.AnyOf)));
+        Assert.Contains(FindCalls([typeof(WorkspaceModule).Assembly]), call =>
+            call == typeof(WorkspacePermissionTargetReadResolver).FullName + ".ResolveAsync[0] -> IsAllowedAsync action=constant:read");
+    }
+
+    [Fact]
+    public void BoundaryScanner_FindsVariableAndConstantActionsAtTheCallSite()
+    {
+        var calls = FindCalls([typeof(DataScopeDecisionBoundaryTests).Assembly]).ToArray();
+        Assert.Contains(calls, call => call.Contains(nameof(VariableAction), StringComparison.Ordinal));
+        Assert.Contains(calls, call => call.Contains(nameof(ConstantAction), StringComparison.Ordinal));
+        Assert.Contains(calls, call => call.Contains(nameof(ConcreteAction), StringComparison.Ordinal));
+        Assert.EndsWith("action=constant:edit", Assert.Single(calls, call => call.Contains(nameof(ConstantAction), StringComparison.Ordinal)));
+        Assert.EndsWith("action=variable", Assert.Single(calls, call => call.Contains(nameof(VariableAction), StringComparison.Ordinal)));
+        Assert.EndsWith("action=variable", Assert.Single(calls, call => call.Contains(nameof(ConcreteAction), StringComparison.Ordinal)));
+        Assert.True(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(".ReadAction[", StringComparison.Ordinal))));
+        Assert.False(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(nameof(ConstantAction), StringComparison.Ordinal))));
+        Assert.False(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(nameof(VariableAction), StringComparison.Ordinal))));
+        Assert.False(IsReadBoundaryOrigin(Assert.Single(calls, call => call.Contains(nameof(CandidateReadAction), StringComparison.Ordinal))));
+    }
+
+    private static Task<bool> VariableAction(IDataScopeObjectDecisionProvider decisions, string action)
+    {
+        GC.KeepAlive("read");
+        return decisions.IsAllowedAsync("test.resource", "id", action);
+    }
+    private static Task<bool> ConstantAction(IDataScopeObjectDecisionProvider decisions)
+    {
+        GC.KeepAlive("read");
+        return decisions.IsAllowedAsync("test.resource", "id", "edit");
+    }
+    private static Task<bool> ReadAction(IDataScopeObjectDecisionProvider decisions) => decisions.IsAllowedAsync("test.resource", "id", "read");
+    private static Task<bool> ConcreteAction(ConcreteDecisions decisions, string action) => decisions.IsAllowedAsync("test.resource", "id", action);
+    private static Task<bool> CandidateReadAction(IDataScopeObjectDecisionProvider decisions) =>
+        decisions.IsCandidateAllowedAsync("test.resource", new Dictionary<string, object?>(), "read");
+    private static bool IsReadBoundaryOrigin(string call) => call.Contains(" -> IsAllowedAsync action=constant:read", StringComparison.Ordinal);
+
+    private sealed class ConcreteDecisions : IDataScopeObjectDecisionProvider
+    {
+        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string actionKey, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    private static IEnumerable<string> FindCalls(IEnumerable<Assembly> assemblies, Func<MethodInfo, bool>? include = null)
+    {
+        foreach (var assembly in assemblies)
+            foreach (var type in assembly.GetTypes())
+                foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                {
+                    if (include is not null && !include(method)) continue;
+                    var stack = new List<string>();
+                    var il = method.GetMethodBody()?.GetILAsByteArray();
+                    if (il is null) continue;
+                    var offset = 0;
+                    var callIndex = 0;
+                    while (offset < il.Length)
+                    {
+                        var value = (short)il[offset++];
+                        if (value == 0xfe) value = (short)(0xfe00 | il[offset++]);
+                        var code = OpCodesByValue[value];
+                        if (code.OperandType == OperandType.InlineMethod)
+                        {
+                            var token = BitConverter.ToInt32(il, offset);
+                            var target = method.Module.ResolveMethod(token, type.IsGenericType ? type.GetGenericArguments() : null,
+                                method.IsGenericMethod ? method.GetGenericArguments() : null);
+                            if (target?.DeclaringType is { } targetType && typeof(IDataScopeObjectDecisionProvider).IsAssignableFrom(targetType)
+                                && typeof(IDataScopeObjectDecisionProvider).GetMethods().Any(contract => contract.Name == target.Name))
+                            {
+                                // 两个底层方法的末参数均为token，倒数第二个栈值才是动作；不靠附近出现过read字面量猜测。
+                                var action = stack.Count >= 2 ? stack[^2] : "unknown";
+                                yield return Owner(method) + "[" + callIndex++ + "] -> " + target.Name + " action=" + action;
+                            }
+                            var pop = (target?.GetParameters().Length ?? 0) + (target is { IsStatic: false } && code != OpCodes.Newobj ? 1 : 0);
+                            Pop(stack, pop);
+                            if (code == OpCodes.Newobj || target is MethodInfo { ReturnType: var result } && result != typeof(void)) stack.Add("variable");
+                        }
+                        else
+                        {
+                            var pop = code.StackBehaviourPop == StackBehaviour.Varpop ? stack.Count
+                                : code.StackBehaviourPop == StackBehaviour.Pop0 ? 0 : code.StackBehaviourPop.ToString().Split('_').Length;
+                            Pop(stack, pop);
+                            var push = code.StackBehaviourPush == StackBehaviour.Push0 ? 0
+                                : code.StackBehaviourPush == StackBehaviour.Push1_push1 ? 2 : 1;
+                            var origin = code == OpCodes.Ldstr ? "constant:" + method.Module.ResolveString(BitConverter.ToInt32(il, offset)) : "variable";
+                            for (var index = 0; index < push; index++) stack.Add(origin);
+                        }
+                        offset += code.OperandType switch
+                        {
+                            OperandType.InlineNone => 0,
+                            OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
+                            OperandType.InlineVar => 2,
+                            OperandType.InlineI8 or OperandType.InlineR => 8,
+                            OperandType.InlineSwitch => 4 + BitConverter.ToInt32(il, offset) * 4,
+                            _ => 4
+                        };
+                    }
+                }
+    }
+
+    // 只记录当前调用求值栈的动作来源，不执行IL，也不把其他路径的字面量当作本次参数。
+    private static void Pop(List<string> stack, int count)
+    {
+        if (count >= stack.Count) stack.Clear();
+        else stack.RemoveRange(stack.Count - count, count);
+    }
+
+    private static string Owner(MethodInfo method)
+    {
+        var type = method.DeclaringType!;
+        if (type.DeclaringType is { } owner)
+        {
+            var source = owner.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+                .SingleOrDefault(candidate => candidate.GetCustomAttribute<AsyncStateMachineAttribute>()?.StateMachineType == type);
+            if (source is not null) return CanonicalOwner(owner, source.Name);
+        }
+        return CanonicalOwner(type, method.Name);
+    }
+
+    private static string CanonicalOwner(Type type, string method)
+    {
+        if (method.StartsWith('<') && method.IndexOf('>') is var end && end > 1)
+        {
+            while (type.Name.StartsWith('<') && type.DeclaringType is not null) type = type.DeclaringType;
+            return type.FullName + "." + method[1..end] + ".lambda";
+        }
+        return type.FullName + "." + method;
+    }
+}

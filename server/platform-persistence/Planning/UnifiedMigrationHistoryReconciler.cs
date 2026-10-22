@@ -1,0 +1,355 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using ICP.Platform.Persistence.ProviderTargets;
+
+namespace ICP.Platform.Persistence.Planning;
+
+/// <summary>
+/// 统一迁移 history reconciliation 的稳定失败码。
+/// </summary>
+public static class PersistenceHistoryFailureCodes
+{
+    public const string VersionUnsupported = "PERSISTENCE_MIGRATION_HISTORY_VERSION_UNSUPPORTED";
+    public const string Duplicate = "PERSISTENCE_MIGRATION_HISTORY_DUPLICATE";
+    public const string Unknown = "PERSISTENCE_MIGRATION_HISTORY_UNKNOWN";
+    public const string NonPrefix = "PERSISTENCE_MIGRATION_HISTORY_NON_PREFIX";
+    public const string FrontierMismatch = "PERSISTENCE_MIGRATION_FRONTIER_MISMATCH";
+    public const string FactMissing = "PERSISTENCE_MIGRATION_HISTORY_FACT_MISSING";
+    public const string OwnerMismatch = "PERSISTENCE_MIGRATION_OWNER_MISMATCH";
+    public const string BundleMismatch = "PERSISTENCE_MIGRATION_BUNDLE_MISMATCH";
+    public const string ContentMismatch = "PERSISTENCE_MIGRATION_CONTENT_MISMATCH";
+    public const string ModelMismatch = "PERSISTENCE_MIGRATION_MODEL_MISMATCH";
+    public const string PlanMismatch = "PERSISTENCE_MIGRATION_PLAN_MISMATCH";
+    public const string ProviderTargetMismatch = "PERSISTENCE_PROVIDER_TARGET_MISMATCH";
+    public const string ProviderTransitionMismatch = "PERSISTENCE_PROVIDER_TRANSITION_MISMATCH";
+}
+
+/// <summary>
+/// 统一迁移历史与候选计划不一致时抛出的稳定异常。
+/// </summary>
+public sealed class PersistenceHistoryException : InvalidOperationException
+{
+    public PersistenceHistoryException(string failureCode, string? migrationId = null)
+        : base(
+            $"Unified migration history reconciliation failed ({failureCode})"
+            + (migrationId is null ? "." : $" at migration '{migrationId}'."))
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(failureCode);
+        FailureCode = failureCode;
+        MigrationId = migrationId;
+    }
+
+    public string FailureCode { get; }
+
+    public string? MigrationId { get; }
+}
+
+/// <summary>
+/// 已应用事实与尚待应用后缀的 reconciliation 结果。
+/// </summary>
+public sealed record UnifiedMigrationHistoryReconciliation(
+    IReadOnlyList<CompiledMigrationHistoryEntry> Applied,
+    IReadOnlyList<CompiledMigrationHistoryEntry> Pending);
+
+/// <summary>
+/// 将数据库实际提交顺序与各 owner 的已编译线性前缀对齐。该过程保持纯函数，确保 provider
+/// 在发出 DDL 前已经决定所有 history 不一致。
+/// </summary>
+public static class UnifiedMigrationHistoryReconciler
+{
+    /// <summary>
+    /// 校验各 owner 的已应用前缀和不可变实际提交摘要，返回可追加的待执行事实。
+    /// 所有不一致均在返回结果前以稳定失败码关闭执行路径。
+    /// </summary>
+    /// <param name="historyVersion">数据库 history 使用的 reconciliation 契约版本。</param>
+    /// <param name="applied">按全局位置读取的数据库已应用迁移事实。</param>
+    /// <param name="target">保持 owner 内迁移顺序的确定性候选事实。</param>
+    /// <returns>原样保留的已应用事实与绑定到实际前缀的新事实。</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="applied"/> 或 <paramref name="target"/> 为 <see langword="null"/>。</exception>
+    /// <exception cref="PersistenceHistoryException">
+    /// 契约版本不受支持，history 或目标含重复、未知、非前缀或 frontier 不一致的迁移，
+    /// 或已应用事实的 owner、bundle、content、model、plan、Provider Target/Transition 与目标不一致。
+    /// </exception>
+    public static UnifiedMigrationHistoryReconciliation Reconcile(
+        string historyVersion,
+        IReadOnlyList<CompiledMigrationHistoryEntry> applied,
+        IReadOnlyList<CompiledMigrationHistoryEntry> target)
+    {
+        ArgumentNullException.ThrowIfNull(applied);
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (!string.Equals(
+                historyVersion,
+                PersistenceHistoryVersions.ReconciliationV1,
+                StringComparison.Ordinal))
+        {
+            throw new PersistenceHistoryException(PersistenceHistoryFailureCodes.VersionUnsupported);
+        }
+
+        ValidateTarget(target);
+        var targetById = target.ToDictionary(static entry => entry.MigrationId, StringComparer.Ordinal);
+        var ownerTargets = target.GroupBy(static entry => entry.OwnerModuleId, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
+        var ownerPositions = new Dictionary<string, int>(StringComparer.Ordinal);
+        // 按实际 Position 绑定候选的不可变步骤事实，保留既有摘要诊断的先后顺序。
+        var boundApplied = UnifiedMigrationHistoryDigest.BindPlanDigests(applied.Select(actual =>
+            targetById.TryGetValue(actual.MigrationId, out var expected)
+                ? expected with { Position = actual.Position }
+                : actual));
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < applied.Count; index++)
+        {
+            var actual = applied[index];
+            if (!seen.Add(actual.MigrationId))
+            {
+                throw Failure(PersistenceHistoryFailureCodes.Duplicate, actual);
+            }
+
+            if (!targetById.TryGetValue(actual.MigrationId, out var expected))
+            {
+                throw new PersistenceHistoryException(
+                    index >= target.Count
+                        ? PersistenceHistoryFailureCodes.FrontierMismatch
+                        : PersistenceHistoryFailureCodes.Unknown,
+                    actual.MigrationId);
+            }
+
+            if (actual.Position != index)
+            {
+                throw Failure(PersistenceHistoryFailureCodes.NonPrefix, actual);
+            }
+
+            ValidateFact(actual, expected with { PlanDigest = boundApplied[index].PlanDigest });
+            var ownerPosition = ownerPositions.GetValueOrDefault(expected.OwnerModuleId);
+            if (!string.Equals(actual.MigrationId, ownerTargets[expected.OwnerModuleId][ownerPosition].MigrationId, StringComparison.Ordinal))
+            {
+                throw Failure(PersistenceHistoryFailureCodes.NonPrefix, actual);
+            }
+
+            ownerPositions[expected.OwnerModuleId] = ownerPosition + 1;
+        }
+
+        // 旧事实只核对，不重写；新 Position 与摘要绑定到本次锁内读到的真实提交前缀。
+        var pending = target.Where(entry => !seen.Contains(entry.MigrationId))
+            .Select((entry, index) => entry with { Position = applied.Count + index });
+        var bound = UnifiedMigrationHistoryDigest.BindPlanDigests(applied.Concat(pending));
+        return new UnifiedMigrationHistoryReconciliation(
+            applied.ToArray(),
+            bound.Skip(applied.Count).ToArray());
+    }
+
+    private static void ValidateTarget(IReadOnlyList<CompiledMigrationHistoryEntry> target)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < target.Count; index++)
+        {
+            var entry = target[index];
+            if (entry.Position != index)
+            {
+                throw Failure(PersistenceHistoryFailureCodes.FrontierMismatch, entry);
+            }
+
+            if (!seen.Add(entry.MigrationId))
+            {
+                throw Failure(PersistenceHistoryFailureCodes.Duplicate, entry);
+            }
+
+            ValidateVersions(entry);
+        }
+    }
+
+    private static void ValidateFact(
+        CompiledMigrationHistoryEntry actual,
+        CompiledMigrationHistoryEntry expected)
+    {
+        ValidateVersions(actual);
+        if (!string.Equals(actual.OwnerModuleId, expected.OwnerModuleId, StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.OwnerMismatch, actual);
+        }
+
+        if (!string.Equals(actual.BundleDigest, expected.BundleDigest, StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.BundleMismatch, actual);
+        }
+
+        if (!string.Equals(actual.ContentDigest, expected.ContentDigest, StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.ContentMismatch, actual);
+        }
+
+        if (!string.Equals(actual.FromModelDigest, expected.FromModelDigest, StringComparison.Ordinal)
+            || !string.Equals(actual.ToModelDigest, expected.ToModelDigest, StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.ModelMismatch, actual);
+        }
+
+        if (!string.Equals(actual.PlanDigest, expected.PlanDigest, StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.PlanMismatch, actual);
+        }
+
+        if (!string.Equals(actual.ProviderTargetVersion, expected.ProviderTargetVersion, StringComparison.Ordinal)
+            || !string.Equals(actual.ProviderTargetDigest, expected.ProviderTargetDigest, StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.ProviderTargetMismatch, actual);
+        }
+
+        if (!string.Equals(actual.ProviderTransitionVersion, expected.ProviderTransitionVersion, StringComparison.Ordinal)
+            || !string.Equals(actual.ProviderTransitionDigest, expected.ProviderTransitionDigest, StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.ProviderTransitionMismatch, actual);
+        }
+    }
+
+    private static void ValidateVersions(CompiledMigrationHistoryEntry entry)
+    {
+        if (!string.Equals(
+                entry.HistoryVersion,
+                PersistenceHistoryVersions.ReconciliationV1,
+                StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.VersionUnsupported, entry);
+        }
+
+        if (!string.Equals(
+                entry.ProviderTargetVersion,
+                ProviderTargetSchemaVersions.TargetV1,
+                StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.ProviderTargetMismatch, entry);
+        }
+
+        if (!string.Equals(
+                entry.ProviderTransitionVersion,
+                ProviderTargetSchemaVersions.TransitionV1,
+                StringComparison.Ordinal))
+        {
+            throw Failure(PersistenceHistoryFailureCodes.ProviderTransitionMismatch, entry);
+        }
+    }
+
+    private static PersistenceHistoryException Failure(
+        string failureCode,
+        CompiledMigrationHistoryEntry entry) =>
+        new(failureCode, entry.MigrationId);
+}
+
+/// <summary>
+/// 将每个迁移事实绑定到它之前的不可变实际提交前缀；追加 migration 不会改变数据库中
+/// 已经持久化的前缀摘要。
+/// </summary>
+public static class UnifiedMigrationHistoryDigest
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false
+    };
+
+    /// <summary>
+    /// 计算可随 stream 追加而保持不变的单步 bundle 事实摘要。整份 assembly checksum
+    /// 仍由计划编译器独立校验，不能拿会随追加变化的 checksum 充当历史步骤身份。
+    /// </summary>
+    public static string ComputeBundleDigest(
+        string moduleId,
+        PersistenceProvider provider,
+        CompiledMigrationStep step)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(moduleId);
+        ArgumentNullException.ThrowIfNull(step);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            schemaVersion = "migration-bundle-fact/v1",
+            moduleId,
+            provider,
+            step.Sequence,
+            step.MigrationId,
+            step.PreviousContentDigest,
+            step.ContentDigest,
+            step.FromModelDigest,
+            step.ToModelDigest,
+            step.Compatibility
+        }, JsonOptions);
+        return Convert.ToHexStringLower(SHA256.HashData(bytes));
+    }
+
+    /// <summary>
+    /// 用 #43 Provider Target v1 的 canonical 规则计算 owner-scoped history fact。
+    /// 投影保留 owner 表的完整结构与其 FK principal 物理引用，只排除其他 owner 的表。
+    /// </summary>
+    public static string ComputeProviderTargetFactDigest(ProviderTransitionSnapshot transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        return ProviderTargetDigest.Compute(ScopeToStream(transition.To, transition.ModuleId));
+    }
+
+    /// <summary>
+    /// 用 #43 Provider Transition v1 的 canonical 规则计算 owner-scoped history fact。
+    /// 当前候选的连接前 operation 校验仍消费完整 transition，不使用该历史投影。
+    /// </summary>
+    public static string ComputeProviderTransitionFactDigest(ProviderTransitionSnapshot transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        return ProviderTargetDigest.Compute(transition with
+        {
+            From = ScopeToStream(transition.From, transition.ModuleId),
+            To = ScopeToStream(transition.To, transition.ModuleId)
+        });
+    }
+
+    private static ProviderTargetSnapshot ScopeToStream(
+        ProviderTargetSnapshot target,
+        string ownerModuleId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerModuleId);
+        if (string.Equals(ownerModuleId, "platform.foundation", StringComparison.Ordinal))
+        {
+            return target;
+        }
+
+        return target with
+        {
+            Tables = target.Tables
+                .Where(table => string.Equals(
+                    table.OwnerModuleId,
+                    ownerModuleId,
+                    StringComparison.Ordinal))
+                .ToArray()
+        };
+    }
+
+    /// <summary>
+    /// 为有序事实绑定只依赖当前前缀的计划摘要。
+    /// </summary>
+    public static IReadOnlyList<CompiledMigrationHistoryEntry> BindPlanDigests(
+        IEnumerable<CompiledMigrationHistoryEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var result = new List<CompiledMigrationHistoryEntry>();
+        var previous = string.Empty;
+        foreach (var entry in entries.OrderBy(static item => item.Position))
+        {
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                previous,
+                entry.Position,
+                entry.HistoryVersion,
+                entry.MigrationId,
+                entry.OwnerModuleId,
+                entry.BundleDigest,
+                entry.ContentDigest,
+                entry.FromModelDigest,
+                entry.ToModelDigest,
+                entry.ProviderTargetVersion,
+                entry.ProviderTargetDigest,
+                entry.ProviderTransitionVersion,
+                entry.ProviderTransitionDigest
+            }, JsonOptions);
+            previous = Convert.ToHexStringLower(SHA256.HashData(bytes));
+            result.Add(entry with { PlanDigest = previous });
+        }
+
+        return result;
+    }
+}

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Example",
+  "displayName": "功能示例",
+  "version": "1.0.0",
+  "description": "功能示例 模块",
+  "entryAssembly": "../../ExampleModule.dll",
+  "dependencies": [
+    "Identity",
+    "Authorization"
+  ],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "backend": {
+    "behaviorKey": "example.backend"
+  },
+  "dataExecutions": [
+    {"key":"example.record.export","moduleId":"Example","provider":"standardCrud.export","boundary":"entry","featureBehaviors":["example.record.export"],"resourceKey":"example.record"},
+    { "key": "example.record.list", "moduleId": "Example", "provider": "standardCrud.list", "boundary": "entry", "featureBehaviors": ["example.record.read"], "resourceKey": "example.record" },
+    {
+      "key": "example.record.read",
+      "moduleId": "Example",
+      "provider": "standardCrud.read",
+      "boundary": "entry",
+      "featureBehaviors": [
+        "example.record.read"
+      ],
+      "resourceKey": "example.record"
+    }
+  ],
+  "frontend": {
+    "behaviorKey": "example.frontend",
+    "entry": "example",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "example.runtime-workload.list",
+      "example.record.list",
+      "example.record.detail"
+    ]
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/ExampleRecord.model.json"
+    ],
+    "migrations": {
+      "sqlServer": {
+        "assembly": "migrations/Example.SqlServerMigrations.dll",
+        "manifest": "migrations/Example.SqlServerMigrations.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0", "type": "model",
+  "DocumentFileLink": {
+    "kind": "Link",
+    "fields": [
+      { "name": "Role", "storage": { "type": "string", "ordinalKey": true }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } },
+      { "name": "Ordinal", "storage": { "type": "int" }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } },
+      { "name": "FileUsageId", "storage": { "type": "guid" }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }
+    ],
+    "linkedTypes": [{ "parent": "DocumentIteration", "child": "FileRecord" }],
+    "indexes": [
+      { "name": "UX_DocumentFileLink_Ordinal", "fields": ["PEID", "Ordinal"], "unique": true },
+      { "name": "UX_DocumentFileLink_File", "fields": ["PEID", "CEID"], "unique": true }
+    ],
+    "foreignKeys": [
+      { "name": "FK_DocumentFileLink_DocumentIteration", "fields": ["PEID"], "principalModuleId": "Document", "principalModel": "DocumentIteration", "principalFields": ["EID"], "onDelete": "Restrict" }
+    ]
+  }
+}

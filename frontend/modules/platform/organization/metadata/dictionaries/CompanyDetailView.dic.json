@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "CompanyDetailView": {
+    "Section_Basic": {
+      "zhs": "基本信息",
+      "en": "Basic Information"
+    },
+    "Field_ECODE": {
+      "zhs": "公司编码",
+      "en": "Company Code"
+    },
+    "Field_ENAME": {
+      "zhs": "公司名称",
+      "en": "Company Name"
+    },
+    "Field_SortOrder": {
+      "zhs": "排序码",
+      "en": "Sort Order Code"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Title": {
+      "zhs": "公司详情",
+      "en": "Company Details"
+    },
+    "Description": {
+      "zhs": "查看公司信息。",
+      "en": "View company information."
+    },
+    "Section_Audit": {
+      "zhs": "审计信息",
+      "en": "Audit"
+    },
+    "Field_CreatedBy": {
+      "zhs": "创建人",
+      "en": "Created By"
+    },
+    "Field_CreatedAt": {
+      "zhs": "创建时间",
+      "en": "Created At"
+    },
+    "Field_UpdatedBy": {
+      "zhs": "更新人",
+      "en": "Updated By"
+    },
+    "Field_UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "Updated At"
+    }
+  }
+}

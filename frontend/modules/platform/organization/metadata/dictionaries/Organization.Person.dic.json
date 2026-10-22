@@ -1,0 +1,334 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Organization.Person": {
+    "BirthDateInFuture": {
+      "zhs": "出生日期不能晚于 {date}。",
+      "en": "Birth date cannot be later than {date}."
+    },
+    "BindingTitle": {
+      "zhs": "账号绑定",
+      "en": "Account binding"
+    },
+    "BindingHelp": {
+      "zhs": "永久一对一绑定；提交后不能解绑、改绑或重绑",
+      "en": "Permanent one-to-one binding. It cannot be removed or reassigned after submission."
+    },
+    "Bound": {
+      "zhs": "已永久绑定",
+      "en": "Permanently bound"
+    },
+    "Unbound": {
+      "zhs": "尚未绑定",
+      "en": "Not bound"
+    },
+    "PersonDisabled": {
+      "zhs": "人员已停用",
+      "en": "Person disabled"
+    },
+    "NoBindingPermission": {
+      "zhs": "当前账号没有绑定权限。",
+      "en": "You do not have permission to bind an account."
+    },
+    "PersonName": {
+      "zhs": "人员姓名",
+      "en": "Person name"
+    },
+    "AccountId": {
+      "zhs": "账号标识",
+      "en": "Account ID"
+    },
+    "AccountCode": {
+      "zhs": "账号编码",
+      "en": "Account code"
+    },
+    "AccountName": {
+      "zhs": "账号名称",
+      "en": "Account name"
+    },
+    "AccountStatus": {
+      "zhs": "账号状态",
+      "en": "Account status"
+    },
+    "BoundAt": {
+      "zhs": "绑定时间",
+      "en": "Bound at"
+    },
+    "BoundBy": {
+      "zhs": "绑定操作者",
+      "en": "Bound by"
+    },
+    "BindingReason": {
+      "zhs": "绑定原因",
+      "en": "Binding reason"
+    },
+    "IdentityUnavailable": {
+      "zhs": "Identity 暂不可用",
+      "en": "Identity is temporarily unavailable"
+    },
+    "Unavailable": {
+      "zhs": "暂不可用",
+      "en": "Unavailable"
+    },
+    "BindingInstructions": {
+      "zhs": "搜索一个普通账号，核对 ECODE、ENAME、状态和 Revision 后提交永久绑定。",
+      "en": "Search for a regular account and review its code, name, status and revision before binding permanently."
+    },
+    "DisabledBindingHelp": {
+      "zhs": "停用人员不能查询候选或提交绑定。",
+      "en": "Disabled people cannot search candidates or submit a binding."
+    },
+    "StartBinding": {
+      "zhs": "建立永久绑定",
+      "en": "Create permanent binding"
+    },
+    "BindingDialogTitle": {
+      "zhs": "建立人员账号永久绑定",
+      "en": "Bind person to account permanently"
+    },
+    "Cancel": {
+      "zhs": "取消",
+      "en": "Cancel"
+    },
+    "Submitting": {
+      "zhs": "提交中…",
+      "en": "Submitting…"
+    },
+    "ConfirmBinding": {
+      "zhs": "确认永久绑定",
+      "en": "Confirm permanent binding"
+    },
+    "SeparateNames": {
+      "zhs": "Person.Name 与 User.ENAME 分别维护，绑定不会同步名称。",
+      "en": "Person and account names are maintained separately. Binding does not synchronize them."
+    },
+    "SearchLabel": {
+      "zhs": "按 ECODE 或 ENAME 搜索",
+      "en": "Search by account code or name"
+    },
+    "Searching": {
+      "zhs": "搜索中…",
+      "en": "Searching…"
+    },
+    "SearchCandidates": {
+      "zhs": "搜索候选",
+      "en": "Search candidates"
+    },
+    "LoadingCandidates": {
+      "zhs": "正在加载最多 20 个可绑定账号…",
+      "en": "Loading up to 20 eligible accounts…"
+    },
+    "EmptyCandidates": {
+      "zhs": "请搜索尚未绑定的普通账号。",
+      "en": "Search for an unbound regular account."
+    },
+    "Select": {
+      "zhs": "选择",
+      "en": "Select"
+    },
+    "Status": {
+      "zhs": "状态",
+      "en": "Status"
+    },
+    "Revision": {
+      "zhs": "版本",
+      "en": "Revision"
+    },
+    "SelectCandidate": {
+      "zhs": "选择 {code}",
+      "en": "Select {code}"
+    },
+    "BindingPreview": {
+      "zhs": "绑定预览：{person} → {code} · {name}",
+      "en": "Binding preview: {person} → {code} · {name}"
+    },
+    "BindingConfirmation": {
+      "zhs": "我已核对人员与账号，理解绑定提交后不能解绑、改绑或重绑。",
+      "en": "I have checked the person and account and understand that this binding cannot be removed or reassigned."
+    },
+    "BindingReasonPlaceholder": {
+      "zhs": "请输入绑定原因（必填，最多 500 字）",
+      "en": "Enter a binding reason (required, up to 500 characters)"
+    },
+    "Enabled": {
+      "zhs": "已启用",
+      "en": "Enabled"
+    },
+    "Disabled": {
+      "zhs": "已停用",
+      "en": "Disabled"
+    },
+    "Deleted": {
+      "zhs": "已删除",
+      "en": "Deleted"
+    },
+    "Close": {
+      "zhs": "关闭",
+      "en": "Close"
+    },
+    "IDENTITY_REVISION_CONFLICT": {
+      "zhs": "候选账号已发生变化，请重新搜索并核对后提交。",
+      "en": "The candidate account has changed. Search again and review it before submitting."
+    },
+    "ORGANIZATION_PERSON_BINDING_INVALID": {
+      "zhs": "绑定请求不完整，请重新选择账号。",
+      "en": "The binding request is incomplete. Select an account again."
+    },
+    "ORGANIZATION_PERSON_BINDING_REASON_INVALID": {
+      "zhs": "绑定原因须为 1–500 个字符，且不能全为空白。",
+      "en": "Enter a binding reason of 1–500 characters, not only whitespace."
+    },
+    "ORGANIZATION_PERSON_BINDING_ACTOR_INVALID": {
+      "zhs": "无法确认绑定操作者，请重新登录后重试。",
+      "en": "The binding actor could not be verified. Sign in again and retry."
+    },
+    "ORGANIZATION_PERSON_NOT_FOUND": {
+      "zhs": "人员不存在，请刷新列表。",
+      "en": "This person no longer exists. Refresh the list."
+    },
+    "ORGANIZATION_PERSON_BINDING_PERSON_DISABLED": {
+      "zhs": "人员已停用，不能绑定账号。",
+      "en": "This person is disabled and cannot be bound to an account."
+    },
+    "ORGANIZATION_PERSON_ALREADY_BOUND": {
+      "zhs": "人员已永久绑定账号，不能改绑。",
+      "en": "This person already has a permanent account binding and cannot be reassigned."
+    },
+    "ORGANIZATION_PERSON_BINDING_USER_NOT_AVAILABLE": {
+      "zhs": "所选账号不存在或不可绑定，请重新搜索。",
+      "en": "The selected account does not exist or is unavailable for binding. Search again."
+    },
+    "ORGANIZATION_USER_ALREADY_BOUND": {
+      "zhs": "所选账号已绑定其他人员，请重新选择。",
+      "en": "The selected account is already bound to another person. Select another account."
+    },
+    "ORGANIZATION_LOCAL_ADMIN_BINDING_FORBIDDEN": {
+      "zhs": "本地管理员账号不能绑定人员。",
+      "en": "The local administrator account cannot be bound to a person."
+    },
+    "ORGANIZATION_IDENTITY_UNAVAILABLE": {
+      "zhs": "账号服务暂不可用，请稍后重试。",
+      "en": "The account service is temporarily unavailable. Try again later."
+    },
+    "ORGANIZATION_PERSON_LIFECYCLE_INVALID": {
+      "zhs": "人员启停请求无效，请刷新后重试。",
+      "en": "The person status request is invalid. Refresh and retry."
+    },
+    "ORGANIZATION_PERSON_LIFECYCLE_REASON_INVALID": {
+      "zhs": "启停原因须为 1–500 个字符，且不能全为空白。",
+      "en": "Enter a status change reason of 1–500 characters, not only whitespace."
+    },
+    "ORGANIZATION_PERSON_LIFECYCLE_ACTOR_INVALID": {
+      "zhs": "无法确认启停操作者，请重新登录后重试。",
+      "en": "The status change actor could not be verified. Sign in again and retry."
+    },
+    "ORGANIZATION_PERSON_LIFECYCLE_DEPENDENCY_UNAVAILABLE": {
+      "zhs": "关联账号或会话服务暂不可用，人员状态未完成变更，请稍后重试。",
+      "en": "The linked account or session service is unavailable. The person status change did not complete. Try again later."
+    },
+    "LIFECYCLE_CONFLICT": {
+      "zhs": "人员或关联账号状态已变化，请刷新并核对后重试。",
+      "en": "The person or linked account status has changed. Refresh and review it before retrying."
+    },
+    "CompanyRequired": {
+      "zhs": "所属公司与部门须同时填写。",
+      "en": "Select both a company and a department."
+    },
+    "DepartmentRequired": {
+      "zhs": "所属公司与部门须同时填写。",
+      "en": "Select both a company and a department."
+    },
+    "CompanyNotFound": {
+      "zhs": "所属公司不存在。",
+      "en": "The selected company does not exist."
+    },
+    "CompanyDisabled": {
+      "zhs": "所属公司已停用。",
+      "en": "The selected company is disabled."
+    },
+    "DepartmentNotFound": {
+      "zhs": "所属部门不存在。",
+      "en": "The selected department does not exist."
+    },
+    "DepartmentDisabled": {
+      "zhs": "所属部门已停用。",
+      "en": "The selected department is disabled."
+    },
+    "DepartmentCompanyMismatch": {
+      "zhs": "所属部门不属于所选公司。",
+      "en": "The selected department does not belong to the selected company."
+    },
+    "DepartmentChainDisabled": {
+      "zhs": "所属部门或其上级部门已停用。",
+      "en": "The selected department or one of its parent departments is disabled."
+    },
+    "PositionNotFound": {
+      "zhs": "岗位不存在。",
+      "en": "The selected position does not exist."
+    },
+    "PositionDisabled": {
+      "zhs": "岗位已停用。",
+      "en": "The selected position is disabled."
+    },
+    "EmploymentIntervalInvalid": {
+      "zhs": "任职结束时间不能早于任职开始时间。",
+      "en": "Employment end time cannot be earlier than the start time."
+    },
+    "PersonNoRequired": {
+      "zhs": "人员编号不能为空。",
+      "en": "Person number is required."
+    },
+    "NameRequired": {
+      "zhs": "姓名不能为空。",
+      "en": "Name is required."
+    },
+    "EnabledRequired": {
+      "zhs": "启用状态不能为空。",
+      "en": "Enablement status is required."
+    },
+    "EmploymentStatusRequired": {
+      "zhs": "任职状态不能为空。",
+      "en": "Employment status is required."
+    },
+    "PersonNoDuplicated": {
+      "zhs": "人员编号必须唯一。",
+      "en": "Person number must be unique."
+    },
+    "DeleteBlockedByUserBinding": {
+      "zhs": "已永久绑定账号的人员不能删除。",
+      "en": "A person with a permanent account binding cannot be deleted."
+    },
+    "InvalidId": {
+      "zhs": "人员标识无效，请刷新后重试。",
+      "en": "The person ID is invalid. Refresh and retry."
+    },
+    "DisableReason": {
+      "zhs": "停用原因",
+      "en": "Reason for disabling"
+    },
+    "DisableReasonPlaceholder": {
+      "zhs": "请输入停用原因（必填）",
+      "en": "Enter a reason for disabling (required)"
+    },
+    "Title": {
+      "zhs": "人员",
+      "en": "Person"
+    },
+    "AuthorizationSummaryTitle": {
+      "zhs": "授权摘要",
+      "en": "Authorization summary"
+    },
+    "AuthorizationSummaryHelp": {
+      "zhs": "此处显示已保存的授权摘要；使用对象授权操作查看或调整权限。",
+      "en": "This summary shows saved authorization. Use the object authorization action to inspect or change permissions."
+    },
+    "AuthorizationLoaded": {
+      "zhs": "已加载",
+      "en": "Loaded"
+    },
+    "AuthorizationReadOnly": {
+      "zhs": "授权摘要仅供查看。",
+      "en": "This authorization summary is read-only."
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "example.record.detail",
+    "dicKey": "ExampleRecordDetailView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "detail",
+    "model": "ExampleRecord",
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ECODE",
+          "ENAME",
+          "ReviewerUserEID",
+          "RecordSource"
+        ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Section_Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
+      }
+    ],
+    "pageActions": [
+      {
+        "key": "edit",
+        "labelKey": "Action_Edit",
+        "standardAction": "edit",
+        "dataAccess": { "object": "ExampleRecord", "actions": ["edit"] }
+      }
+    ],
+    "resourceKey": "example.record",
+    "dataAccess": {
+      "execution": "example.record.read",
+      "resources": [
+        "example.record"
+      ]
+    }
+  }
+}

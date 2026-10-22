@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dataAccess": { "execution": "identity.account.read", "resources": ["identity.account"] },
+    "key": "identity.account.detail",
+    "dicKey": "AccountDetailView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "detail",
+    "model": "IdentityAccount",
+    "resourceKey": "identity.account",
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ECODE",
+          "ENAME",
+          "Status"
+        ]
+      },
+      {
+        "key": "protection",
+        "titleKey": "Section_Protection",
+        "fields": [
+          "IsLocalAdministrator",
+          "IsPersonnelBound",
+          "PersonnelDisableHold"
+        ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Section_Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
+      }
+    ],
+    "summaryBlocks": [
+      "securityEvents"
+    ],
+    "pageActions": [
+      {
+        "key": "edit",
+        "labelKey": "Action_Edit",
+        "standardAction": "edit"
+      },
+      {
+        "key": "enable",
+        "labelKey": "Action_Enable",
+        "standardAction": "enable",
+        "handlerKey": "enable",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_Enable",
+        "dataDependency": {
+          "fields": ["EID", "ECODE", "ENAME", "Status", "Revision", "IsLocalAdministrator", "IsPersonnelBound", "PersonnelDisableHold"],
+          "reasonKey": "Action_DependencyUnavailable"
+        }
+      },
+      {
+        "key": "disable",
+        "labelKey": "Action_Disable",
+        "standardAction": "disable",
+        "handlerKey": "disable",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_Disable",
+        "dataDependency": {
+          "fields": ["EID", "ECODE", "ENAME", "Status", "Revision", "IsLocalAdministrator", "IsPersonnelBound", "PersonnelDisableHold"],
+          "reasonKey": "Action_DependencyUnavailable"
+        }
+      },
+      {
+        "key": "credentialReset",
+        "labelKey": "Action_CredentialReset",
+        "handlerKey": "credentialReset",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_CredentialReset",
+        "dataDependency": {
+          "fields": ["EID", "ECODE", "ENAME", "Status", "Revision", "IsLocalAdministrator", "IsPersonnelBound", "PersonnelDisableHold"],
+          "reasonKey": "Action_DependencyUnavailable"
+        }
+      },
+      {
+        "key": "delete",
+        "labelKey": "Action_Delete",
+        "standardAction": "delete",
+        "variant": "danger",
+        "handlerKey": "delete",
+        "inputKey": "identityAccountDeleteConfirmation",
+        "confirmMessageKey": "Confirm_Delete",
+        "dataDependency": {
+          "fields": ["EID", "ECODE", "ENAME", "Status", "Revision", "IsLocalAdministrator", "IsPersonnelBound", "PersonnelDisableHold"],
+          "reasonKey": "Action_DependencyUnavailable"
+        }
+      }
+    ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "identity.account.authorize",
+        "dataAccess": {"object":"IdentityAccount","actions":["authorize"]} }
+    ]
+  }
+}

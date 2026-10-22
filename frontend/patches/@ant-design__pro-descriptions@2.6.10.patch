@@ -1,0 +1,38 @@
+diff --git a/es/index.js b/es/index.js
+index 43accbeca9525150da3f726d87a72cb4e85f440d..3c05144940a8c2fe83900d8b5e728775eec4e36d 100644
+--- a/es/index.js
++++ b/es/index.js
+@@ -432,9 +432,11 @@ var ProDescriptions = function ProDescriptions(props) {
+       children: /*#__PURE__*/_jsx(Descriptions, _objectSpread(_objectSpread({
+         className: className
+       }, rest), {}, {
+-        contentStyle: _objectSpread({
+-          minWidth: 0
+-        }, contentStyle || {}),
++        styles: _objectSpread(_objectSpread({}, rest.styles), {}, {
++          content: _objectSpread(_objectSpread({
++            minWidth: 0
++          }, contentStyle || {}), (rest.styles || {}).content || {})
++        }),
+         extra: rest.extra ? /*#__PURE__*/_jsxs(Space, {
+           children: [options, rest.extra]
+         }) : options,
+diff --git a/lib/index.js b/lib/index.js
+index c60f15230cda214896591ca94c9fa8a51b72476a..4266c7fcf34d1d148e874b7c83e419dbdd6b45de 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -433,9 +433,11 @@ var ProDescriptions = exports.ProDescriptions = function ProDescriptions(props)
+       children: /*#__PURE__*/(0, _jsxRuntime.jsx)(_antd.Descriptions, (0, _objectSpread2.default)((0, _objectSpread2.default)({
+         className: className
+       }, rest), {}, {
+-        contentStyle: (0, _objectSpread2.default)({
+-          minWidth: 0
+-        }, contentStyle || {}),
++        styles: (0, _objectSpread2.default)((0, _objectSpread2.default)({}, rest.styles), {}, {
++          content: (0, _objectSpread2.default)((0, _objectSpread2.default)({
++            minWidth: 0
++          }, contentStyle || {}), (rest.styles || {}).content || {})
++        }),
+         extra: rest.extra ? /*#__PURE__*/(0, _jsxRuntime.jsxs)(_antd.Space, {
+           children: [options, rest.extra]
+         }) : options,

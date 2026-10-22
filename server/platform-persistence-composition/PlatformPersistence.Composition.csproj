@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PlatformPersistence.Composition</AssemblyName>
+    <RootNamespace>ICP.Platform.Persistence.Composition</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\modules\Platform\ConfigCenter\ConfigCenter.csproj" />
+    <ProjectReference Include="..\modules\Platform\Authorization\AuthorizationModule.csproj" />
+    <ProjectReference Include="..\modules\Platform\Organization\OrganizationModule.csproj" />
+    <ProjectReference Include="..\modules\Platform\Identity\IdentityModule.csproj" />
+    <ProjectReference Include="..\modules\Platform\Authentication\AuthenticationModule.csproj" />
+  </ItemGroup>
+
+</Project>

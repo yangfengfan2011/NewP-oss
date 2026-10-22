@@ -1,0 +1,250 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dataAccess": { "execution": "organization.person.list", "resources": ["organization.person"] },
+    "key": "organization.person.list",
+    "dicKey": "PersonListView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "list",
+    "model": "Person",
+    "resourceKey": "organization.person",
+    "lookupBindings": {
+      "organization.companies": {"behavior":"organization.person.company.lookup","dataAccess":{"execution":"organization.person.company.lookup","resources":["organization.company"]}},
+      "organization.departments": {"behavior":"organization.person.department.lookup","dataAccess":{"execution":"organization.person.department.lookup","resources":["organization.department"]}},
+      "organization.positions": {"behavior":"organization.position.lookup","dataAccess":{"execution":"organization.position.options","resources":["organization.position"]}}
+    },
+    "editorMode": "drawer",
+    "detailViewKey": "organization.person.detail",
+    "query": {
+      "fields": [
+        {
+          "key": "keyword",
+          "labelKey": "Query_Keyword",
+          "source": "preset",
+          "preset": "keyword",
+          "operator": "like"
+        },
+        {
+          "key": "employmentStatus",
+          "labelKey": "Query_EmploymentStatus",
+          "source": "model",
+          "field": "EmploymentStatus",
+          "operator": "="
+        }
+      ],
+      "defaultSort": {
+        "field": "PersonNo",
+        "direction": "asc"
+      },
+      "defaultPageSize": 20
+    },
+    "advancedFilter": {
+      "enabled": true,
+      "titleKey": "AdvancedFilter_Title",
+      "sections": [
+        {
+          "key": "person",
+          "titleKey": "AdvancedFilter_Person",
+          "fields": [
+            {
+              "key": "birthDateRange",
+              "labelKey": "Query_BirthDateRange",
+              "source": "model",
+              "field": "BirthDate",
+              "operator": "dateRange",
+              "fromKey": "birthDateFrom",
+              "toKey": "birthDateTo"
+            }
+          ]
+        },
+        {
+          "key": "organization",
+          "titleKey": "AdvancedFilter_Organization",
+          "fields": [
+            {
+              "key": "companyId",
+              "labelKey": "Query_Company",
+              "source": "model",
+              "field": "CompanyId",
+              "operator": "=",
+              "dependsOn": []
+            },
+            {
+              "key": "departmentId",
+              "labelKey": "Query_Department",
+              "source": "model",
+              "field": "DepartmentId",
+              "operator": "=",
+              "dependsOn": [
+                "companyId"
+              ]
+            },
+            {
+              "key": "positionId",
+              "labelKey": "Query_Position",
+              "source": "model",
+              "field": "PositionId",
+              "operator": "="
+            },
+            {
+              "key": "isEnabled",
+              "labelKey": "Query_IsEnabled",
+              "source": "model",
+              "field": "IsEnabled",
+              "operator": "="
+            }
+          ]
+        }
+      ]
+    },
+    "columnResize": true,
+    "columns": [
+      {
+        "key": "personNo",
+        "labelKey": "Column_PersonNo",
+        "source": "model",
+        "field": "PersonNo",
+        "width": 140,
+        "sortable": true,
+        "hideable": false,
+        "responsivePriority": "high"
+      },
+      {
+        "key": "name",
+        "labelKey": "Column_Name",
+        "source": "model",
+        "field": "ENAME",
+        "sortable": true,
+        "standardAction": "view",
+        "responsivePriority": "high"
+      },
+      {
+        "key": "birthDate",
+        "labelKey": "Column_BirthDate",
+        "source": "model",
+        "field": "BirthDate",
+        "width": 130,
+        "sortable": true,
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "companyId",
+        "labelKey": "Column_CompanyName",
+        "source": "model",
+        "field": "CompanyId",
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "departmentName",
+        "labelKey": "Column_DepartmentName",
+        "source": "projection",
+        "field": "DepartmentName",
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "positionName",
+        "labelKey": "Column_PositionName",
+        "source": "projection",
+        "field": "PositionName",
+        "responsivePriority": "low"
+      },
+      {
+        "key": "employmentStatus",
+        "labelKey": "Column_EmploymentStatus",
+        "source": "model",
+        "field": "EmploymentStatus",
+        "sortable": true,
+        "responsivePriority": "low"
+      },
+      {
+        "key": "employmentStartedAt",
+        "labelKey": "Column_EmploymentStartedAt",
+        "source": "model",
+        "field": "EmploymentStartedAt",
+        "width": 180,
+        "sortable": true,
+        "responsivePriority": "low"
+      },
+      {
+        "key": "employmentEndedAt",
+        "labelKey": "Column_EmploymentEndedAt",
+        "source": "model",
+        "field": "EmploymentEndedAt",
+        "width": 180,
+        "sortable": true,
+        "responsivePriority": "low"
+      },
+      {
+        "key": "isEnabled",
+        "labelKey": "Column_IsEnabled",
+        "source": "model",
+        "field": "IsEnabled",
+        "sortable": true,
+        "responsivePriority": "high"
+      }
+    ],
+    "pageActions": [
+      {
+        "key": "create",
+        "labelKey": "Action_Create",
+        "standardAction": "create", "dataAccess": { "object": "Person", "actions": ["create"] },
+        "variant": "primary"
+      }
+    ],
+    "rowActions": [
+      {
+        "key": "edit",
+        "labelKey": "Action_Edit",
+        "standardAction": "edit", "dataAccess": { "object": "Person", "actions": ["edit"] }
+      },
+      {
+        "key": "delete",
+        "labelKey": "Action_Delete",
+        "standardAction": "delete", "dataAccess": { "object": "Person", "actions": ["delete"] },
+        "variant": "danger",
+        "confirmMessageKey": "Action_Delete_Confirm",
+        "handlerKey": "delete",
+        "disabledWhen": {
+          "field": "AccountEID",
+          "operator": "notEmpty",
+          "reasonKey": "Action_Delete_BoundDisabled"
+        }
+      },
+      {
+        "key": "disable",
+        "labelKey": "Action_Disable",
+        "standardAction": "disable",
+        "variant": "danger",
+        "confirmMessageKey": "Action_Disable_Confirm",
+        "handlerKey": "disable",
+        "inputKey": "disableReason",
+        "visibleWhen": {
+          "field": "IsEnabled",
+          "operator": "equals",
+          "value": true
+        }
+      },
+      {
+        "key": "enable",
+        "labelKey": "Action_Enable",
+        "standardAction": "enable",
+        "confirmMessageKey": "Action_Enable_Confirm",
+        "handlerKey": "enable",
+        "visibleWhen": {
+          "field": "IsEnabled",
+          "operator": "equals",
+          "value": false
+        }
+      }
+    ],
+    "export": {
+      "dataAccess": { "object": "Person", "actions": ["read"] },
+      "modes": [
+        "current",
+        "all"
+      ]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Audit",
+  "modelDigest": "90a3292f8fca62a4a86c8b6415179c4a38a67b0a21e1b7c3600c6916a7fda140",
+  "bundleChecksum": "7f63a342c822e284d023eb1d2e599e9288a7920ecc816400c22edd6526b05b89",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20260910123205_Audit_000001_BusinessChanges",
+      "previousContentDigest": null,
+      "contentDigest": "91688d8e5c45b2e2546ca919d9b05af2f2ec9c1c7bce29ec6c15b804bb960ca5",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "aa10187b9edf0245a58e83f5e3afaafc2661ecb9506c08fe7858ef8ae1662453",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000002",
+      "migrationId": "20261017201106_Audit_000002_BusinessChangeIp",
+      "previousContentDigest": "91688d8e5c45b2e2546ca919d9b05af2f2ec9c1c7bce29ec6c15b804bb960ca5",
+      "contentDigest": "b17b4e2a5623b306c5969f7b105b3044dadbf2b763ce0b190f825cc15c40555b",
+      "fromModelDigest": "aa10187b9edf0245a58e83f5e3afaafc2661ecb9506c08fe7858ef8ae1662453",
+      "toModelDigest": "90a3292f8fca62a4a86c8b6415179c4a38a67b0a21e1b7c3600c6916a7fda140",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

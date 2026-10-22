@@ -1,0 +1,499 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { FrontendModule, RouteConfig } from '@icp-platform/sdk';
+import type {
+  RuntimeNavItemDocument,
+  RuntimeViewDocument,
+} from '../metadata/runtimeMetadataManifest';
+import {
+  compileStandardCrudRouteProjection,
+  resolveStandardCrudListRoute,
+} from '../navigation/standardCrudRouteAdapter';
+import exampleModuleBindings from '../../../../modules/example/src/index';
+import exampleNavigationDocument from '../../../../modules/example/metadata/navigation/Example.nav.json';
+import exampleRuntimeWorkloadListViewDocument from '../../../../modules/example/metadata/views/RuntimeWorkloadList.view.json';
+import exampleRecordListViewDocument from '../../../../modules/example/metadata/views/ExampleRecordList.view.json';
+import exampleRecordDetailViewDocument from '../../../../modules/example/metadata/views/ExampleRecordDetail.view.json';
+import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
+
+const modules: FrontendModule[] = [
+  {
+    metadata: { moduleId: 'organization', displayName: 'Organization', version: '1.0.0' },
+    standardCrudResources: [
+      {
+        resourceKey: 'organization.person',
+        dataAdapter: createStandardCrudTestDataAdapter(),
+        listViewKey: 'organization.person.list',
+        detailViewKey: 'organization.person.detail',
+        detailRoutePath: '/organization/persons/:id',
+      },
+    ],
+  },
+];
+
+const navDocuments: RuntimeNavItemDocument[] = [{
+  type: 'nav',
+  navigation: {
+    items: [{
+      key: 'organization.person.center',
+      path: '/organization/persons',
+      entryType: 'standard-list',
+      targetKey: 'organization.person.list',
+      featurePosition: 'Organization.Person.View',
+    }],
+  },
+}];
+
+const viewDocuments: RuntimeViewDocument[] = [{
+  type: 'view',
+  view: {
+    key: 'organization.person.list',
+    mode: 'list',
+    detailViewKey: 'organization.person.detail',
+  },
+}, {
+  type: 'view',
+  view: {
+    key: 'organization.person.detail',
+    mode: 'detail',
+    model: 'Person',
+    sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
+  },
+}];
+
+const fallbackRoutes: RouteConfig[] = [
+  { path: '/organization/persons', component: () => null, featurePosition: 'Organization.Person.View' },
+  { path: '/organization/persons/new', component: () => null, featurePosition: 'Organization.Person.View' },
+  { path: '/organization/persons/:id', component: () => null, featurePosition: 'Organization.Person.View' },
+];
+
+describe('standard CRUD route adapter', () => {
+  it('builds detail route entries and inherits module route permissions', () => {
+    const projection = compileStandardCrudRouteProjection(modules, navDocuments, viewDocuments, []);
+
+    expect(projection.detailEntries).toEqual([
+      {
+        path: '/organization/persons/:id',
+        viewKey: 'organization.person.detail',
+        featurePosition: 'Organization.Person.View',
+      },
+    ]);
+  });
+
+  it('removes module fallback routes owned by standard CRUD detail routes and drawer redirects', () => {
+    const projection = compileStandardCrudRouteProjection(
+      modules,
+      navDocuments,
+      viewDocuments,
+      fallbackRoutes,
+    );
+
+    expect(projection.fallbackRoutes.map((route) => route.path)).toEqual([
+      '/organization/persons',
+    ]);
+  });
+
+  it('为抽屉入口兼容构建旧新建路由重定向', () => {
+    expect(compileStandardCrudRouteProjection(modules, navDocuments, viewDocuments, []).drawerRedirects).toEqual([
+      {
+        from: '/organization/persons/new',
+        to: '/organization/persons?drawer=create',
+      },
+    ]);
+  });
+
+  it('projects lazy list/detail descriptors from metadata without executing their loaders', () => {
+    const load = vi.fn();
+    const lazyModules: FrontendModule[] = [{
+      metadata: { moduleId: 'organization', displayName: 'Organization', version: '1.0.0' },
+      standardCrudCapabilities: [
+        { kind: 'standard-list', targetKey: 'organization.person.list', load },
+        { kind: 'standard-crud-detail', targetKey: 'organization.person.detail', load },
+      ],
+    }];
+
+    const projection = compileStandardCrudRouteProjection(lazyModules, navDocuments, viewDocuments, []);
+    expect(projection.detailEntries).toEqual([{
+      path: '/organization/persons/:id',
+      viewKey: 'organization.person.detail',
+      featurePosition: 'Organization.Person.View',
+    }]);
+    expect(projection.drawerRedirects).toEqual([{
+      from: '/organization/persons/new',
+      to: '/organization/persons?drawer=create',
+    }]);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('projects the formal Example persisted routes while keeping runtime workload list-only', () => {
+    const exampleModule: FrontendModule = {
+      metadata: { moduleId: 'example', displayName: 'Example', version: '1.0.0' },
+      standardCrudCapabilities: exampleModuleBindings.standardCrudCapabilities,
+    };
+    const navigation = exampleNavigationDocument as unknown as RuntimeNavItemDocument;
+    const runtimeWorkloadListView = exampleRuntimeWorkloadListViewDocument as unknown as RuntimeViewDocument;
+    const recordListView = exampleRecordListViewDocument as unknown as RuntimeViewDocument;
+    const recordDetailView = exampleRecordDetailViewDocument as unknown as RuntimeViewDocument;
+
+    expect(resolveStandardCrudListRoute([navigation], 'example.runtime-workload.list')).toEqual({
+      path: '/examples/standard-crud/runtime-columns',
+      featurePosition: undefined,
+    });
+    expect(resolveStandardCrudListRoute([navigation], 'example.record.list')).toEqual({
+      path: '/examples/standard-crud/persistent-records',
+      featurePosition: undefined,
+    });
+    expect(compileStandardCrudRouteProjection(
+      [exampleModule],
+      [navigation],
+      [runtimeWorkloadListView, recordListView, recordDetailView],
+      [],
+    )).toEqual({
+      detailEntries: [{
+        path: '/examples/standard-crud/persistent-records/:id',
+        viewKey: 'example.record.detail',
+        featurePosition: undefined,
+        featurePosition: undefined,
+      }],
+      drawerRedirects: [{
+        from: '/examples/standard-crud/persistent-records/new',
+        to: '/examples/standard-crud/persistent-records?drawer=create',
+      }],
+      fallbackRoutes: [],
+    });
+    expect(exampleRuntimeWorkloadListViewDocument.view).not.toHaveProperty('pageActions');
+  });
+
+  it('fails closed on duplicate detail route paths instead of relying on registration order', () => {
+    const duplicateModules: FrontendModule[] = [
+      ...modules,
+      {
+        metadata: { moduleId: 'employee', displayName: 'Employee', version: '1.0.0' },
+        standardCrudResources: [
+          {
+            resourceKey: 'employee.person',
+            dataAdapter: createStandardCrudTestDataAdapter(),
+            listViewKey: 'employee.person.list',
+            detailViewKey: 'employee.person.detail',
+            detailRoutePath: '/organization/persons/:id',
+          },
+        ],
+      },
+    ];
+
+    const duplicateNavDocuments: RuntimeNavItemDocument[] = [{
+      type: 'nav',
+      navigation: {
+        items: [
+          ...navDocuments[0].navigation.items,
+          {
+            key: 'employee.person.center',
+            path: '/organization/persons',
+            entryType: 'standard-list',
+            targetKey: 'employee.person.list',
+          },
+        ],
+      },
+    }];
+    const duplicateViewDocuments: RuntimeViewDocument[] = [
+      ...viewDocuments,
+      {
+        type: 'view',
+        view: {
+          key: 'employee.person.list',
+          mode: 'list',
+          detailViewKey: 'employee.person.detail',
+        },
+      },
+      {
+        type: 'view',
+        view: {
+          key: 'employee.person.detail',
+          mode: 'detail',
+          model: 'Person',
+          sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
+        },
+      },
+    ];
+
+    expect(() => compileStandardCrudRouteProjection(
+      duplicateModules,
+      duplicateNavDocuments,
+      duplicateViewDocuments,
+      [],
+    )).toThrowError(/MODULE_PROJECTION_FAILED: STANDARD_CRUD_DETAIL_PATH_CONFLICT/);
+  });
+});
+
+describe('standard CRUD route projection compiler', () => {
+  const load = vi.fn();
+  const listTarget = 'sample.records.list';
+  const detailTarget = 'sample.records.detail';
+  const path = '/sample/records';
+  const featurePosition = 'Sample/navigation:records';
+
+  const lazyModule: FrontendModule = {
+    metadata: { moduleId: 'sample', displayName: 'Sample', version: '1.0.0' },
+    standardCrudCapabilities: [
+      { kind: 'standard-list', targetKey: listTarget, load },
+      { kind: 'standard-crud-detail', targetKey: detailTarget, load },
+    ],
+  };
+  const lazyNav: RuntimeNavItemDocument[] = [{
+    type: 'nav',
+    navigation: {
+      items: [{
+        key: 'sample.records',
+        path,
+        entryType: 'standard-list',
+        targetKey: listTarget,
+        featurePosition,
+      }],
+    },
+  }];
+  const lazyViews: RuntimeViewDocument[] = [{
+    type: 'view',
+    view: { key: listTarget, mode: 'list', detailViewKey: detailTarget },
+  }, {
+    type: 'view',
+    view: {
+      key: detailTarget,
+      mode: 'detail',
+      model: 'Record',
+      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
+    },
+  }];
+
+  function expectProjectionFailure(
+    action: () => unknown,
+    diagnostic: string,
+  ): void {
+    expect(action).toThrowError(new RegExp(`MODULE_PROJECTION_FAILED: ${diagnostic}`));
+    expect(load).not.toHaveBeenCalled();
+  }
+
+  it('fails when a lazy list descriptor has no unique standard-list nav owner', () => {
+    expectProjectionFailure(
+      () => compileStandardCrudRouteProjection([lazyModule], [], lazyViews, []),
+      'STANDARD_CRUD_NAV_NOT_UNIQUE',
+    );
+  });
+
+  it.each(['missing', 'duplicate'] as const)(
+    'fails when the lazy list view is %s',
+    (variant) => {
+      const views = variant === 'missing'
+        ? lazyViews.slice(1)
+        : [lazyViews[0], lazyViews[0], lazyViews[1]];
+
+      expectProjectionFailure(
+        () => compileStandardCrudRouteProjection([lazyModule], lazyNav, views, []),
+        'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE',
+      );
+    },
+  );
+
+  it.each(['missing-key', 'unknown-view', 'duplicate-descriptor'] as const)(
+    'fails when the list detail projection is %s',
+    (variant) => {
+      const module = variant === 'duplicate-descriptor'
+          ? {
+              ...lazyModule,
+              standardCrudCapabilities: [
+                ...lazyModule.standardCrudCapabilities!,
+                { kind: 'standard-crud-detail' as const, targetKey: detailTarget, load },
+              ],
+            }
+        : lazyModule;
+      const views = variant === 'missing-key'
+        ? [{ ...lazyViews[0], view: { key: listTarget, mode: 'list' } }, lazyViews[1]]
+        : variant === 'unknown-view'
+          ? [lazyViews[0]]
+          : lazyViews;
+      const diagnostic = variant === 'missing-key'
+        ? 'STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN'
+        : variant === 'unknown-view'
+          ? 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE'
+          : 'STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE';
+
+      expectProjectionFailure(
+        () => compileStandardCrudRouteProjection([module], lazyNav, views, []),
+        diagnostic,
+      );
+    },
+  );
+
+  it('fails when a detail descriptor is not owned by a list descriptor', () => {
+    const orphanModule: FrontendModule = {
+      ...lazyModule,
+      standardCrudCapabilities: [
+        ...lazyModule.standardCrudCapabilities!,
+        { kind: 'standard-crud-detail', targetKey: 'sample.orphan.detail', load },
+      ],
+    };
+
+    expectProjectionFailure(
+      () => compileStandardCrudRouteProjection([orphanModule], lazyNav, lazyViews, []),
+      'STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN',
+    );
+  });
+
+  it('fails when one detail descriptor is claimed by multiple list descriptors', () => {
+    const secondListTarget = 'sample.secondary.list';
+    const sharedDetailModule: FrontendModule = {
+      ...lazyModule,
+      standardCrudCapabilities: [
+        ...lazyModule.standardCrudCapabilities!,
+        { kind: 'standard-list', targetKey: secondListTarget, load },
+      ],
+    };
+    const nav: RuntimeNavItemDocument[] = [{
+      type: 'nav',
+      navigation: {
+        items: [
+          ...lazyNav[0].navigation.items,
+          { key: 'sample.secondary', path: '/sample/secondary', entryType: 'standard-list', targetKey: secondListTarget },
+        ],
+      },
+    }];
+    const views: RuntimeViewDocument[] = [
+      ...lazyViews,
+      { type: 'view', view: { key: secondListTarget, mode: 'list', detailViewKey: detailTarget } },
+    ];
+
+    expectProjectionFailure(
+      () => compileStandardCrudRouteProjection([sharedDetailModule], nav, views, []),
+      'STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE',
+    );
+  });
+
+  it('fails when two resources derive the same detail path', () => {
+    const secondListTarget = 'sample.archived.list';
+    const secondDetailTarget = 'sample.archived.detail';
+    const secondModule: FrontendModule = {
+      metadata: { moduleId: 'archived', displayName: 'Archived', version: '1.0.0' },
+      standardCrudCapabilities: [
+        { kind: 'standard-list', targetKey: secondListTarget, load },
+        { kind: 'standard-crud-detail', targetKey: secondDetailTarget, load },
+      ],
+    };
+    const nav: RuntimeNavItemDocument[] = [{
+      type: 'nav',
+      navigation: {
+        items: [
+          ...lazyNav[0].navigation.items,
+          { key: 'sample.archived', path, entryType: 'standard-list', targetKey: secondListTarget },
+        ],
+      },
+    }];
+    const views: RuntimeViewDocument[] = [
+      ...lazyViews,
+      { type: 'view', view: { key: secondListTarget, mode: 'list', detailViewKey: secondDetailTarget } },
+      {
+        type: 'view',
+        view: {
+          key: secondDetailTarget,
+          mode: 'detail',
+          model: 'Record',
+          sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
+        },
+      },
+    ];
+
+    expectProjectionFailure(
+      () => compileStandardCrudRouteProjection([lazyModule, secondModule], nav, views, []),
+      'STANDARD_CRUD_DETAIL_PATH_CONFLICT',
+    );
+  });
+
+  it('fails when legacy registration detail truth differs from the list view', () => {
+    const legacyModule: FrontendModule = {
+      ...modules[0],
+      standardCrudResources: [{
+        ...modules[0].standardCrudResources![0],
+        detailViewKey: 'sample.other.detail',
+      }],
+    };
+
+    expectProjectionFailure(
+      () => compileStandardCrudRouteProjection([legacyModule], navDocuments, viewDocuments, []),
+      'STANDARD_CRUD_DETAIL_VIEW_KEY_MISMATCH',
+    );
+  });
+
+  it('fails when two list-only resources derive the same drawer path', () => {
+    const listOnlyModules: FrontendModule[] = ['alpha', 'beta'].map((key) => ({
+      metadata: { moduleId: key, displayName: key, version: '1.0.0' },
+      standardCrudResources: [{
+        resourceKey: `${key}.records`,
+        dataAdapter: createStandardCrudTestDataAdapter(),
+        listViewKey: `${key}.records.list`,
+      }],
+    }));
+    const nav: RuntimeNavItemDocument[] = [{
+      type: 'nav',
+      navigation: {
+        items: ['alpha', 'beta'].map((key) => ({
+          key,
+          path,
+          entryType: 'standard-list' as const,
+          targetKey: `${key}.records.list`,
+        })),
+      },
+    }];
+    const views: RuntimeViewDocument[] = ['alpha', 'beta'].map((key) => ({
+      type: 'view',
+      view: { key: `${key}.records.list`, mode: 'list', pageActions: [{ key: 'create', standardAction: 'create' }] },
+    }));
+
+    expectProjectionFailure(
+      () => compileStandardCrudRouteProjection(listOnlyModules, nav, views, []),
+      'STANDARD_CRUD_DRAWER_PATH_CONFLICT',
+    );
+  });
+
+  it('fails when a drawer compatibility fallback claims different permissions', () => {
+    const conflictingFallback: RouteConfig = {
+      path: `${path}/new`,
+      component: () => null,
+      featurePosition: 'Sample.Record.Update',
+    };
+
+    expectProjectionFailure(
+      () => compileStandardCrudRouteProjection([lazyModule], lazyNav, lazyViews, [conflictingFallback]),
+      'STANDARD_CRUD_DRAWER_FALLBACK_CONFLICT',
+    );
+  });
+
+  it('fails when multiple fallback routes claim a projected drawer path', () => {
+    const fallback: RouteConfig = {
+      path: `${path}/new`,
+      component: () => null,
+      featurePosition,
+    };
+
+    expectProjectionFailure(
+      () => compileStandardCrudRouteProjection([lazyModule], lazyNav, lazyViews, [fallback, fallback]),
+      'STANDARD_CRUD_FALLBACK_OWNERSHIP_CONFLICT',
+    );
+  });
+
+  it('compiles detail and drawer ownership without invoking loaders', () => {
+    const compatibleFallback: RouteConfig = {
+      path: `${path}/new`,
+      component: () => null,
+      featurePosition,
+    };
+
+    expect(compileStandardCrudRouteProjection(
+      [lazyModule],
+      lazyNav,
+      lazyViews,
+      [compatibleFallback, { path: '/unowned', component: () => null }],
+    )).toEqual({
+      detailEntries: [{ path: `${path}/:id`, viewKey: detailTarget, featurePosition }],
+      drawerRedirects: [{ from: `${path}/new`, to: `${path}?drawer=create` }],
+      fallbackRoutes: [{ path: '/unowned', component: expect.any(Function) }],
+    });
+    expect(load).not.toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,1722 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using ICP.Platform.HostApi.Acceptance;
+using ICP.Platform.Testing;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Playwright;
+
+namespace ICP.Platform.Acceptance;
+
+internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
+{
+    internal const string PreflightScenario = "example-required-field.preflight";
+    internal const string MigrationScenario = "example-required-field.migration";
+    internal const string BackfillRecoveryScenario = "example-required-field.backfill-recovery";
+    internal const string ContractPreconditionScenario = "example-required-field.contract-precondition";
+    internal const string BrowserScenario = "example-required-field.browser";
+    internal const string RestartScenario = "example-required-field.restart";
+    internal const string DeclarationCrudScenario = "example-data-execution.browser-crud";
+    internal const string DeclarationAuthorizationScenario = "example-authorization.browser";
+    internal const string DeclarationExportScenario = "standard-crud-export.browser";
+
+    internal static IReadOnlyList<string> RequiredScenarios { get; } =
+    [
+        PreflightScenario,
+        MigrationScenario,
+        BackfillRecoveryScenario,
+        ContractPreconditionScenario,
+        BrowserScenario,
+        RestartScenario
+    ];
+
+    private const string AuthenticationCookieName = "ICP.Platform.ExampleRequiredFieldAcceptance";
+    private const string NullableMigration = "20260828082341_Example_000003_RecordSourceNullable";
+    private const string BackfillMigration = "20260828082358_Example_000004_RecordSourceBackfill";
+    private const string RequiredMigration = "20260828082459_Example_000005_RecordSourceRequired";
+    private static readonly Regex CatalogPattern = new(
+        "^NewP_acceptance_example_[0-9a-f]{24}$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    // 平台稳定失败码统一为全大写下划线形式；只提取它们即可定位失败层且不带出路径或凭据。
+    private static readonly Regex StableDiagnosticPattern = new(
+        @"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private readonly List<string> _artifactRefs = [];
+    private readonly List<string> _processIdentities = [];
+    private readonly Dictionary<string, string?> _devEnvironment = new(StringComparer.OrdinalIgnoreCase);
+    private string? _adminConnectionString;
+    private string? _applicationConnectionString;
+    private string? _connectionSource;
+    private string? _catalog;
+    private string? _dataPrefix;
+    private string? _pluginRoot;
+    private string? _keyRingRoot;
+    private string? _lastDevRunId;
+    private int _hostPort;
+    private int _shellPort;
+    private bool _catalogCreated;
+    private DatabaseOwnershipSnapshot? _ownershipSnapshot;
+    private string? _adminPassword;
+    private string? _browserCode;
+    private readonly bool _declarationCrudOnly;
+    private readonly bool _declarationAuthorizationOnly;
+    private readonly bool _declarationExportOnly;
+    private ReusableSqlServerDatabase? _databaseLease;
+
+    public ExampleRequiredFieldAcceptanceRunner(
+        string repositoryRoot,
+        string runDirectory,
+        string runId,
+        bool declarationCrudOnly = false, bool declarationAuthorizationOnly = false, bool declarationExportOnly = false)
+        : base(repositoryRoot, runDirectory, runId)
+    {
+        _declarationCrudOnly = declarationCrudOnly || declarationAuthorizationOnly || declarationExportOnly;
+        _declarationAuthorizationOnly = declarationAuthorizationOnly;
+        _declarationExportOnly = declarationExportOnly;
+    }
+
+    /// <inheritdoc/>
+    protected override async Task RunScenariosAsync(CancellationToken cancellationToken)
+    {
+        await RunScenarioAsync(PreflightScenario, RunPreflightScenarioAsync, cancellationToken);
+        if (_declarationCrudOnly)
+        {
+            await RunScenarioAsync("example-data-execution.prepare", PrepareDeclarationCrudAsync, cancellationToken);
+            var browserScenario = _declarationExportOnly ? DeclarationExportScenario
+                : _declarationAuthorizationOnly ? DeclarationAuthorizationScenario : DeclarationCrudScenario;
+            await RunScenarioAsync(browserScenario, RunBrowserScenarioAsync, cancellationToken);
+            return;
+        }
+        await RunScenarioAsync(BackfillRecoveryScenario, RunBackfillRecoveryScenarioAsync, cancellationToken);
+        await RunScenarioAsync(ContractPreconditionScenario, RunContractPreconditionScenarioAsync, cancellationToken);
+        await RunScenarioAsync(MigrationScenario, RunMigrationScenarioAsync, cancellationToken);
+        await RunScenarioAsync(BrowserScenario, RunBrowserScenarioAsync, cancellationToken);
+        await RunScenarioAsync(RestartScenario, RunRestartScenarioAsync, cancellationToken);
+    }
+
+    // 现场快照与 preflight 同属一个场景：写快照失败也该记到 preflight 头上，
+    // 所以它跟着 preflight 一起进 RunScenarioAsync，而不是裸挂在场景序列里。
+    private async Task RunPreflightScenarioAsync(CancellationToken cancellationToken)
+    {
+        await RunPreflightAsync(cancellationToken);
+        await RecordScenarioSuccessAsync(
+            PreflightScenario,
+            "example-required-field/preflight.json",
+            new
+            {
+                status = "passed",
+                connectionSource = _connectionSource,
+                runId = _runId,
+                catalog = _catalog,
+                dataPrefix = _dataPrefix
+            },
+            cancellationToken);
+    }
+
+    // Preflight 固定唯一 catalog、数据前缀、Host/Shell 资源根和受支持的 managed dev 入口。
+    private async Task RunPreflightAsync(CancellationToken cancellationToken)
+    {
+        _dataPrefix = $"ACC140-{_runId[..8]}";
+        if (_declarationCrudOnly)
+        {
+            _catalog = ReusableSqlServerDatabase.Catalog;
+            _applicationConnectionString = ReusableSqlServerDatabase.ResolveConnection(_repositoryRoot);
+            var testConnection = new SqlConnectionStringBuilder(_applicationConnectionString);
+            AddConnectionSecrets(_applicationConnectionString, testConnection.Password);
+            _connectionSource = "ReusableSqlServerDatabase";
+        }
+        else
+        {
+            var adminConnection = AcceptanceSqlServerConnectionResolver.Resolve(_repositoryRoot);
+            _adminConnectionString = adminConnection.AdminConnectionString;
+            _connectionSource = adminConnection.SourceName;
+            AddConnectionSecrets(adminConnection.ConfiguredConnectionString, adminConnection.Password);
+            _catalog = $"NewP_acceptance_example_{_runId}";
+            ValidateCatalogName(_catalog);
+            _applicationConnectionString = new SqlConnectionStringBuilder(_adminConnectionString)
+            {
+                InitialCatalog = _catalog,
+                Pooling = false
+            }.ConnectionString;
+        }
+        _pluginRoot = Path.Combine(_runDirectory, "resources", "plugins");
+        _keyRingRoot = Path.Combine(_runDirectory, "resources", "key-ring");
+        Directory.CreateDirectory(_pluginRoot);
+        Directory.CreateDirectory(_keyRingRoot);
+
+        _devEnvironment["NEWP_DEV_SQLSERVER_CONNECTION_STRING"] = _applicationConnectionString;
+        _devEnvironment["ConnectionStrings__SqlServer"] = _applicationConnectionString;
+        _devEnvironment["Platform__PluginInstallRoot"] = _pluginRoot;
+        _devEnvironment["Authentication__Host__KeyRingPath"] = _keyRingRoot;
+        _devEnvironment["Authentication__Host__CookieName"] = AuthenticationCookieName;
+        _devEnvironment["Authentication__Host__AllowInsecureDevelopmentCookie"] = "true";
+        _devEnvironment["Identity__LocalAdministrator__ECODE"] = "admin";
+        _devEnvironment["Identity__LocalAdministrator__ENAME"] = "Example Required Field Acceptance Administrator";
+        _devEnvironment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        _devEnvironment["Acceptance__Enabled"] = "true";
+        _devEnvironment["Acceptance__RunId"] = _runId;
+        var fixtureSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        RegisterSecret(fixtureSecret);
+        _devEnvironment["Acceptance__Secret"] = fixtureSecret;
+        _devEnvironment["Logging__LogLevel__Default"] = "Information";
+
+        await RunDevScriptAsync(
+            "stop-dev.ps1",
+            "example-required-field/preflight-stop-existing.json",
+            cancellationToken,
+            allowAlreadyStopped: true);
+        var build = await AcceptanceInfrastructure.RunProcessAsync(
+            "dotnet",
+            ["build", "apps/host-api/HostApi.csproj", "--configuration", "Release", "--no-restore", "--nologo", "/nodeReuse:false"],
+            _repositoryRoot,
+            cancellationToken: cancellationToken);
+        await WriteEvidenceAsync(
+            "example-required-field/preflight-build.json",
+            new
+            {
+                command = "dotnet build apps/host-api/HostApi.csproj --configuration Release --no-restore /nodeReuse:false",
+                exitCode = build.ExitCode,
+                standardError = Sanitize(build.StandardError)
+            },
+            cancellationToken);
+        if (build.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"HostApi release build failed: {Sanitize(build.StandardError)}");
+        }
+
+    }
+
+    // 普通页面回归只租用固定测试库；当前 Host 完成正式准备，不重放历史迁移或故障场景。
+    private async Task PrepareDeclarationCrudAsync(CancellationToken cancellationToken)
+    {
+        _databaseLease = await ReusableSqlServerDatabase.AcquireAsync(_repositoryRoot, cancellationToken);
+        await RunDevExpectFailureAsync("example-data-execution/bootstrap-required.json", "IDENTITY_BOOTSTRAP_REQUIRED", cancellationToken);
+        _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
+        await RunDevScriptAsync("stop-dev.ps1", "example-data-execution/bootstrap-stop.json", cancellationToken, allowAlreadyStopped: true);
+        var bootstrap = await FormalIdentityBootstrap.RunAsync(_repositoryRoot, Path.Combine(_runDirectory, "resources"), _devEnvironment, cancellationToken);
+        RegisterSecret(bootstrap.TemporaryCredential);
+        _processIdentities.Add($"identity-bootstrap:{bootstrap.ProcessId}:{_runId}");
+        await StartDevAsync("example-data-execution/ready-dev.json", cancellationToken);
+        await AssertReadyAsync(cancellationToken);
+        await PrepareAdministratorPasswordAsync(bootstrap.TemporaryCredential, cancellationToken);
+    }
+
+    // Backfill 故障由 runner-owned trigger 注入；移除故障后必须从未记录的 backfill 继续并到达 Ready。
+    private async Task RunBackfillRecoveryScenarioAsync(CancellationToken cancellationToken)
+    {
+        await ResetCatalogToHistoricalStageAsync(stage: 3, cancellationToken);
+        await SeedStageThreeRowsAsync(cancellationToken);
+        await CreateBackfillFailureTriggerAsync(cancellationToken);
+
+        var failure = await RunDevExpectFailureAsync(
+            "example-required-field/backfill-failure-dev.json",
+            "ACC140_BACKFILL_FAILURE",
+            cancellationToken);
+        var failedState = await ReadExampleStateAsync(cancellationToken);
+        AssertState(
+            failedState,
+            nullableExpected: true,
+            expectedLegacySource: null,
+            expectedManualSource: "Manual",
+            expectedMigrations: [NullableMigration],
+            unexpectedMigrations: [BackfillMigration, RequiredMigration]);
+        if (!failure.Diagnostic.Contains("ACC140_BACKFILL_FAILURE", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Managed Host failure did not retain the injected backfill diagnostic.");
+        }
+
+        await RunDevScriptAsync(
+            "stop-dev.ps1",
+            "example-required-field/backfill-failure-stop.json",
+            cancellationToken,
+            allowAlreadyStopped: true);
+        await DropTriggerAsync(BackfillFailureTriggerName, cancellationToken);
+
+        var bootstrapRequired = await RunDevExpectFailureAsync(
+            "example-required-field/backfill-resume-dev.json",
+            "IDENTITY_BOOTSTRAP_REQUIRED",
+            cancellationToken);
+        if (!bootstrapRequired.Diagnostic.Contains("IDENTITY_BOOTSTRAP_REQUIRED", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Recovered migration did not reach the identity bootstrap readiness boundary.");
+        }
+        var recoveredState = await ReadExampleStateAsync(cancellationToken);
+        AssertState(
+            recoveredState,
+            nullableExpected: false,
+            expectedLegacySource: "Legacy",
+            expectedManualSource: "Manual",
+            expectedMigrations: [NullableMigration, BackfillMigration, RequiredMigration],
+            unexpectedMigrations: []);
+        await RunDevScriptAsync(
+            "stop-dev.ps1",
+            "example-required-field/backfill-resume-stop.json",
+            cancellationToken,
+            allowAlreadyStopped: true);
+
+        var bootstrap = await FormalIdentityBootstrap.RunAsync(
+            _repositoryRoot,
+            Path.Combine(_runDirectory, "resources"),
+            _devEnvironment,
+            cancellationToken);
+        RegisterSecret(bootstrap.TemporaryCredential);
+        _processIdentities.Add($"identity-bootstrap:{bootstrap.ProcessId}:{_runId}");
+        await StartDevAsync("example-required-field/backfill-ready-dev.json", cancellationToken);
+        await AssertReadyAsync(cancellationToken);
+        _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
+
+        await RecordScenarioSuccessAsync(
+            BackfillRecoveryScenario,
+            "example-required-field/backfill-recovery.json",
+            new
+            {
+                status = "passed",
+                injectedFailure = "ACC140_BACKFILL_FAILURE",
+                failedSupervisorCode = failure.FailureCode,
+                failedState,
+                resumeCheckpoint = "backfill-failure-removed",
+                recoveredState,
+                hostReady = true,
+                hostPort = _hostPort,
+                shellPort = _shellPort
+            },
+            cancellationToken);
+    }
+
+    // Contract precondition 通过 no-op UPDATE 保留 NULL，使 required migration 在收窄 schema 前失败。
+    private async Task RunContractPreconditionScenarioAsync(CancellationToken cancellationToken)
+    {
+        await ResetCatalogToHistoricalStageAsync(stage: 3, cancellationToken);
+        await SeedStageThreeRowsAsync(cancellationToken);
+        await CreateContractPreconditionTriggerAsync(cancellationToken);
+
+        var failure = await RunDevExpectFailureAsync(
+            "example-required-field/contract-precondition-dev.json",
+            expectedDiagnostic: null,
+            cancellationToken);
+        var state = await ReadExampleStateAsync(cancellationToken);
+        AssertState(
+            state,
+            nullableExpected: true,
+            expectedLegacySource: null,
+            expectedManualSource: "Manual",
+            expectedMigrations: [NullableMigration, BackfillMigration],
+            unexpectedMigrations: [RequiredMigration]);
+        await RunDevScriptAsync(
+            "stop-dev.ps1",
+            "example-required-field/contract-precondition-stop.json",
+            cancellationToken,
+            allowAlreadyStopped: true);
+
+        await RecordScenarioSuccessAsync(
+            ContractPreconditionScenario,
+            "example-required-field/contract-precondition.json",
+            new
+            {
+                status = "passed",
+                supervisorFailureCode = failure.FailureCode,
+                hostReady = false,
+                nullPreserved = true,
+                requiredMigrationRecorded = false,
+                state
+            },
+            cancellationToken);
+    }
+
+    // 成功旅程从 stage 2 旧行开始，经 nullable 插入 Manual，再由真实 managed Host 完成 backfill/contract。
+    private async Task RunMigrationScenarioAsync(CancellationToken cancellationToken)
+    {
+        await ResetCatalogToHistoricalStageAsync(stage: 2, cancellationToken);
+        await SeedStageTwoLegacyRowAsync(cancellationToken);
+        await ApplyHistoricalStageAsync(stage: 3, cancellationToken);
+        await SeedStageThreeManualRowAsync(cancellationToken);
+        var nullableState = await ReadExampleStateAsync(cancellationToken);
+        AssertState(
+            nullableState,
+            nullableExpected: true,
+            expectedLegacySource: null,
+            expectedManualSource: "Manual",
+            expectedMigrations: [NullableMigration],
+            unexpectedMigrations: [BackfillMigration, RequiredMigration]);
+
+        var bootstrapRequired = await RunDevExpectFailureAsync(
+            "example-required-field/migration-dev.json",
+            "IDENTITY_BOOTSTRAP_REQUIRED",
+            cancellationToken);
+        var migratedState = await ReadExampleStateAsync(cancellationToken);
+        AssertState(
+            migratedState,
+            nullableExpected: false,
+            expectedLegacySource: "Legacy",
+            expectedManualSource: "Manual",
+            expectedMigrations: [NullableMigration, BackfillMigration, RequiredMigration],
+            unexpectedMigrations: []);
+        await RunDevScriptAsync(
+            "stop-dev.ps1",
+            "example-required-field/migration-bootstrap-required-stop.json",
+            cancellationToken,
+            allowAlreadyStopped: true);
+
+        var bootstrap = await FormalIdentityBootstrap.RunAsync(
+            _repositoryRoot,
+            Path.Combine(_runDirectory, "resources"),
+            _devEnvironment,
+            cancellationToken);
+        RegisterSecret(bootstrap.TemporaryCredential);
+        _processIdentities.Add($"identity-bootstrap:{bootstrap.ProcessId}:{_runId}");
+        await StartDevAsync("example-required-field/migration-ready-dev.json", cancellationToken);
+        await AssertReadyAsync(cancellationToken);
+        _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
+        await PrepareAdministratorPasswordAsync(bootstrap.TemporaryCredential, cancellationToken);
+        var readyState = await ReadExampleStateAsync(cancellationToken);
+        AssertEquivalentMigrationState(migratedState, readyState, "identity bootstrap restart");
+
+        await RecordScenarioSuccessAsync(
+            MigrationScenario,
+            "example-required-field/migration.json",
+            new
+            {
+                status = "passed",
+                threeStepHistory = new[] { NullableMigration, BackfillMigration, RequiredMigration },
+                nullableState,
+                migratedState,
+                readyState,
+                supervisorFailureCode = bootstrapRequired.FailureCode,
+                hostReady = true,
+                restartNoOp = true
+            },
+            cancellationToken);
+    }
+
+    // 冒烟旅程只证明用户能走通「进入 → 列表出数据 → 写入 → 看到结果」；
+    // 字段默认值、required 标记与值投影由 standard-crud 前端单测覆盖，不在浏览器层重复断言。
+    private async Task RunBrowserScenarioAsync(CancellationToken cancellationToken)
+    {
+        var password = _adminPassword
+            ?? throw new InvalidOperationException("Administrator password was not prepared.");
+        _browserCode = $"{_dataPrefix}-BROWSER";
+        var browserName = "Browser Manual row";
+        var screenshotPath = Path.Combine(_runDirectory, "example-required-field", "browser.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(screenshotPath)!);
+
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        {
+            Headless = true,
+            ExecutablePath = ResolveChromePath()
+        });
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            AcceptDownloads = true,
+            Locale = "zh-CN",
+            ViewportSize = new ViewportSize { Width = 1440, Height = 1000 }
+        });
+        var page = await context.NewPageAsync();
+        page.SetDefaultTimeout(120_000);
+        page.SetDefaultNavigationTimeout(120_000);
+        async Task CapturePageAsync(string name)
+        {
+            if (!AcceptancePresentation.Enabled) return;
+            var path = Path.Combine(_runDirectory, "example-required-field", name);
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true,
+                Animations = ScreenshotAnimations.Disabled, Mask = [page.Locator("input, textarea")] });
+            AddArtifact(path);
+        }
+        var responses = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var errors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
+        var declarationRequests = new System.Collections.Concurrent.ConcurrentQueue<object>();
+        page.Request += (_, request) =>
+        {
+            var path = new Uri(request.Url).AbsolutePath;
+            if (!_declarationCrudOnly || !(path.StartsWith("/api/example/records", StringComparison.Ordinal)
+                || _declarationExportOnly && path.StartsWith("/api/organization/persons", StringComparison.Ordinal)
+                || _declarationAuthorizationOnly && path.StartsWith("/api/authorization/data-scope/objects/example.record/", StringComparison.Ordinal))) return;
+            request.Headers.TryGetValue("x-newp-data-declaration", out var declaration);
+            request.Headers.TryGetValue("x-newp-button", out var button);
+            request.Headers.TryGetValue("x-newp-feature", out var feature);
+            declarationRequests.Enqueue(new { request.Method, path, declaration, button, feature });
+            while (declarationRequests.Count > (_declarationAuthorizationOnly ? 20 : 10)) declarationRequests.TryDequeue(out _);
+        };
+        page.PageError += (_, error) => errors.Enqueue(error);
+        page.RequestFailed += (_, request) => errors.Enqueue($"{request.Method} {new Uri(request.Url).AbsolutePath}: {request.Failure}");
+        page.Response += (sender, response) =>
+        {
+            responses.Enqueue($"{response.Request.Method} {new Uri(response.Url).AbsolutePath}: {response.Status}");
+            while (responses.Count > 30) responses.TryDequeue(out _);
+            if (response.Status >= 400) failedResponses.Enqueue(response);
+            while (failedResponses.Count > 10) failedResponses.TryDequeue(out _);
+            while (errors.Count > 30) errors.TryDequeue(out _);
+        };
+        try
+        {
+            await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync("admin", password);
+            await page.GotoAsync(
+                $"http://127.0.0.1:{_shellPort}/examples/standard-crud/persistent-records",
+                new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            if (_declarationCrudOnly)
+                await page.GetByRole(AriaRole.Button, new() { Name = "新建记录", Exact = true }).WaitForAsync();
+            else
+                await page.GetByText(LegacyCode, new PageGetByTextOptions { Exact = true }).WaitForAsync();
+            await CapturePageAsync("list.png");
+
+            // 标准 Drawer 的定位、填写与提交由页面驱动持有；本旅程不观察写入响应，只以列表行出现为准。
+            var driver = new StandardCrudPageDriver(page);
+            var createDrawer = await driver.OpenCreateDrawerAsync("新建记录");
+            await StandardCrudPageDriver.FillDrawerFieldAsync(createDrawer, "示例编码", _browserCode);
+            await StandardCrudPageDriver.FillDrawerFieldAsync(createDrawer, "示例名称", browserName);
+            await CapturePageAsync("create-drawer.png");
+            await driver.SaveAndCloseWithoutResponseAsync(createDrawer);
+
+            var browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
+            await browserRow.WaitForAsync();
+
+            if (_declarationExportOnly)
+            {
+                var downloads = new List<string>();
+                downloads.Add(await SaveListExportAsync(driver, "导出当前", "example-current.xlsx", cancellationToken));
+                downloads.Add(await SaveListExportAsync(driver, "导出全部", "example-all.xlsx", cancellationToken));
+                await driver.OpenOrganizationTabAsync("人员", "persons");
+                // URL切换先于懒加载列表就绪；动作出现后再让正式driver选择按钮/菜单路径。
+                await page.GetByRole(AriaRole.Button, new() { Name = "新建人员", Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                var personNumber = $"EXP-{_runId[..10]}";
+                var personDrawer = await driver.OpenCreateDrawerAsync("新建人员");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(personDrawer, "人员编号", personNumber);
+                await StandardCrudPageDriver.FillDrawerFieldAsync(personDrawer, "姓名", "Export Person " + _runId[..8]);
+                await driver.SaveAndCloseWithoutResponseAsync(personDrawer);
+                await driver.WaitForRowAsync(personNumber);
+                downloads.Add(await SaveListExportAsync(driver, "导出本页", "person-current.xlsx", cancellationToken));
+                downloads.Add(await SaveListExportAsync(driver, "导出筛选结果", "person-all.xlsx", cancellationToken));
+                await RecordScenarioSuccessAsync(DeclarationExportScenario, "standard-crud-export/browser.json", new
+                {
+                    status = "passed", downloads,
+                    assertions = new[] { "example-list-reachable", "example-current-downloaded", "example-all-downloaded",
+                        "person-list-reachable", "person-current-downloaded", "person-all-downloaded" },
+                    declarationRequests = declarationRequests.ToArray(), responses = responses.ToArray()
+                }, cancellationToken);
+                return;
+            }
+
+            if (_declarationAuthorizationOnly)
+            {
+                await driver.InspectAndSaveObjectAuthorizationAsync(browserRow, "example.record", cancellationToken);
+                await RecordScenarioSuccessAsync(DeclarationAuthorizationScenario, "example-authorization/browser.json", new
+                {
+                    status = "passed", route = "/examples/standard-crud/persistent-records",
+                    assertions = new[] { "created-row-visible", "inspection-opened", "configuration-edited", "configuration-saved", "row-still-visible" },
+                    declarationRequests = declarationRequests.ToArray(), responses = responses.ToArray()
+                }, cancellationToken);
+                return;
+            }
+            if (_declarationCrudOnly)
+            {
+                await browserRow.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
+                var editDrawer = await driver.WaitForVisibleDrawerAsync("Example edit");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(editDrawer, "示例名称", browserName + " edited");
+                await CapturePageAsync("declaration-edit.png");
+                await driver.SaveChangesAsync(editDrawer, new("PUT", "/api/example/records/", 200, "Example edit", PathIsPrefix: true));
+                browserRow = await driver.WaitForRowAsync(_browserCode, browserName + " edited");
+                await browserRow.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+                await page.GetByRole(AriaRole.Menuitem, new() { Name = "删除", Exact = true }).ClickAsync();
+                var confirmation = driver.ConfirmDialogWithText("确认删除当前示例记录？");
+                await CapturePageAsync("declaration-delete.png");
+                await driver.ConfirmAsync(confirmation, new("DELETE", "/api/example/records/", null, "Example delete", PathIsPrefix: true));
+                await browserRow.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+                await RecordScenarioSuccessAsync(DeclarationCrudScenario, "example-data-execution/browser-crud.json", new
+                {
+                    status = "passed",
+                    route = "/examples/standard-crud/persistent-records",
+                    assertions = new[] { "list-entry-reachable", "created-row-visible", "edited-row-visible", "deleted-row-removed" },
+                    declarationRequests = declarationRequests.ToArray(),
+                    responses = responses.Where(value => value.Contains("/api/example/records", StringComparison.Ordinal)).ToArray()
+                }, cancellationToken);
+                return;
+            }
+
+            await browserRow.GetByText(_browserCode, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
+            var detailDrawer = driver.VisibleDrawer();
+            await detailDrawer.GetByText("查看记录", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
+            await AssertLocatorContainsAsync(detailDrawer, _browserCode, "browser detail reached");
+            if (AcceptancePresentation.Enabled)
+            {
+                await AcceptancePresentation.CaptureAsync(page, screenshotPath);
+                AddArtifact(screenshotPath);
+            }
+
+            await RecordScenarioSuccessAsync(
+                BrowserScenario,
+                "example-required-field/browser.json",
+                new
+                {
+                    status = "passed",
+                    owner = "Acceptance.Runner/.NET Playwright",
+                    session = _runId,
+                    route = "/examples/standard-crud/persistent-records",
+                    checkpoint = BrowserScenario,
+                    assertions = new[]
+                    {
+                        "login-and-list-loaded",
+                        "create-write-appears-in-list",
+                        "detail-reachable"
+                    },
+                    screenshot = AcceptancePresentation.Enabled ? "example-required-field/browser.png" : null
+                },
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // 同一旅程的导航与写入均保留脱敏诊断，不能覆盖原场景失败。
+            try
+            {
+                var problems = new List<object>();
+                foreach (var response in failedResponses)
+                {
+                    try
+                    {
+                        using var body = JsonDocument.Parse(await response.TextAsync());
+                        var fields = body.RootElement.EnumerateObject()
+                            .Where(field => field.Name is "code" or "title" or "status" or "type")
+                            .ToDictionary(field => field.Name, field => Sanitize(field.Value.ToString()));
+                        problems.Add(new { path = new Uri(response.Url).AbsolutePath, fields });
+                    }
+                    catch (Exception) { /* 非 JSON 或已关闭响应不影响其余诊断。 */ }
+                }
+                await WriteEvidenceAsync("example-required-field/browser-navigation-failure.json", new
+                {
+                    url = Sanitize(page.Url),
+                    diagnostic = Sanitize(exception.ToString()),
+                    visibleDom = Sanitize(await page.Locator("body").InnerTextAsync()),
+                    responses = responses.Select(Sanitize).ToArray(),
+                    errors = errors.Select(Sanitize).ToArray(),
+                    problems
+                }, CancellationToken.None);
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                {
+                    Path = Path.Combine(_runDirectory, "example-required-field", "browser-navigation-failure.png"),
+                    FullPage = true,
+                    Mask = [page.Locator("input, textarea")]
+                });
+            }
+            catch (Exception) { /* 保留原始场景失败。 */ }
+            throw;
+        }
+
+    }
+
+    // 先准备真实导出控件，再监听下载并保存文件；文件内容、行数及权限语义由API/SQL覆盖。
+    private async Task<string> SaveListExportAsync(StandardCrudPageDriver driver, string actionLabel, string fileName, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        // 父按钮的完整可访问名称包含两端装饰图标；父菜单与子项均由正式driver定位。
+        var action = await driver.PreparePageActionAsync(actionLabel, "download 导出 down");
+        var download = await driver.Page.RunAndWaitForDownloadAsync(() => action.ClickAsync());
+        var failure = await download.FailureAsync();
+        if (failure is not null) throw new InvalidOperationException($"Browser export download failed: {Sanitize(failure)}");
+        var relativePath = Path.Combine("standard-crud-export", fileName);
+        var path = Path.Combine(_runDirectory, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await download.SaveAsAsync(path);
+        token.ThrowIfCancellationRequested();
+        if (!File.Exists(path)) throw new InvalidOperationException("Browser export download did not arrive.");
+        AddArtifact(path);
+        return relativePath;
+    }
+
+    // Restart 使用新的 Host/Shell 与 API session，证明已完成 history 不重放且正式数据仍可读。
+    private async Task RunRestartScenarioAsync(CancellationToken cancellationToken)
+    {
+        var before = await ReadExampleStateAsync(cancellationToken);
+        await RunDevScriptAsync(
+            "stop-dev.ps1",
+            "example-required-field/restart-stop.json",
+            cancellationToken,
+            allowAlreadyStopped: true);
+        await StartDevAsync("example-required-field/restart-dev.json", cancellationToken);
+        await AssertReadyAsync(cancellationToken);
+        var after = await ReadExampleStateAsync(cancellationToken);
+        AssertEquivalentMigrationState(before, after, "managed Host restart");
+
+        using var client = CreateClient(_hostPort);
+        await LoginAdminAsync(client, cancellationToken);
+        var features = await AcceptanceFeatureCatalog.LoadAsync(client, cancellationToken);
+        var readPosition = features.Behavior("Example", "example.record.read").Position;
+        async Task<HttpResponseMessage> ReadRecordAsync(string path, CancellationToken token)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Add("X-NewP-Feature", readPosition);
+            return await client.SendAsync(request, token);
+        }
+        using (var legacy = await ReadRecordAsync(
+                   $"/api/example/records/{Uri.EscapeDataString(LegacyId)}",
+                   cancellationToken))
+        {
+            var body = await legacy.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(legacy, HttpStatusCode.OK, body, "legacy detail after restart");
+            AssertField(body, "RecordSource", "Legacy", "legacy detail after restart");
+        }
+        using (var list = await ReadRecordAsync(
+                   "/api/example/records?page=1&pageSize=50&sortBy=ECODE&sortDirection=asc",
+                   cancellationToken))
+        {
+            var body = await list.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(list, HttpStatusCode.OK, body, "Example list after restart");
+            if (!body.Contains(LegacyCode, StringComparison.Ordinal)
+                || !body.Contains("Legacy", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Migrated Legacy row was not readable after restart.");
+            }
+            if (!body.Contains(_browserCode!, StringComparison.Ordinal)
+                || !body.Contains("Manual", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Browser-created Manual row was not persisted across restart.");
+            }
+        }
+
+        await RecordScenarioSuccessAsync(
+            RestartScenario,
+            "example-required-field/restart.json",
+            new
+            {
+                status = "passed",
+                before,
+                after,
+                historyNoOp = true,
+                hostReady = true,
+                apiSessionRecreated = true,
+                persistedRows = new[] { LegacyCode, _browserCode }
+            },
+            cancellationToken);
+    }
+
+    // 历史计划由 HostApi Acceptance fixture 经正式 persistence seam 应用，runner 不跨越实现边界。
+    private async Task ResetCatalogToHistoricalStageAsync(int stage, CancellationToken cancellationToken)
+    {
+        await RunDevScriptAsync(
+            "stop-dev.ps1",
+            "example-required-field/reset-stop.json",
+            cancellationToken,
+            allowAlreadyStopped: true);
+        if (_catalogCreated)
+        {
+            await VerifyCatalogOwnershipAsync(cancellationToken);
+            await DropCatalogAsync(cancellationToken);
+        }
+        await CreateCatalogAsync(cancellationToken);
+
+        await ApplyHistoricalStageAsync(stage, cancellationToken);
+        _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
+    }
+
+    // 在同一 catalog 上推进历史前缀，支持 stage2 旧行与 stage3 Manual 行的真实时序。
+    private async Task ApplyHistoricalStageAsync(int stage, CancellationToken cancellationToken)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Acceptance:Enabled"] = "true",
+                ["Acceptance:RunId"] = _runId,
+                ["Persistence:Adapter"] = "EfCore",
+                ["Persistence:Provider"] = "SqlServer",
+                ["ConnectionStrings:SqlServer"] = _applicationConnectionString
+            })
+            .Build();
+        await ExampleRequiredFieldMigrationFixture.ApplyHistoricalStageAsync(
+            _repositoryRoot,
+            configuration,
+            _runId,
+            "Acceptance",
+            stage,
+            cancellationToken);
+    }
+
+    // Stage 2 行模拟尚未出现 RecordSource 列的旧数据。
+    private async Task SeedStageTwoLegacyRowAsync(CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(
+            """
+            INSERT INTO [dbo].[ExampleRecord]
+                ([EID], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [ReviewerUserEID], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (@legacyId, SYSUTCDATETIME(), N'acceptance', @legacyCode, N'Legacy migration row', NULL, SYSUTCDATETIME(), N'acceptance');
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("@legacyId", LegacyId);
+                command.Parameters.AddWithValue("@legacyCode", LegacyCode);
+            },
+            cancellationToken);
+    }
+
+    // Nullable 前缀应用后插入 Manual，证明 backfill 不覆盖已有非空业务值。
+    private async Task SeedStageThreeManualRowAsync(CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(
+            """
+            INSERT INTO [dbo].[ExampleRecord]
+                ([EID], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [ReviewerUserEID], [RecordSource], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (@manualId, SYSUTCDATETIME(), N'acceptance', @manualCode, N'Manual migration row', NULL, N'Manual', SYSUTCDATETIME(), N'acceptance');
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("@manualId", ManualId);
+                command.Parameters.AddWithValue("@manualCode", ManualCode);
+            },
+            cancellationToken);
+    }
+
+    // Stage 3 的 NULL/Manual 两行分别证明 backfill 修改目标与显式值保留。
+    private async Task SeedStageThreeRowsAsync(CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(
+            """
+            INSERT INTO [dbo].[ExampleRecord]
+                ([EID], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [ReviewerUserEID], [RecordSource], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (@legacyId, SYSUTCDATETIME(), N'acceptance', @legacyCode, N'Legacy migration row', NULL, NULL, SYSUTCDATETIME(), N'acceptance'),
+                (@manualId, SYSUTCDATETIME(), N'acceptance', @manualCode, N'Manual migration row', NULL, N'Manual', SYSUTCDATETIME(), N'acceptance');
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("@legacyId", LegacyId);
+                command.Parameters.AddWithValue("@legacyCode", LegacyCode);
+                command.Parameters.AddWithValue("@manualId", ManualId);
+                command.Parameters.AddWithValue("@manualCode", ManualCode);
+            },
+            cancellationToken);
+    }
+
+    // AFTER UPDATE trigger 仅在本 run 的 NULL->Legacy backfill 命中时抛错，连同该 migration 事务回滚。
+    private async Task CreateBackfillFailureTriggerAsync(CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(
+            $"""
+            CREATE TRIGGER [dbo].[{BackfillFailureTriggerName}]
+            ON [dbo].[ExampleRecord]
+            AFTER UPDATE
+            AS
+            BEGIN
+                SET NOCOUNT ON;
+                IF EXISTS
+                (
+                    SELECT 1
+                    FROM [inserted] AS [i]
+                    INNER JOIN [deleted] AS [d] ON [d].[EID] = [i].[EID]
+                    WHERE [d].[RecordSource] IS NULL AND [i].[RecordSource] = N'Legacy'
+                )
+                    THROW 51000, 'ACC140_BACKFILL_FAILURE', 1;
+            END;
+            """,
+            configure: null,
+            cancellationToken);
+    }
+
+    // INSTEAD OF UPDATE 仅用于 contract failure fixture，使 backfill history 完成但 NULL 仍留待收窄前置检查。
+    private async Task CreateContractPreconditionTriggerAsync(CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(
+            $"""
+            CREATE TRIGGER [dbo].[{ContractPreconditionTriggerName}]
+            ON [dbo].[ExampleRecord]
+            INSTEAD OF UPDATE
+            AS
+            BEGIN
+                SET NOCOUNT ON;
+            END;
+            """,
+            configure: null,
+            cancellationToken);
+    }
+
+    // Host dev 失败是本旅程的正式观察；结果只保留稳定码与已脱敏 diagnostic。
+    private async Task<DevFailure> RunDevExpectFailureAsync(
+        string evidencePath,
+        string? expectedDiagnostic,
+        CancellationToken cancellationToken)
+    {
+        var arguments = DevScriptArguments(Path.Combine(_repositoryRoot, "scripts", "dev.ps1"));
+        var result = await AcceptanceInfrastructure.RunProcessAsync(
+            "pwsh.exe",
+            arguments,
+            _repositoryRoot,
+            _devEnvironment,
+            redirectOutput: false,
+            cancellationToken);
+        CaptureDevRunIdentity();
+        var currentResultPath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "current-result.json");
+        if (!File.Exists(currentResultPath))
+        {
+            throw new InvalidOperationException("Failed managed Host startup did not write current-result.json.");
+        }
+
+        using var currentResult = JsonDocument.Parse(await File.ReadAllTextAsync(currentResultPath, cancellationToken));
+        var status = ReadString(currentResult.RootElement, "status");
+        var failureCode = ReadOptionalString(currentResult.RootElement, "failureCode");
+        var diagnostic = ReadOptionalString(currentResult.RootElement, "diagnostic");
+        var probe = expectedDiagnostic is null ? null : ProbeOwnedHostLog(expectedDiagnostic);
+        var expectedObserved = expectedDiagnostic is null
+            || diagnostic.Contains(expectedDiagnostic, StringComparison.Ordinal)
+            || probe!.ExpectedObserved;
+        await WriteEvidenceAsync(
+            evidencePath,
+            new
+            {
+                script = "dev.ps1",
+                exitCode = result.ExitCode,
+                status,
+                failureCode,
+                diagnostic = Sanitize(diagnostic),
+                expectedDiagnostic,
+                expectedObserved,
+                actualHostDiagnostic = Sanitize(probe?.ActualDiagnostic),
+                hostLogSource = probe?.Source,
+                ownerRunId = _lastDevRunId
+            },
+            cancellationToken);
+        if (result.ExitCode == 0 || !string.Equals(status, "failed", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Managed Host unexpectedly reached {status} with exit {result.ExitCode}.");
+        }
+        if (!expectedObserved)
+        {
+            var actual = Sanitize(probe!.ActualDiagnostic);
+            throw new InvalidOperationException(
+                $"Managed Host failure did not retain the expected diagnostic {expectedDiagnostic}. "
+                + $"Host log ({probe.Source}) reported: "
+                + (actual.Length == 0 ? "no stable failure code" : actual));
+        }
+        return new DevFailure(failureCode, expectedDiagnostic ?? diagnostic);
+    }
+
+    // 只在 owned dev run 的 Host 日志内查找稳定诊断，不把完整日志或潜在配置写入证据。
+    // 期望诊断未命中时同时提取 Host 实际报出的稳定失败码，否则调用者只剩一个无法二分的否定信号。
+    private OwnedHostLogProbe ProbeOwnedHostLog(string expectedDiagnostic)
+    {
+        var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
+        if (!File.Exists(statePath))
+        {
+            return new OwnedHostLogProbe(false, string.Empty, "dev-state-missing");
+        }
+
+        var devRoot = Path.GetFullPath(Path.Combine(_repositoryRoot, ".codex-temp", "dev", "runs"));
+        var actual = string.Empty;
+        var source = "log-missing";
+        try
+        {
+            using var state = JsonDocument.Parse(ReadWhileWriterHoldsFile(statePath));
+            if (!state.RootElement.TryGetProperty("logs", out var logs))
+            {
+                return new OwnedHostLogProbe(false, string.Empty, "dev-state-has-no-logs");
+            }
+
+            foreach (var property in new[] { "hostStderr", "hostStdout" })
+            {
+                var declared = ReadOptionalString(logs, property);
+                if (string.IsNullOrWhiteSpace(declared))
+                {
+                    continue;
+                }
+
+                var path = Path.GetFullPath(declared);
+                if (!path.StartsWith(devRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    source = "log-outside-dev-root";
+                    continue;
+                }
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                var text = ReadWhileWriterHoldsFile(path);
+                if (text.Contains(expectedDiagnostic, StringComparison.Ordinal))
+                {
+                    return new OwnedHostLogProbe(true, string.Empty, property);
+                }
+                if (actual.Length == 0)
+                {
+                    actual = ExtractStableDiagnostic(text);
+                    source = actual.Length == 0 ? $"{property}-no-stable-code" : property;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            // 读不到日志是基础设施故障，不是"Host 没报出期望诊断"。
+            // 把两者混成同一个否定结论会让调用者去查错误的东西。
+            throw new InvalidOperationException(
+                $"Could not read the owned dev run log while probing for {expectedDiagnostic}.",
+                exception);
+        }
+
+        return new OwnedHostLogProbe(false, actual, source);
+    }
+
+    // dev supervisor 仍持有 host 日志与 state 的写句柄，默认的 FileShare.Read 会直接抛
+    // IOException，把"日志里没有期望诊断"和"日志根本读不到"混成同一个否定结论。
+    // 这些是别的进程正在追加写的文件，读它就必须允许并发写。
+    private static string ReadWhileWriterHoldsFile(string path)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    // 只提取形如 PERSISTENCE_MIGRATION_HISTORY_NON_PREFIX 的稳定失败码；
+    // 它们足以二分失败层，且不会带出连接串、路径或凭据。
+    internal static string ExtractStableDiagnostic(string logText)
+    {
+        var codes = StableDiagnosticPattern.Matches(logText)
+            .Select(match => match.Value)
+            .Distinct(StringComparer.Ordinal)
+            .Take(4)
+            .ToArray();
+        return codes.Length == 0 ? string.Empty : string.Join(" / ", codes);
+    }
+
+    // Host/Shell Ready 必须来自 managed dev supervisor 的 ready state 与正式 readiness endpoint。
+    private async Task StartDevAsync(string evidencePath, CancellationToken cancellationToken)
+    {
+        await RunDevScriptAsync("dev.ps1", evidencePath, cancellationToken);
+        var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
+        using var state = JsonDocument.Parse(await File.ReadAllTextAsync(statePath, cancellationToken));
+        if (!string.Equals(ReadString(state.RootElement, "status"), "ready", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Development supervisor did not reach ready state.");
+        }
+        CaptureDevRunIdentity(state.RootElement);
+    }
+
+    // 所有脚本执行都固定 managed dev 参数；连接凭据只从继承环境传入，不进入命令或证据。
+    private async Task RunDevScriptAsync(
+        string scriptName,
+        string evidencePath,
+        CancellationToken cancellationToken,
+        bool allowAlreadyStopped = false)
+    {
+        var scriptPath = Path.Combine(_repositoryRoot, "scripts", scriptName);
+        var isDev = scriptName.Equals("dev.ps1", StringComparison.OrdinalIgnoreCase);
+        var result = await AcceptanceInfrastructure.RunProcessAsync(
+            "pwsh.exe",
+            isDev ? DevScriptArguments(scriptPath) : ["-NoLogo", "-NoProfile", "-File", scriptPath],
+            _repositoryRoot,
+            isDev ? _devEnvironment : null,
+            redirectOutput: !isDev,
+            cancellationToken);
+        await WriteEvidenceAsync(
+            evidencePath,
+            new
+            {
+                script = scriptName,
+                exitCode = result.ExitCode,
+                standardOutput = Sanitize(result.StandardOutput),
+                standardError = Sanitize(result.StandardError)
+            },
+            cancellationToken);
+        if (result.ExitCode != 0)
+        {
+            if (!isDev && allowAlreadyStopped && SupervisorHasNoOwnedProcesses())
+            {
+                return;
+            }
+            if (isDev)
+            {
+                CaptureDevRunIdentity();
+            }
+            // 脚本可能只把失败原因写到 stdout；只取 stderr 会抛出没有内容的诊断。
+            var diagnostic = string.IsNullOrWhiteSpace(result.StandardError)
+                ? result.StandardOutput
+                : result.StandardError;
+            throw new InvalidOperationException($"{scriptName} failed: {Sanitize(diagnostic)}");
+        }
+        if (!allowAlreadyStopped
+            && !isDev
+            && !result.StandardOutput.Contains("DEV_STOPPED", StringComparison.Ordinal)
+            && !result.StandardOutput.Contains("DEV_ALREADY_STOPPED", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("stop-dev.ps1 did not report a recognized terminal state.");
+        }
+    }
+
+    // Supervisor 在 Host 启动前失败时 processes 为 null；此时没有 owned process 需要 stop。
+    private bool SupervisorHasNoOwnedProcesses()
+    {
+        try
+        {
+            var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
+            using var state = JsonDocument.Parse(ReadWhileWriterHoldsFile(statePath));
+            var root = state.RootElement;
+            return string.Equals(ReadString(root, "status"), "failed", StringComparison.Ordinal)
+                && root.TryGetProperty("processes", out var processes)
+                && processes.ValueKind is JsonValueKind.Null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // 固定超时上限保证历史 migration 与失败恢复仍受 development slice 的时间预算约束。
+    private static List<string> DevScriptArguments(string scriptPath) =>
+    [
+        "-NoLogo", "-NoProfile", "-File", scriptPath,
+        "-HostStartupTimeoutSeconds", "600",
+        "-ShellStartupTimeoutSeconds", "180",
+        "-ShellRequestTimeoutSeconds", "60",
+        "-HostEnvironmentName", "Acceptance",
+        "-SkipDependencyInstall"
+    ];
+
+    // 捕获 supervisor runId 与 PID，形成 teardown 所需的 owned process identity。
+    private void CaptureDevRunIdentity()
+    {
+        try
+        {
+            var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
+            using var state = JsonDocument.Parse(ReadWhileWriterHoldsFile(statePath));
+            CaptureDevRunIdentity(state.RootElement);
+        }
+        catch
+        {
+            // 失败态若无法读取 supervisor identity，teardown 会保守地只校验 catalog ownership。
+        }
+    }
+
+    // state 中 process pid 与 runId 是唯一可用于安全 stop 的 owned Host/Shell 身份。
+    private void CaptureDevRunIdentity(JsonElement state)
+    {
+        _lastDevRunId = ReadString(state, "runId");
+        if (state.TryGetProperty("ports", out var ports))
+        {
+            _hostPort = ports.TryGetProperty("host", out var host) ? host.GetInt32() : _hostPort;
+            _shellPort = ports.TryGetProperty("shell", out var shell) ? shell.GetInt32() : _shellPort;
+        }
+        if (state.TryGetProperty("processes", out var processes))
+        {
+            foreach (var name in new[] { "host", "shell" })
+            {
+                if (processes.TryGetProperty(name, out var process)
+                    && process.TryGetProperty("pid", out var pid))
+                {
+                    var identity = $"{name}:{pid.GetInt32()}:{_lastDevRunId}";
+                    if (!_processIdentities.Contains(identity, StringComparer.Ordinal))
+                    {
+                        _processIdentities.Add(identity);
+                    }
+                }
+            }
+        }
+    }
+
+    // readiness endpoint 是 Host Ready 的正式外部契约，不以进程存在代替。
+    private async Task AssertReadyAsync(CancellationToken cancellationToken)
+    {
+        using var client = CreateClient(_hostPort);
+        using var response = await client.GetAsync("/api/health/ready", cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (response.StatusCode != HttpStatusCode.OK || !body.Contains("ready", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Host readiness returned {(int)response.StatusCode}: {Sanitize(body)}");
+        }
+    }
+
+    // 迁移后状态一次读取 schema、数据、EF history、统一 history 与 DEFAULT 数量。
+    private async Task<ExampleState> ReadExampleStateAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_applicationConnectionString!);
+        await connection.OpenAsync(cancellationToken);
+        var nullable = Convert.ToBoolean(await ExecuteScalarAsync(connection, """
+            SELECT [columns].[is_nullable]
+            FROM [sys].[columns] AS [columns]
+            INNER JOIN [sys].[tables] AS [tables] ON [tables].[object_id] = [columns].[object_id]
+            WHERE [tables].[name] = N'ExampleRecord' AND [columns].[name] = N'RecordSource';
+            """, cancellationToken));
+        var defaults = Convert.ToInt32(await ExecuteScalarAsync(connection, """
+            SELECT COUNT(*)
+            FROM [sys].[default_constraints] AS [defaults]
+            INNER JOIN [sys].[columns] AS [columns]
+              ON [columns].[object_id] = [defaults].[parent_object_id]
+             AND [columns].[column_id] = [defaults].[parent_column_id]
+            INNER JOIN [sys].[tables] AS [tables] ON [tables].[object_id] = [columns].[object_id]
+            WHERE [tables].[name] = N'ExampleRecord' AND [columns].[name] = N'RecordSource';
+            """, cancellationToken));
+        var legacy = await ReadNullableStringAsync(connection, LegacyId, cancellationToken);
+        var manual = await ReadNullableStringAsync(connection, ManualId, cancellationToken);
+        var efHistory = await ReadStringsAsync(
+            connection,
+            "SELECT [MigrationId] FROM [dbo].[__EFMigrationsHistory] ORDER BY [MigrationId];",
+            cancellationToken);
+        var unifiedHistory = await ReadStringsAsync(
+            connection,
+            "SELECT [MigrationId] FROM [dbo].[__NewPMigrationHistory] ORDER BY [MigrationId];",
+            cancellationToken);
+        return new ExampleState(nullable, defaults, legacy, manual, efHistory, unifiedHistory);
+    }
+
+
+    // 失败/恢复断言同时约束数据、schema、DEFAULT 与双 history，不接受只看异常文本。
+    private static void AssertState(
+        ExampleState state,
+        bool nullableExpected,
+        string? expectedLegacySource,
+        string expectedManualSource,
+        IReadOnlyList<string> expectedMigrations,
+        IReadOnlyList<string> unexpectedMigrations)
+    {
+        if (state.Nullable != nullableExpected
+            || state.DefaultConstraints != 0
+            || !string.Equals(state.LegacySource, expectedLegacySource, StringComparison.Ordinal)
+            || !string.Equals(state.ManualSource, expectedManualSource, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Example schema/data state did not match the required migration checkpoint.");
+        }
+        foreach (var migration in expectedMigrations)
+        {
+            if (!state.EfHistory.Contains(migration, StringComparer.Ordinal)
+                || !state.UnifiedHistory.Contains(migration, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException($"Required migration {migration} was not recorded in both histories.");
+            }
+        }
+        foreach (var migration in unexpectedMigrations)
+        {
+            if (state.EfHistory.Contains(migration, StringComparer.Ordinal)
+                || state.UnifiedHistory.Contains(migration, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException($"Rolled-back migration {migration} remained in a history table.");
+            }
+        }
+    }
+
+    // 每个 run 只创建其唯一 catalog；重置场景时仍复用同名且先验 ownership。
+    private async Task CreateCatalogAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_adminConnectionString!);
+        await connection.OpenAsync(cancellationToken);
+        await using (var exists = connection.CreateCommand())
+        {
+            exists.CommandText = "SELECT COUNT(*) FROM [sys].[databases] WHERE [name] = @catalog;";
+            exists.Parameters.AddWithValue("@catalog", _catalog!);
+            if (Convert.ToInt32(await exists.ExecuteScalarAsync(cancellationToken)) != 0)
+            {
+                _catalogCreated = true;
+                _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
+                await VerifyCatalogOwnershipAsync(cancellationToken);
+                await WriteEvidenceAsync(
+                    "example-required-field/resumed-catalog-cleanup.json",
+                    new
+                    {
+                        status = "ownership-verified",
+                        runId = _runId,
+                        catalog = _catalog,
+                        action = "drop-before-recreate"
+                    },
+                    cancellationToken);
+                await DropCatalogAsync(cancellationToken);
+            }
+        }
+
+        await using var create = connection.CreateCommand();
+        create.CommandText = $"CREATE DATABASE [{_catalog}];";
+        await create.ExecuteNonQueryAsync(cancellationToken);
+        _catalogCreated = true;
+    }
+
+    // DROP 前终止本 catalog 连接，并且只接受严格格式化的 runner catalog 名。
+    private async Task DropCatalogAsync(CancellationToken cancellationToken)
+    {
+        ValidateCatalogName(_catalog!);
+        SqlConnection.ClearAllPools();
+        await using var connection = new SqlConnection(_adminConnectionString!);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            IF DB_ID(N'{_catalog}') IS NOT NULL
+            BEGIN
+                ALTER DATABASE [{_catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+                DROP DATABASE [{_catalog}];
+            END;
+            """;
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        _catalogCreated = false;
+        _ownershipSnapshot = null;
+    }
+
+    // Catalog ownership marker 必须与本 run 捕获值完全一致才允许重置或 teardown。
+    private async Task VerifyCatalogOwnershipAsync(CancellationToken cancellationToken)
+    {
+        // dev state.json 是跨会话共享的：teardown 会据它 stop 进程，
+        // 因此必须先确认 supervisor 仍属于本 run，避免停掉其他 dev 会话或并行 worktree 的进程。
+        // 续跑路径在任何 dev run 之前就会校验 ownership，此时尚无 runId 可比。
+        if (_lastDevRunId is not null)
+        {
+            var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
+            using var state = JsonDocument.Parse(
+                await File.ReadAllTextAsync(statePath, cancellationToken));
+            if (!string.Equals(
+                    ReadString(state.RootElement, "runId"),
+                    _lastDevRunId,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Development supervisor state no longer belongs to this acceptance run.");
+            }
+        }
+
+        var expected = _ownershipSnapshot
+            ?? throw new InvalidOperationException("Acceptance catalog ownership was not captured.");
+        var current = await ReadOwnershipSnapshotAsync(cancellationToken);
+        if (current != expected)
+        {
+            throw new InvalidOperationException("Acceptance catalog ownership marker changed.");
+        }
+    }
+
+    // 正式 ownership marker 是 catalog 安全清理的事实源。
+    private async Task<DatabaseOwnershipSnapshot> ReadOwnershipSnapshotAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_applicationConnectionString!);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT [Version], [RepositoryId], [WorktreeId], [Provider], [ServerFingerprint], [CatalogFingerprint]
+            FROM [dbo].[__NewPDatabaseOwnership]
+            WHERE [MarkerId] = 1;
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new InvalidOperationException("Acceptance catalog ownership marker was missing.");
+        }
+        return new DatabaseOwnershipSnapshot(
+            reader.GetInt32(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5));
+    }
+
+    // Teardown 先重验数据库 ownership，再 stop owned supervisor，最后清理 catalog 与资源根。
+    protected override async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
+    {
+        try { return await TeardownResourcesAsync(cancellationToken); }
+        finally
+        {
+            // 无法确认归属或停止 Host 时保留 schema，只归还租约会话锁。
+            if (_databaseLease is not null)
+            {
+                await _databaseLease.ReleaseAsync();
+                _databaseLease = null;
+            }
+        }
+    }
+
+    // 归属核对和停止成功后才清理资源；外层负责失败时保留 schema 并归还会话锁。
+    private async Task<AcceptanceCleanupResult> TeardownResourcesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (_catalogCreated || _databaseLease is not null)
+            {
+                await VerifyCatalogOwnershipAsync(cancellationToken);
+            }
+        }
+        catch (Exception exception)
+        {
+            // 归属校验失败时保留资源，交由人工确认这套库/目录到底属于谁。
+            return new AcceptanceCleanupResult(
+                "failed",
+                AcceptanceFailureCodes.OwnershipMismatch,
+                $"一次性资源归属校验失败，资源已保留：{Sanitize(exception.Message)}");
+        }
+
+        try
+        {
+            await RunDevScriptAsync(
+                "stop-dev.ps1",
+                "example-required-field/teardown-stop.json",
+                cancellationToken,
+                allowAlreadyStopped: true);
+            if (_catalogCreated)
+            {
+                await DropCatalogAsync(cancellationToken);
+            }
+            if (_databaseLease is not null)
+            {
+                await _databaseLease.DisposeAsync();
+                _databaseLease = null;
+            }
+            foreach (var root in new[] { _pluginRoot, _keyRingRoot })
+            {
+                if (root is not null && Directory.Exists(root))
+                {
+                    EnsureSafeResourceRoot(root);
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+            return new AcceptanceCleanupResult("completed", null);
+        }
+        catch (Exception exception)
+        {
+            return new AcceptanceCleanupResult(
+                "failed",
+                AcceptanceFailureCodes.CleanupFailed,
+                Sanitize(exception.Message));
+        }
+    }
+
+    // 场景通过时留一份可读的现场快照；它是排错用的转储，不再是裁决输入。
+    private Task RecordScenarioSuccessAsync(
+        string scenario,
+        string evidencePath,
+        object evidence,
+        CancellationToken cancellationToken)
+    {
+        _ = scenario;
+        return WriteEvidenceAsync(evidencePath, evidence, cancellationToken);
+    }
+
+    // JSON 证据只能写入本 run 目录，路径越界直接失败。
+    private async Task<string> WriteEvidenceAsync(
+        string relativePath,
+        object value,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.GetFullPath(Path.Combine(
+            _runDirectory,
+            relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        if (!path.StartsWith(_runDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Evidence path escaped the acceptance run directory.");
+        }
+        await AcceptanceInfrastructure.WriteJsonAsync(path, value, cancellationToken);
+        return AddArtifact(path);
+    }
+
+    // 每个证据引用都以 run directory 相对路径存储，避免泄漏机器绝对路径。
+    private string AddArtifact(string path)
+    {
+        var artifact = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, path);
+        if (!_artifactRefs.Contains(artifact, StringComparer.Ordinal))
+        {
+            _artifactRefs.Add(artifact);
+        }
+        return artifact;
+    }
+
+    // runner resource root 只能是当前 run/resources 的直接子路径。
+    private void EnsureSafeResourceRoot(string root) =>
+        AcceptanceInfrastructure.EnsureOwnedResourceRoot(_runDirectory, root);
+
+    // Catalog 格式包含 gate owner 与完整随机 runId，拒绝宽泛 DROP 目标。
+    private static void ValidateCatalogName(string catalog)
+    {
+        if (!CatalogPattern.IsMatch(catalog))
+        {
+            throw new InvalidOperationException("Acceptance catalog name was not ownership-safe.");
+        }
+    }
+
+    // SQL helper 始终连接已固定的 application catalog，并支持参数化数据输入。
+    private async Task ExecuteNonQueryAsync(
+        string sql,
+        Action<SqlCommand>? configure,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_applicationConnectionString!);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        configure?.Invoke(command);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // runner trigger 名为内部固定值，只删除该 run 自己创建的数据库对象。
+    private Task DropTriggerAsync(string triggerName, CancellationToken cancellationToken) =>
+        ExecuteNonQueryAsync(
+            $"DROP TRIGGER IF EXISTS [dbo].[{triggerName}];",
+            configure: null,
+            cancellationToken);
+
+    // Scalar helper 把 DBNull 规范化为 null，便于显式断言 NULL 保留。
+    private static async Task<object?> ExecuteScalarAsync(
+        SqlConnection connection,
+        string sql,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is DBNull ? null : result;
+    }
+
+    // 按 EID 读取 RecordSource，保留数据库 NULL 语义。
+    private static async Task<string?> ReadNullableStringAsync(
+        SqlConnection connection,
+        string id,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT [RecordSource] FROM [dbo].[ExampleRecord] WHERE [EID] = @id;";
+        command.Parameters.AddWithValue("@id", id);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is null or DBNull ? null : Convert.ToString(result);
+    }
+
+    // 双 history 以稳定 MigrationId 排序读取，供 checkpoint 与 restart 比较。
+    private static async Task<string[]> ReadStringsAsync(
+        SqlConnection connection,
+        string sql,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var values = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            values.Add(reader.GetString(0));
+        }
+        return values.ToArray();
+    }
+
+    // HttpClient 由后续 API 场景显式管理 cookie。
+    private static HttpClient CreateClient(int port) => new()
+    {
+        BaseAddress = new Uri($"http://127.0.0.1:{port}"),
+        Timeout = TimeSpan.FromMinutes(5)
+    };
+
+    // Bootstrap 临时凭据只使用一次，随后切换到本 run 的一次性管理员密码。
+    private async Task PrepareAdministratorPasswordAsync(
+        string temporaryCredential,
+        CancellationToken cancellationToken)
+    {
+        using var client = CreateClient(_hostPort);
+        using var login = await LoginAsync(client, "admin", temporaryCredential, cancellationToken);
+        _adminPassword = CreateAdministratorPassword();
+        RegisterSecret(_adminPassword);
+        _ = await ChangePasswordAsync(
+            client,
+            temporaryCredential,
+            _adminPassword,
+            ReadLong(login.RootElement, "revision"),
+            cancellationToken);
+    }
+
+    // API 与 restart 场景每次创建新 client 并重新登录，避免旧 session 遮蔽恢复缺陷。
+    private async Task LoginAdminAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        using var _ = await LoginAsync(
+            client,
+            "admin",
+            _adminPassword ?? throw new InvalidOperationException("Administrator password was not prepared."),
+            cancellationToken);
+    }
+
+    // 登录响应必须签发指定 acceptance cookie，凭据只存在请求内存中。
+    private static async Task<JsonDocument> LoginAsync(
+        HttpClient client,
+        string ecode,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            HttpMethod.Post,
+            "/api/auth/login",
+            new { ecode, password },
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.OK, body, "identity login");
+        CaptureAuthenticationCookie(client, response);
+        return JsonDocument.Parse(body);
+    }
+
+    // 密码切换保留 optimistic revision 并更新 authentication cookie。
+    private static async Task<long> ChangePasswordAsync(
+        HttpClient client,
+        string currentPassword,
+        string newPassword,
+        long expectedRevision,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            HttpMethod.Post,
+            "/api/identity/me/password-change",
+            new { currentPassword, newPassword, expectedRevision },
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.OK, body, "change identity password");
+        CaptureAuthenticationCookie(client, response);
+        using var result = JsonDocument.Parse(body);
+        return ReadLong(ReadObject(result.RootElement, "account"), "revision");
+    }
+
+    // Secure acceptance cookie 由 loopback client 显式回放，不放宽 Host cookie 策略。
+    private static void CaptureAuthenticationCookie(HttpClient client, HttpResponseMessage response)
+    {
+        var prefix = $"{AuthenticationCookieName}=";
+        var cookie = response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.Select(static value => value.Split(';', 2)[0])
+                .SingleOrDefault(value => value.StartsWith(prefix, StringComparison.Ordinal))
+            : null;
+        if (string.IsNullOrWhiteSpace(cookie))
+        {
+            throw new InvalidOperationException("Identity response did not issue the expected authentication cookie.");
+        }
+        client.DefaultRequestHeaders.Remove("Cookie");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Cookie", cookie);
+    }
+
+    // 所有写 API 先取得一次 antiforgery token，再在同一 client session 发出请求。
+    private static async Task<HttpResponseMessage> SendJsonWithAntiforgeryAsync(
+        HttpClient client,
+        HttpMethod method,
+        string path,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        using var tokenResponse = await client.GetAsync("/api/auth/antiforgery-token", cancellationToken);
+        var tokenBody = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(tokenResponse, HttpStatusCode.OK, tokenBody, "issue antiforgery token");
+        using var token = JsonDocument.Parse(tokenBody);
+        using var request = new HttpRequestMessage(method, path)
+        {
+            Content = JsonContent.Create(payload)
+        };
+        request.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", ReadString(token.RootElement, "requestToken"));
+        return await client.SendAsync(request, cancellationToken);
+    }
+
+    // HTTP status 不符时只报告响应状态和短诊断，调用者负责先经 Sanitize 进入证据。
+    private static void EnsureStatus(
+        HttpResponseMessage response,
+        HttpStatusCode expected,
+        string body,
+        string check)
+    {
+        if (response.StatusCode != expected)
+        {
+            throw new InvalidOperationException(
+                $"{check} returned {(int)response.StatusCode}, expected {(int)expected}: {body}");
+        }
+    }
+
+    // 标准 CRUD detail/create/update envelope 中正式字段统一位于 fields 对象。
+    private static void AssertField(string body, string field, string expected, string check)
+    {
+        using var json = JsonDocument.Parse(body);
+        var fields = ReadObject(json.RootElement, "fields");
+        var actual = ReadString(fields, field);
+        if (!string.Equals(actual, expected, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"{check} returned {field}={actual}, expected {expected}.");
+        }
+    }
+
+    // 一次性管理员密码仅存在进程内，不从会写入 evidence 的 run identity 派生。
+    internal static string CreateAdministratorPassword()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    // Restart/no-op 比较只看三步相关 schema/data/history，不受 identity bootstrap 其他 stream 影响。
+    private static void AssertEquivalentMigrationState(ExampleState before, ExampleState after, string check)
+    {
+        if (before.Nullable != after.Nullable
+            || before.DefaultConstraints != after.DefaultConstraints
+            || !string.Equals(before.LegacySource, after.LegacySource, StringComparison.Ordinal)
+            || !string.Equals(before.ManualSource, after.ManualSource, StringComparison.Ordinal)
+            || !before.EfHistory.SequenceEqual(after.EfHistory, StringComparer.Ordinal)
+            || !before.UnifiedHistory.SequenceEqual(after.UnifiedHistory, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException($"{check} replayed migration or changed Example required-field state.");
+        }
+    }
+
+    // Locator 文本断言在真实 DOM 稳定后执行，失败时只暴露期望标签。
+    private static async Task AssertLocatorContainsAsync(ILocator locator, string expected, string check)
+    {
+        var matchingLocator = locator.Filter(new LocatorFilterOptions { HasText = expected });
+        await matchingLocator.WaitForAsync();
+        if (!(await matchingLocator.InnerTextAsync()).Contains(expected, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Browser assertion failed for {check}.");
+        }
+    }
+
+    // 正式 runner 优先采用显式 Chromium 配置，其次使用本机受支持 Chrome。
+    private static string ResolveChromePath()
+    {
+        var configured = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE");
+        var candidates = new[]
+        {
+            configured,
+            @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            @"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Google",
+                "Chrome",
+                "Application",
+                "chrome.exe")
+        };
+        return candidates.FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            ?? throw new InvalidOperationException("No Chromium executable was found for the Example browser observer.");
+    }
+
+    // 值用于断言或所有权判定时必须指名失败，否则缺失字段会退化成值不匹配。
+    private static string ReadString(JsonElement element, string property) =>
+        AcceptanceInfrastructure.ReadRequiredString(element, property);
+
+    // 缺失是合法运行态的字段（成功时为空的 failureCode、未产生的日志路径）走可选读取。
+    private static string ReadOptionalString(JsonElement element, string property) =>
+        AcceptanceInfrastructure.ReadOptionalString(element, property);
+
+    // JSON object 缺失时立即失败，避免把响应 envelope 漂移误判为空值。
+    private static JsonElement ReadObject(JsonElement element, string property) =>
+        AcceptanceInfrastructure.ReadRequiredObject(element, property);
+
+    // Revision 必须保持整数契约。
+    private static long ReadLong(JsonElement element, string property) =>
+        AcceptanceInfrastructure.ReadRequiredInt64(element, property);
+
+    private string LegacyId => $"{_dataPrefix}-legacy";
+    private string LegacyCode => $"{_dataPrefix}-LEGACY";
+    private string ManualId => $"{_dataPrefix}-manual";
+    private string ManualCode => $"{_dataPrefix}-MANUAL";
+    private string BackfillFailureTriggerName => $"trg_ACC140_Backfill_{_runId[..8]}";
+    private string ContractPreconditionTriggerName => $"trg_ACC140_Contract_{_runId[..8]}";
+
+    private sealed record DevFailure(string FailureCode, string Diagnostic);
+    internal sealed record OwnedHostLogProbe(bool ExpectedObserved, string ActualDiagnostic, string Source);
+    private sealed record ExampleState(
+        bool Nullable,
+        int DefaultConstraints,
+        string? LegacySource,
+        string? ManualSource,
+        IReadOnlyList<string> EfHistory,
+        IReadOnlyList<string> UnifiedHistory);
+    private sealed record DatabaseOwnershipSnapshot(
+        int Version,
+        string RepositoryId,
+        string WorktreeId,
+        string Provider,
+        string ServerFingerprint,
+        string CatalogFingerprint);
+}

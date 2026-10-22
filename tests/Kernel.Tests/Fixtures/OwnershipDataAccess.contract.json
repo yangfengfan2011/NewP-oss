@@ -1,0 +1,474 @@
+[
+  {
+    "id": "Document/view:document.document.initializeOwnership/read",
+    "moduleId": "Document",
+    "viewKey": "document.document.initializeOwnership",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "document.document.initializeOwnership",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:initializeOwnership",
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending",
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.initialize"
+  },
+  {
+    "id": "Document/view:document.document.list/featureActions/action:initializeOwnership",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "featureActions",
+    "actionKey": "initializeOwnership",
+    "execution": "",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:initializeOwnership"
+    ],
+    "object": "Document",
+    "businessBinding": "document.document.initializeOwnership"
+  },
+  {
+    "id": "Document/view:document.document.list/pageActions/action:initializeOwnershipPending",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "pageActions",
+    "actionKey": "initializeOwnershipPending",
+    "execution": "",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending"
+    ],
+    "object": "Document",
+    "businessBinding": "document.document.initializeOwnership"
+  },
+  {
+    "id": "Document/view:document.document.list/rowActions/action:initializeOwnership",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "rowActions",
+    "actionKey": "initializeOwnership",
+    "execution": "",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "object": "Document",
+    "businessBinding": "document.document.initializeOwnership"
+  },
+  {
+    "id": "Document/view:document.document.list/rowActions/action:transfer",
+    "moduleId": "Document",
+    "viewKey": "document.document.list",
+    "surface": "rowActions",
+    "actionKey": "transfer",
+    "execution": "",
+    "resources": [
+      "document.document"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:transfer"
+    ],
+    "object": "Document",
+    "businessBinding": "document.document.transfer"
+  },
+  {
+    "id": "Part/view:part.part.initializeOwnership/read",
+    "moduleId": "Part",
+    "viewKey": "part.part.initializeOwnership",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "part.part.initializeOwnership",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.custom/action:initializeOwnership",
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.pageActions/action:initializeOwnershipPending",
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "entityOwnership.initialize"
+  },
+  {
+    "id": "Part/view:part.part.list/featureActions/action:initializeOwnership",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "featureActions",
+    "actionKey": "initializeOwnership",
+    "execution": "",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.custom/action:initializeOwnership"
+    ],
+    "object": "Part",
+    "businessBinding": "part.part.initializeOwnership"
+  },
+  {
+    "id": "Part/view:part.part.list/pageActions/action:initializeOwnershipPending",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "pageActions",
+    "actionKey": "initializeOwnershipPending",
+    "execution": "",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.pageActions/action:initializeOwnershipPending"
+    ],
+    "object": "Part",
+    "businessBinding": "part.part.initializeOwnership"
+  },
+  {
+    "id": "Part/view:part.part.list/rowActions/action:initializeOwnership",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "rowActions",
+    "actionKey": "initializeOwnership",
+    "execution": "",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "object": "Part",
+    "businessBinding": "part.part.initializeOwnership"
+  },
+  {
+    "id": "Part/view:part.part.list/rowActions/action:transfer",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "rowActions",
+    "actionKey": "transfer",
+    "execution": "",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.rowActions/action:transfer"
+    ],
+    "object": "Part",
+    "businessBinding": "part.part.transfer"
+  },
+  {
+    "id": "Workspace/view:workspace.folder.initializeOwnership/read",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.initializeOwnership",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "workspace.folder.initializeOwnership",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:initializeOwnership",
+      "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:initializeOwnershipPending",
+      "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "workspace.backend"
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/featureActions/action:initializeOwnership",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "featureActions",
+    "actionKey": "initializeOwnership",
+    "execution": "",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:initializeOwnership"
+    ],
+    "businessBinding": "workspace.folder.initializeOwnership",
+    "objectRequirements": [
+      {
+        "object": "WorkspaceFolder",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "document.document"
+      }
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/pageActions/action:initializeOwnershipPending",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "pageActions",
+    "actionKey": "initializeOwnershipPending",
+    "execution": "",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:initializeOwnershipPending"
+    ],
+    "businessBinding": "workspace.folder.initializeOwnership",
+    "objectRequirements": [
+      {
+        "object": "WorkspaceFolder",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "document.document"
+      }
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/pageActions/action:transferSelected",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "pageActions",
+    "actionKey": "transferSelected",
+    "execution": "",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:transferSelected"
+    ],
+    "businessBinding": "workspace.folder.transfer",
+    "objectRequirements": [
+      {
+        "object": "WorkspaceFolder",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "document.document"
+      }
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/rowActions/action:initializeOwnership",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "rowActions",
+    "actionKey": "initializeOwnership",
+    "execution": "",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:initializeOwnership"
+    ],
+    "businessBinding": "workspace.folder.initializeOwnership",
+    "objectRequirements": [
+      {
+        "object": "WorkspaceFolder",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "document.document"
+      }
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.folder.list/rowActions/action:transfer",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "rowActions",
+    "actionKey": "transfer",
+    "execution": "",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [],
+    "featurePositions": [
+      "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:transfer"
+    ],
+    "businessBinding": "workspace.folder.transfer",
+    "objectRequirements": [
+      {
+        "object": "WorkspaceFolder",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "edit"
+        ],
+        "resourceKey": "document.document"
+      }
+    ]
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "DataScope.Business_organization.person": {
+    "departmentEnabled": {
+      "zhs": "所属部门已启用",
+      "en": "Department is enabled"
+    }
+  }
+}

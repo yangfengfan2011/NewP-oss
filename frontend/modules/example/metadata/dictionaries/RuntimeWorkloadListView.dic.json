@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "RuntimeWorkloadListView": {
+    "Title": {
+      "zhs": "未来两周工作量预览",
+      "en": "Two-week Workload Preview"
+    },
+    "Description": {
+      "zhs": "验证运行时日期列与计算型行数据使用同一业务周期。",
+      "en": "Validates runtime date columns and computed rows against one business period."
+    },
+    "Query_Keyword": {
+      "zhs": "成员",
+      "en": "Member"
+    },
+    "Query_Keyword_Placeholder": {
+      "zhs": "按示例成员姓名搜索",
+      "en": "Search example members"
+    }
+  }
+}

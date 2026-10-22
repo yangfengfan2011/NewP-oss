@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0",
+  "scenarios": {
+    "anonymous": {
+      "roots": ["index.html"]
+    }
+  },
+  "bindingEntries": [],
+  "forbiddenDependencies": [],
+  "budgets": {}
+}

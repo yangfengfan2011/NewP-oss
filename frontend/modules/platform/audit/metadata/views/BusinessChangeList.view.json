@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "audit.change.list",
+    "dicKey": "BusinessChangeView",
+    "titleKey": "Title",
+    "mode": "list",
+    "model": "BusinessChange",
+    "pageActions": [],
+    "editorMode": "drawer",
+    "detailViewKey": "audit.change.detail",
+    "query": {
+      "fields": [
+        {
+          "key": "Resource",
+          "labelKey": "Resource",
+          "source": "model",
+          "field": "Resource",
+          "operator": "="
+        },
+        {
+          "key": "TargetId",
+          "labelKey": "TargetId",
+          "source": "model",
+          "field": "TargetId",
+          "operator": "="
+        },
+        {
+          "key": "ActorId",
+          "labelKey": "ActorId",
+          "source": "model",
+          "field": "ActorId",
+          "operator": "="
+        },
+        {
+          "key": "EventType",
+          "labelKey": "EventType",
+          "source": "model",
+          "field": "EventType",
+          "operator": "="
+        },
+        {
+          "key": "From",
+          "labelKey": "From",
+          "source": "model",
+          "field": "OccurredAt"
+        },
+        {
+          "key": "To",
+          "labelKey": "To",
+          "source": "model",
+          "field": "OccurredAt"
+        }
+      ],
+      "defaultSort": {
+        "field": "OccurredAt",
+        "direction": "desc"
+      },
+      "defaultPageSize": 20
+    },
+    "columns": [
+      {
+        "key": "OccurredAt",
+        "labelKey": "OccurredAt",
+        "source": "model",
+        "field": "OccurredAt",
+        "responsivePriority": "high"
+      },
+      {
+        "key": "EventType",
+        "labelKey": "EventType",
+        "source": "model",
+        "field": "EventType",
+        "responsivePriority": "high",
+        "standardAction": "view"
+      },
+      {
+        "key": "Resource",
+        "labelKey": "Resource",
+        "source": "model",
+        "field": "Resource",
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "TargetId",
+        "labelKey": "TargetId",
+        "source": "model",
+        "field": "TargetId",
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "ActorId",
+        "labelKey": "ActorId",
+        "source": "model",
+        "field": "ActorId",
+        "responsivePriority": "medium"
+      }
+    ],
+    "rowActions": [],
+    "resourceKey": "audit.change"
+  }
+}

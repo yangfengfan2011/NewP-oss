@@ -1,0 +1,185 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "PlatformShell": {
+    "Experience_hybrid": { "zhs": "混合模式", "en": "Hybrid" },
+    "Experience_product": { "zhs": "业务模式", "en": "Business" },
+    "Experience_platform": { "zhs": "平台模式", "en": "Platform" },
+    "Welcome": {
+      "zhs": "欢迎，{name}",
+      "en": "Welcome, {name}"
+    },
+    "Navigation": {
+      "zhs": "导航",
+      "en": "Navigation"
+    },
+    "ExpandMenu": {
+      "zhs": "展开菜单",
+      "en": "Expand menu"
+    },
+    "CollapseMenu": {
+      "zhs": "折叠菜单",
+      "en": "Collapse menu"
+    },
+    "Breadcrumb": {
+      "zhs": "面包屑",
+      "en": "Breadcrumb"
+    },
+    "Workspace": {
+      "zhs": "工作台",
+      "en": "Workspace"
+    },
+    "PageError": {
+      "zhs": "页面出现错误",
+      "en": "Something went wrong on this page"
+    },
+    "PageLoading": {
+      "zhs": "正在加载页面…",
+      "en": "Loading page…"
+    },
+    "PageUnavailable": {
+      "zhs": "当前页面无法加载，其他页面仍可继续使用。",
+      "en": "This page could not be loaded. Other pages are still available."
+    },
+    "RetryPage": {
+      "zhs": "重试当前页面",
+      "en": "Retry this page"
+    },
+    "BusinessView": {
+      "zhs": "业务视图",
+      "en": "Business view"
+    },
+    "PlatformView": {
+      "zhs": "平台视图",
+      "en": "Platform view"
+    },
+    "ExperienceMode": {
+      "zhs": "体验模式",
+      "en": "Experience mode"
+    },
+    "PortalCount": {
+      "zhs": "当前可见 {count} 个门户入口",
+      "en": "{count} portal entries available"
+    },
+    "CurrentView": {
+      "zhs": "当前视图",
+      "en": "Current view"
+    },
+    "SwitchDescription": {
+      "zhs": "可通过顶部切换在业务/平台视图间移动",
+      "en": "Use the top bar to switch between business and platform views."
+    },
+    "HomeHelp": {
+      "zhs": "入口页说明",
+      "en": "About this workspace"
+    },
+    "HomeDescription": {
+      "zhs": "第二阶段不仅统一模块页，也要统一入口页的信息结构。首页优先承载入口、导航和示例说明，不提前做品牌化精修。",
+      "en": "The home page brings together portal entries, navigation, and examples in a shared structure."
+    },
+    "BusinessPortal": {
+      "zhs": "业务门户",
+      "en": "Business portal"
+    },
+    "BusinessDescription": {
+      "zhs": "面向业务团队的日常入口",
+      "en": "Everyday tools for business teams"
+    },
+    "PlatformPortal": {
+      "zhs": "平台门户",
+      "en": "Platform portal"
+    },
+    "PlatformDescription": {
+      "zhs": "面向治理、配置与审计管理的入口",
+      "en": "Tools for governance, configuration, and audits"
+    },
+    "Recent": {
+      "zhs": "最近访问",
+      "en": "Recent pages"
+    },
+    "RecentEmpty": {
+      "zhs": "后续可接入最近打开的模块、页面与搜索跳转记录。",
+      "en": "Recently opened modules, pages, and search results will appear here."
+    },
+    "CommonActions": {
+      "zhs": "常用操作",
+      "en": "Common actions"
+    },
+    "CommonEmpty": {
+      "zhs": "后续可接入快捷操作、个人收藏入口与系统推荐任务。",
+      "en": "Shortcuts, favorites, and suggested tasks will appear here."
+    },
+    "DemoHome": {
+      "zhs": "进入演示首页",
+      "en": "Open demo home"
+    },
+    "DemoHomeNote": {
+      "zhs": "查看业务模块接入后的首页模式",
+      "en": "Explore the home page of an integrated business module"
+    },
+    "DemoList": {
+      "zhs": "查看演示列表",
+      "en": "View demo list"
+    },
+    "DemoListNote": {
+      "zhs": "参考第二阶段标准列表页结构",
+      "en": "Explore the standard list layout"
+    },
+    "Files": {
+      "zhs": "进入文件中心",
+      "en": "Open file center"
+    },
+    "FilesNote": {
+      "zhs": "体验上传、列表与操作区结构",
+      "en": "Explore uploads, lists, and actions"
+    },
+    "Roles": {
+      "zhs": "角色管理",
+      "en": "Role management"
+    },
+    "RolesNote": {
+      "zhs": "查看权限状态与角色页骨架",
+      "en": "View permission status and role management"
+    },
+    "Grants": {
+      "zhs": "功能授权",
+      "en": "Feature permissions"
+    },
+    "GrantsNote": {
+      "zhs": "按功能入口配置角色授权",
+      "en": "Configure role permissions by feature"
+    },
+    "Config": {
+      "zhs": "配置管理",
+      "en": "Configuration"
+    },
+    "ConfigNote": {
+      "zhs": "查看配置页摘要区与表格区组合",
+      "en": "View configuration summaries and tables"
+    },
+    "ValueLists": {
+      "zhs": "值列表管理",
+      "en": "Value lists"
+    },
+    "ValueListsNote": {
+      "zhs": "管理基础值列表数据与表格操作",
+      "en": "Manage value-list data and table actions"
+    },
+    "Metadata": {
+      "zhs": "元数据配置中心",
+      "en": "Metadata configuration"
+    },
+    "MetadataNote": {
+      "zhs": "进入 SettingDefinition 元数据定义工作台",
+      "en": "Open the SettingDefinition metadata workspace"
+    },
+    "AccessLogs": {
+      "zhs": "访问日志",
+      "en": "Access logs"
+    },
+    "AccessLogsNote": {
+      "zhs": "查看审计页摘要与分页结构",
+      "en": "View audit summaries and paginated records"
+    }
+  }
+}

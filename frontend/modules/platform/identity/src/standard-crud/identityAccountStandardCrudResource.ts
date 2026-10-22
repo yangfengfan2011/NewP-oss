@@ -1,0 +1,344 @@
+import { platformFetch } from '@icp-platform/core';
+import {
+  createStandardCrudRestDataAdapter,
+  isStandardCrudRecord,
+  readStandardCrudBoolean,
+  readStandardCrudString,
+  StandardCrudRequestError,
+  type StandardCrudDataAdapter,
+  type StandardCrudFeatureRequestContext,
+  type StandardCrudResourceRegistration,
+} from '@icp-platform/sdk';
+import {
+  createAccount,
+  deleteAccount,
+  getAccountSnapshot,
+  IdentityApiError,
+  resetCredential,
+  setAccountStatus,
+  updateAccountName,
+  type IdentityAccount,
+} from '../api/identityClient';
+import { identityAccountOperationResultPresenter } from './identityAccountOperationResultPresenter';
+import {
+  identityAccountDeleteConfirmationInput,
+  identityAccountSecurityReasonInput,
+} from './IdentityAccountSecurityActionInput';
+import { identityAccountSecurityEventsSummaryRenderer } from './IdentityAccountSecurityEventsSummary';
+
+export interface IdentityAccountListRow {
+  [key: string]: unknown;
+  id: string;
+  EID: string;
+  ECODE: string;
+  ENAME: string;
+  Status: string;
+  Revision: number;
+  IsLocalAdministrator: boolean;
+  IsPersonnelBound: boolean;
+  PersonnelDisableHold: boolean;
+  CreatedBy?: string;
+  CreatedAt?: string;
+  UpdatedBy?: string;
+  UpdatedAt?: string;
+}
+
+function mapIdentityAccountListItem(value: unknown): IdentityAccountListRow {
+  const row = isStandardCrudRecord(value) ? value : {};
+  const eid = readStandardCrudString(row, ['EID', 'eid']);
+
+  // mapper 显式恢复 metadata 协议字段，Shell 无需了解 Identity API 的 JSON camelCase 约定。
+  return {
+    id: eid,
+    EID: eid,
+    ECODE: readStandardCrudString(row, ['ECODE', 'ecode']),
+    ENAME: readStandardCrudString(row, ['ENAME', 'ename']),
+    Status: readStandardCrudString(row, ['Status', 'status']),
+    Revision: Number(row.Revision ?? row.revision ?? 0),
+    IsLocalAdministrator: readStandardCrudBoolean(row, ['IsLocalAdministrator', 'isLocalAdministrator']),
+    IsPersonnelBound: readStandardCrudBoolean(row, ['IsPersonnelBound', 'isPersonnelBound']),
+    PersonnelDisableHold: readStandardCrudBoolean(row, ['PersonnelDisableHold', 'personnelDisableHold']),
+    CreatedBy: readStandardCrudString(row, ['CreatedBy', 'createdBy']),
+    CreatedAt: readStandardCrudString(row, ['CreatedAt', 'createdAt']),
+    UpdatedBy: readStandardCrudString(row, ['UpdatedBy', 'updatedBy']),
+    UpdatedAt: readStandardCrudString(row, ['UpdatedAt', 'updatedAt']),
+  };
+}
+
+function mapIdentityAccountDetail(account: IdentityAccount, context?: StandardCrudFeatureRequestContext) {
+  return {
+    fields: {
+      EID: account.eid,
+      ECODE: account.ecode,
+      ENAME: account.ename,
+      Status: account.status,
+      Revision: account.revision,
+      IsLocalAdministrator: account.isLocalAdministrator,
+      IsPersonnelBound: account.isPersonnelBound,
+      PersonnelDisableHold: account.personnelDisableHold,
+      CreatedBy: account.createdBy ?? null,
+      CreatedAt: account.createdAt ?? null,
+      UpdatedBy: account.updatedBy ?? null,
+      UpdatedAt: account.updatedAt ?? null,
+      CreatedBy_DisplayValue: account.CreatedBy_DisplayValue ?? null,
+      CreatedAt_DisplayValue: account.CreatedAt_DisplayValue ?? null,
+      UpdatedBy_DisplayValue: account.UpdatedBy_DisplayValue ?? null,
+      UpdatedAt_DisplayValue: account.UpdatedAt_DisplayValue ?? null,
+    },
+    summaries: {
+      securityEvents: {
+        status: 'ready' as const,
+        data: { accountEid: account.eid, featurePosition: context?.featurePosition },
+      },
+    },
+  };
+}
+
+function readMutationString(values: Record<string, unknown>, field: string): string {
+  const value = values[field];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+
+interface IdentitySecurityActionInput {
+  reason?: unknown;
+  confirmation?: unknown;
+}
+
+interface IdentityActionSnapshot {
+  eid: string;
+  ecode: string;
+  status: string;
+  revision: number;
+  isLocalAdministrator: boolean;
+  isPersonnelBound: boolean;
+  personnelDisableHold: boolean;
+}
+
+function readIdentityActionSnapshot(detail: unknown, row: unknown): IdentityActionSnapshot | null {
+  const detailRecord = isStandardCrudRecord(detail) && isStandardCrudRecord(detail.fields)
+    ? detail.fields
+    : detail;
+  const source = isStandardCrudRecord(detailRecord)
+    ? detailRecord
+    : isStandardCrudRecord(row) ? row : null;
+  if (!source) return null;
+
+  const eid = readStandardCrudString(source, ['EID', 'eid', 'id']);
+  const revision = Number(source.Revision ?? source.revision);
+  if (!eid || !Number.isSafeInteger(revision) || revision < 0) return null;
+
+  return {
+    eid,
+    ecode: readStandardCrudString(source, ['ECODE', 'ecode']),
+    status: readStandardCrudString(source, ['Status', 'status']),
+    revision,
+    isLocalAdministrator: readStandardCrudBoolean(source, ['IsLocalAdministrator', 'isLocalAdministrator']),
+    isPersonnelBound: readStandardCrudBoolean(source, ['IsPersonnelBound', 'isPersonnelBound']),
+    personnelDisableHold: readStandardCrudBoolean(source, ['PersonnelDisableHold', 'personnelDisableHold']),
+  };
+}
+
+function resolveIdentityAccountActionState({
+  action,
+  detail,
+  row,
+}: Parameters<NonNullable<StandardCrudResourceRegistration['actionStateResolver']>>[0]) {
+  const snapshot = readIdentityActionSnapshot(detail, row);
+  const securityAction = ['enable', 'disable', 'delete', 'credentialReset'].includes(action.key);
+  if (!snapshot) {
+    return securityAction
+      ? { visible: true, available: false, reason: '账号最新安全状态不可用，请刷新后重试。', reasonKey: 'IdentityMessages.SnapshotUnavailable' }
+      : { visible: true, available: true };
+  }
+
+  if (snapshot.status === 'Deleted' && (securityAction || action.key === 'edit')) {
+    return { visible: false, available: false };
+  }
+  if (action.key === 'enable') {
+    if (snapshot.status !== 'Disabled') return { visible: false, available: false };
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。', reasonKey: 'IdentityErrors.IDENTITY_LOCAL_ADMIN_PROTECTED' };
+    if (snapshot.personnelDisableHold) return { visible: true, available: false, reason: '存在人员停用阻断，不能启用账号。', reasonKey: 'IdentityErrors.IDENTITY_PERSONNEL_DISABLE_HOLD' };
+  }
+  if (action.key === 'disable') {
+    if (snapshot.status !== 'Enabled') return { visible: false, available: false };
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。', reasonKey: 'IdentityErrors.IDENTITY_LOCAL_ADMIN_PROTECTED' };
+  }
+  if (action.key === 'delete') {
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。', reasonKey: 'IdentityErrors.IDENTITY_LOCAL_ADMIN_PROTECTED' };
+    if (snapshot.isPersonnelBound) return { visible: true, available: false, reason: '账号已绑定人员，只能停用，不能删除。', reasonKey: 'IdentityErrors.IDENTITY_PERSONNEL_BOUND' };
+  }
+  if (action.key === 'credentialReset' && snapshot.isLocalAdministrator) {
+    return { visible: true, available: false, reason: '本地管理员凭据只能通过本机维护命令重置。', reasonKey: 'IdentityMessages.LocalAdminCredentialProtected' };
+  }
+
+  return { visible: true, available: true };
+}
+
+function readIdentitySecurityInput(input: unknown): { reason: string; confirmation: string } {
+  const value = isStandardCrudRecord(input) ? input as IdentitySecurityActionInput : {};
+  const reason = typeof value.reason === 'string' ? value.reason.trim() : '';
+  if (!reason) throw new StandardCrudRequestError('请填写操作原因。', 0, {}, { reasonKey: 'IdentityMessages.ReasonRequired' });
+  return {
+    reason,
+    confirmation: typeof value.confirmation === 'string' ? value.confirmation : '',
+  };
+}
+
+function toIdentitySecurityActionError(error: unknown): Error {
+  if (error instanceof StandardCrudRequestError) return error;
+  return new StandardCrudRequestError('操作结果未知。系统不会自动重放，请刷新账号最新安全状态后核对。', 0, {},
+    { reasonKey: 'IdentityMessages.OperationUnknown' }, undefined, error);
+}
+
+async function setIdentityAccountLifecycleStatus(
+  targetStatus: 'Enabled' | 'Disabled',
+  context: Parameters<NonNullable<StandardCrudResourceRegistration['actionHandlers']>[string]>[0],
+) {
+  const snapshot = readIdentityActionSnapshot(context.detail, context.row);
+  const input = readIdentitySecurityInput(context.input);
+  if (!context.id || !snapshot) throw new StandardCrudRequestError('账号最新安全状态不可用，请刷新后重试。', 0, {}, { reasonKey: 'IdentityMessages.SnapshotUnavailable' });
+  try {
+    await setAccountStatus(context.id, {
+      targetStatus,
+      expectedRevision: snapshot.revision,
+      reason: input.reason,
+    }, context);
+  } catch (error) {
+    throw toIdentitySecurityActionError(error);
+  }
+}
+
+async function deleteIdentityAccount(
+  context: Parameters<NonNullable<StandardCrudResourceRegistration['actionHandlers']>[string]>[0],
+) {
+  const snapshot = readIdentityActionSnapshot(context.detail, context.row);
+  const input = readIdentitySecurityInput(context.input);
+  if (!context.id || !snapshot) throw new StandardCrudRequestError('账号最新安全状态不可用，请刷新后重试。', 0, {}, { reasonKey: 'IdentityMessages.SnapshotUnavailable' });
+  if (input.confirmation !== snapshot.ecode) {
+    throw new StandardCrudRequestError(`请完整输入登录账号 ${snapshot.ecode} 以确认不可恢复删除。`, 400, {}, { reasonKey: 'IdentityMessages.DeleteConfirmationRequired', args: { accountCode: snapshot.ecode } });
+  }
+  try {
+    await deleteAccount(context.id, { expectedRevision: snapshot.revision, reason: input.reason }, context);
+  } catch (error) {
+    throw toIdentitySecurityActionError(error);
+  }
+}
+
+async function resetIdentityAccountCredential(
+  context: Parameters<NonNullable<StandardCrudResourceRegistration['actionHandlers']>[string]>[0],
+) {
+  const snapshot = readIdentityActionSnapshot(context.detail, context.row);
+  const input = readIdentitySecurityInput(context.input);
+  if (!context.id || !snapshot) throw new StandardCrudRequestError('账号最新安全状态不可用，请刷新后重试。', 0, {}, { reasonKey: 'IdentityMessages.SnapshotUnavailable' });
+  try {
+    const issuance = await resetCredential(context.id, {
+      expectedRevision: snapshot.revision,
+      reason: input.reason,
+    }, context);
+    return { operation: 'action' as const, payload: issuance };
+  } catch (error) {
+    throw toIdentitySecurityActionError(error);
+  }
+}
+
+// 创建结果可能已在服务端生效；网络结果未知时只提示人工核对，绝不自动重试签发。
+async function createIdentityAccount(values: Record<string, unknown>, context?: StandardCrudFeatureRequestContext) {
+  try {
+    const issuance = await createAccount({
+      ecode: readMutationString(values, 'ECODE'),
+      ename: readMutationString(values, 'ENAME'),
+    }, context);
+    return { operation: 'create' as const, payload: issuance };
+  } catch (error) {
+    if (error instanceof StandardCrudRequestError) {
+      throw error;
+    }
+    throw new StandardCrudRequestError('创建结果未知。系统不会自动重试，请先刷新账号列表并核对结果。', 0, {}, { reasonKey: 'IdentityMessages.CreateUnknown' });
+  }
+}
+
+async function updateIdentityAccount(
+  id: string | undefined,
+  values: Record<string, unknown>,
+  detailFields: Record<string, unknown>,
+  context?: StandardCrudFeatureRequestContext,
+) {
+  const expectedRevision = detailFields.Revision;
+  if (!id || typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+    throw new StandardCrudRequestError('账号最新 Revision 不可用，请重新加载后再编辑。', 0, {}, { reasonKey: 'IdentityMessages.RevisionUnavailable' });
+  }
+
+  try {
+    const account = await updateAccountName(id, {
+      ename: readMutationString(values, 'ENAME'),
+      expectedRevision,
+    }, context);
+    return { operation: 'update' as const, payload: account };
+  } catch (error) {
+    if (error instanceof StandardCrudRequestError) {
+      throw error;
+    }
+    throw toIdentitySecurityActionError(error);
+  }
+}
+
+const identityAccountRestListAdapter = createStandardCrudRestDataAdapter({
+  apiRoute: '/api/identity/accounts',
+  fetcher: (input, init) => platformFetch(input, init),
+  mapListItem: mapIdentityAccountListItem,
+  getRowId: (row: IdentityAccountListRow) => row.id,
+});
+
+const identityAccountDataAdapter: StandardCrudDataAdapter<IdentityAccountListRow> = {
+  list: async (...args) => {
+    try { return await identityAccountRestListAdapter.list(...args); }
+    catch (error) {
+      if (error instanceof StandardCrudRequestError) {
+        throw new IdentityApiError(error.code ?? `HTTP_${error.status}`, error.status, undefined, undefined, error);
+      }
+      throw error;
+    }
+  },
+  getRowId: identityAccountRestListAdapter.getRowId,
+  get: async (id, readContext) => {
+    const normalized = mapIdentityAccountDetail(await getAccountSnapshot(id, readContext), readContext);
+    return { normalized, value: normalized };
+  },
+  create: (values, _fields, context) => createIdentityAccount(values, context),
+  update: (id, values, detailFields, context) => updateIdentityAccount(id, values, detailFields ?? {}, context),
+};
+
+// Identity 专用命令共享标准宿主的发起位置，不重新推断导航或动作身份。
+export const identityAccountStandardCrudResource: StandardCrudResourceRegistration<
+  Record<string, unknown>,
+  IdentityAccountListRow
+> = {
+  resourceKey: 'identity.account',
+  dataAdapter: identityAccountDataAdapter,
+  listViewKey: 'identity.account.list',
+  detailViewKey: 'identity.account.detail',
+  concurrencyRevisionField: 'Revision',
+  enumOptions: {
+    IdentityAccountStatus: [
+      { value: 'Enabled', label: '启用' },
+      { value: 'Disabled', label: '停用' },
+      { value: 'Deleted', label: '已删除' },
+    ],
+  },
+  operationResultPresenters: [identityAccountOperationResultPresenter],
+  actionStateResolver: resolveIdentityAccountActionState,
+  actionHandlers: {
+    enable: (context) => setIdentityAccountLifecycleStatus('Enabled', context),
+    disable: (context) => setIdentityAccountLifecycleStatus('Disabled', context),
+    delete: deleteIdentityAccount,
+    credentialReset: resetIdentityAccountCredential,
+  },
+  actionInputRenderers: {
+    identityAccountSecurityReason: identityAccountSecurityReasonInput,
+    identityAccountDeleteConfirmation: identityAccountDeleteConfirmationInput,
+  },
+  summaryRenderers: {
+    securityEvents: identityAccountSecurityEventsSummaryRenderer,
+  },
+};

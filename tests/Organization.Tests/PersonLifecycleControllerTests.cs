@@ -1,0 +1,71 @@
+using System.Reflection;
+using System.Security.Claims;
+using ICP.Platform.Modules.Organization.Controllers;
+using ICP.Platform.Modules.Organization.DTOs;
+using ICP.Platform.Modules.Organization.DTOs.Requests;
+using ICP.Platform.Modules.Organization.Services;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Xunit;
+
+namespace ICP.Platform.Modules.Organization.Tests;
+
+public sealed class PersonLifecycleControllerTests
+{
+    [Fact]
+    public void Controller_DeclaresOnlyDedicatedStatusCommandRoute()
+    {
+        var method = typeof(PersonLifecycleController).GetMethod(nameof(PersonLifecycleController.SetStatus));
+
+        Assert.Contains(method!.GetCustomAttributes<HttpPutAttribute>(), route => route.Template == "{personEid}/status");
+    }
+
+    [Fact]
+    public async Task SetStatus_WhenLifecycleConflicts_ReturnsStableProblemDetails()
+    {
+        var controller = Controller(new FailingService(
+            new PersonLifecycleException(PersonLifecycleFailureCodes.Conflict, new { status = "latest" })));
+
+        var response = await controller.SetStatus(
+            "Person_1",
+            new SetPersonLifecycleStatusRequest(false, "账号状态冲突"));
+
+        var conflict = Assert.IsType<ObjectResult>(response.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+        Assert.Contains("application/problem+json", conflict.ContentTypes);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal(PersonLifecycleFailureCodes.Conflict, problem.Extensions["code"]);
+        Assert.Equal("Organization.Person.LIFECYCLE_CONFLICT", problem.Extensions["reasonKey"]);
+        Assert.Equal("trace-lifecycle-controller", problem.Extensions["traceId"]);
+        Assert.NotNull(problem.Extensions["current"]);
+    }
+
+    private static PersonLifecycleController Controller(IPersonLifecycleService service) => new(new DirectCommandExecutor(), new PersonLifecycleButtonHandler(service))
+    {
+        ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                TraceIdentifier = "trace-lifecycle-controller",
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, "User_Admin")],
+                    "test"))
+            }
+        }
+    };
+
+    private sealed class FailingService(Exception exception) : IPersonLifecycleService
+    {
+        public ValueTask<PersonLifecycleDto> SetStatusAsync(
+            string personEid,
+            SetPersonLifecycleStatusRequest request,
+            PersonLifecycleActor actor,
+            CancellationToken cancellationToken = default) => ValueTask.FromException<PersonLifecycleDto>(exception);
+    }
+}
+
+internal sealed class DirectCommandExecutor : ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor
+{
+    public Task<TResult> ExecuteAsync<TInput, TState, TResult>(ICP.Platform.Authorization.Contracts.IButtonBusinessHandler<TInput, TState, TResult> handler,
+        TInput input, CancellationToken token = default) => handler.WithinBoundaryAsync(input, "", (state, inner) => handler.ExecuteAsync(state, inner), token);
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "TemplateModule",
+  "displayName": "模板模块",
+  "version": "1.0.0",
+  "description": "后端模块模板骨架",
+  "entryAssembly": "../../TemplateModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "backend": {
+    "behaviorKey": "template-module.backend"
+  },
+  "frontend": {
+    "behaviorKey": "template-module.frontend",
+    "entry": "template-module",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "template-module.page"
+    ]
+  },
+  "features": [
+    {
+      "key": "template-module",
+      "kind": "navigation",
+      "title": "模板模块",
+      "behaviorKey": "template-module.read"
+    }
+  ]
+}

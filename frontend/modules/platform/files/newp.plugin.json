@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Files",
+  "displayName": "文件服务",
+  "version": "1.0.0",
+  "description": "平台私有内容、暂存与使用生命周期服务",
+  "entryAssembly": "../../FilesModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "max": "2.0.0",
+    "min": "1.1.0"
+  },
+  "backend": {
+    "behaviorKey": "files.backend"
+  },
+  "frontend": {
+    "enabled": false
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/FileRecord.model.json",
+      "metadata/models/FileUploadLease.model.json",
+      "metadata/models/FileUsage.model.json",
+      "metadata/models/FileCopyLease.model.json"
+    ],
+    "migrations": {
+      "sqlServer": {
+        "manifest": "migrations/Files.SqlServerMigrations.json",
+        "assembly": "migrations/Files.SqlServerMigrations.dll"
+      }
+    }
+  }
+}

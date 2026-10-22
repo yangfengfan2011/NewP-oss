@@ -1,0 +1,331 @@
+using ICP.Platform.Crud.Tests.Support;
+using ICP.Platform.Persistence.EfCore;
+using ICP.Platform.Query.Descriptors;
+using ICP.Platform.Query.Models;
+using ICP.Platform.Query.Runtime;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Xunit;
+
+namespace ICP.Platform.Crud.Tests;
+
+public sealed class PlatformQueryExecutorTests
+{
+    [Fact]
+    public async Task QueryAsync_AppliesFilterSortPagingAndProjectionInSqlShape()
+    {
+        var sql = new List<string>();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, sql);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+            Row("Person_1", "P001", "张三", "FullTime", true),
+            Row("Person_2", "P002", "李四", "FullTime", true),
+            Row("Person_3", "X003", "王五", "PartTime", true));
+        await dbContext.SaveChangesAsync();
+        sql.Clear();
+
+        var executor = new EfPlatformQueryExecutor(dbContext);
+        var result = await executor.QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(
+                Fields: ["EID", "PersonNo", "CompanyName"],
+                Page: 1,
+                PageSize: 1,
+                SortBy: "PersonNo",
+                SortDirection: "desc",
+                Conditions: [new PlatformQueryCondition("EmploymentStatus", "=", "FullTime")]));
+
+        Assert.Equal(2, result.Total);
+        var row = Assert.Single(result.Items);
+        Assert.Equal("P002", row["PersonNo"]);
+        Assert.True(row.ContainsKey("CompanyId"));
+        Assert.False(row.ContainsKey("CreatedAt"));
+
+        var executedSql = string.Join(Environment.NewLine, sql);
+        Assert.Contains("PersonNo", executedSql, StringComparison.Ordinal);
+        Assert.Contains("CompanyId", executedSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreatedAt", executedSql, StringComparison.Ordinal);
+        Assert.Contains("COUNT", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("OFFSET", executedSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task QueryAsync_AppliesInclusiveCalendarDateRangeBeforeCountAndPaging()
+    {
+        var sql = new List<string>();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, sql);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+            Row("Person_1", "P001", "甲", "FullTime", true, new DateOnly(1990, 1, 1)),
+            Row("Person_2", "P002", "乙", "FullTime", true, new DateOnly(2000, 2, 29)),
+            Row("Person_3", "P003", "丙", "FullTime", true, new DateOnly(2010, 12, 31)),
+            Row("Person_4", "P004", "丁", "FullTime", true, null));
+        await dbContext.SaveChangesAsync();
+        sql.Clear();
+
+        var result = await new EfPlatformQueryExecutor(dbContext).QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(
+                Fields: ["EID", "BirthDate"],
+                Page: 1,
+                PageSize: 1,
+                SortBy: "BirthDate",
+                SortDirection: "asc",
+                Conditions:
+                [
+                    new PlatformQueryCondition("BirthDate", "gte", "1990-01-01"),
+                    new PlatformQueryCondition("BirthDate", "lte", "2000-02-29")
+                ]));
+
+        Assert.Equal(2, result.Total);
+        var row = Assert.Single(result.Items);
+        Assert.Equal("Person_1", row["EID"]);
+        Assert.Equal(new DateOnly(1990, 1, 1), row["BirthDate"]);
+
+        var executedSql = string.Join(Environment.NewLine, sql);
+        Assert.Contains("COUNT", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WHERE", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(sql, statement =>
+            statement.Contains("COUNT", StringComparison.OrdinalIgnoreCase)
+            && statement.Contains("WHERE", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(sql, statement =>
+            statement.Contains("LIMIT", StringComparison.OrdinalIgnoreCase)
+            && statement.Contains("WHERE", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("gte", "2000-02-29", "Person_2", "Person_3")]
+    [InlineData("lte", "2000-02-29", "Person_1", "Person_2")]
+    public async Task QueryAsync_AppliesSingleCalendarDateBoundaryAndExcludesNull(
+        string comparison,
+        string boundary,
+        params string[] expectedIds)
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+            Row("Person_1", "P001", "甲", "FullTime", true, new DateOnly(1990, 1, 1)),
+            Row("Person_2", "P002", "乙", "FullTime", true, new DateOnly(2000, 2, 29)),
+            Row("Person_3", "P003", "丙", "FullTime", true, new DateOnly(2010, 12, 31)),
+            Row("Person_4", "P004", "丁", "FullTime", true, null));
+        await dbContext.SaveChangesAsync();
+
+        var result = await new EfPlatformQueryExecutor(dbContext).QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(
+                Fields: ["EID", "BirthDate"],
+                SortBy: "BirthDate",
+                SortDirection: "asc",
+                Conditions: [new PlatformQueryCondition("BirthDate", comparison, boundary)]));
+
+        Assert.Equal(expectedIds.Length, result.Total);
+        Assert.Equal(expectedIds, result.Items.Select(row => row["EID"]));
+        Assert.DoesNotContain(result.Items, row => row["BirthDate"] is null);
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenConditionOperatorIsUnknown_ThrowsStableCode()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var error = await Assert.ThrowsAsync<PlatformQueryValidationException>(() =>
+            new EfPlatformQueryExecutor(dbContext).QueryAsync(
+                Descriptor(),
+                new PlatformQueryRequest(
+                    Fields: null,
+                    Conditions: [new PlatformQueryCondition("BirthDate", "between", "2000-01-01")])));
+
+        Assert.Equal("PlatformQuery.UnsupportedConditionOperator", error.Code);
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenCalendarDateBoundaryIsInvalid_ThrowsStableCode()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var error = await Assert.ThrowsAsync<PlatformQueryValidationException>(() =>
+            new EfPlatformQueryExecutor(dbContext).QueryAsync(
+                Descriptor(),
+                new PlatformQueryRequest(
+                    Fields: null,
+                    Conditions: [new PlatformQueryCondition("BirthDate", "gte", "2001-02-29")])));
+
+        Assert.Equal("PlatformQuery.InvalidConditionValue", error.Code);
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenComparisonOperatorDoesNotMatchFieldType_ThrowsStableCode()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var error = await Assert.ThrowsAsync<PlatformQueryValidationException>(() =>
+            new EfPlatformQueryExecutor(dbContext).QueryAsync(
+                Descriptor(),
+                new PlatformQueryRequest(
+                    Fields: null,
+                    Conditions: [new PlatformQueryCondition("ENAME", "gte", "甲")])));
+
+        Assert.Equal("PlatformQuery.IncompatibleConditionOperator", error.Code);
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenConditionGroupUsesOr_ReturnsRowsMatchingAnyCondition()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+            Row("Person_1", "P001", "张三", "FullTime", true),
+            Row("Person_2", "X002", "李四", "FullTime", true));
+        await dbContext.SaveChangesAsync();
+
+        var result = await new EfPlatformQueryExecutor(dbContext).QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(
+                Fields: ["EID", "PersonNo"],
+                Conditions:
+                [
+                    new PlatformQueryCondition("PersonNo", "contains", "P", GroupKey: "keyword", GroupOperator: "or"),
+                    new PlatformQueryCondition("ENAME", "contains", "李", GroupKey: "keyword", GroupOperator: "or")
+                ]));
+
+        Assert.Equal(2, result.Total);
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenConditionGroupMixesOperators_ThrowsStableCode()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var error = await Assert.ThrowsAsync<PlatformQueryValidationException>(() =>
+            new EfPlatformQueryExecutor(dbContext).QueryAsync(
+                Descriptor(),
+                new PlatformQueryRequest(
+                    Fields: ["EID"],
+                    Conditions:
+                    [
+                        new PlatformQueryCondition("PersonNo", "contains", "P", GroupKey: "keyword", GroupOperator: "or"),
+                        new PlatformQueryCondition("ENAME", "contains", "李", GroupKey: "keyword", GroupOperator: "and")
+                    ])));
+
+        Assert.Equal("PlatformQuery.MixedConditionGroupOperator", error.Code);
+    }
+
+    [Fact]
+    public async Task QueryAsync_UsesIdAsStableSecondarySortAcrossPages()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+            Row("Person_3", "P003", "同名", "FullTime", true),
+            Row("Person_1", "P001", "同名", "FullTime", true),
+            Row("Person_2", "P002", "同名", "FullTime", true));
+        await dbContext.SaveChangesAsync();
+        var executor = new EfPlatformQueryExecutor(dbContext);
+
+        var firstPage = await executor.QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(Fields: ["EID", "ENAME"], Page: 1, PageSize: 2, SortBy: "ENAME", SortDirection: "asc"));
+        var secondPage = await executor.QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(Fields: ["EID", "ENAME"], Page: 2, PageSize: 2, SortBy: "ENAME", SortDirection: "asc"));
+
+        Assert.Equal(["Person_1", "Person_2"], firstPage.Items.Select(row => row["EID"]));
+        Assert.Equal("Person_3", Assert.Single(secondPage.Items)["EID"]);
+    }
+
+    [Fact]
+    public async Task QueryAsync_AppliesDescriptorStableSortFieldsBeforeId()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+            Row("Person_1", "P003", "同名", "FullTime", true),
+            Row("Person_2", "P001", "同名", "FullTime", true),
+            Row("Person_3", "P002", "同名", "FullTime", true));
+        await dbContext.SaveChangesAsync();
+        var executor = new EfPlatformQueryExecutor(dbContext);
+        var descriptor = Descriptor(["PersonNo"]);
+
+        var result = await executor.QueryAsync(
+            descriptor,
+            new PlatformQueryRequest(Fields: ["EID", "PersonNo", "ENAME"], SortBy: "ENAME", SortDirection: "asc"));
+
+        Assert.Equal(["P001", "P002", "P003"], result.Items.Select(row => row["PersonNo"]));
+    }
+
+    private static EfPlatformDbContext BuildDbContext(SqliteConnection connection, List<string> sql)
+    {
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlite(connection)
+            .LogTo(sql.Add, LogLevel.Information)
+            .EnableSensitiveDataLogging()
+            .Options;
+
+        return new EfPlatformDbContext(options, [PlatformCrudModelDefinitions.Person()]);
+    }
+
+    private static Dictionary<string, object?> Row(
+        string id,
+        string personNo,
+        string name,
+        string status,
+        bool isEnabled,
+        DateOnly? birthDate = null) => new(StringComparer.Ordinal)
+    {
+        ["EID"] = id,
+        ["PersonNo"] = personNo,
+        ["ENAME"] = name,
+        ["CompanyId"] = "Company_1",
+        ["DepartmentId"] = "Department_1",
+        ["PositionId"] = "Position_1",
+        ["EmploymentStatus"] = status,
+        ["BirthDate"] = birthDate,
+        ["IsEnabled"] = isEnabled,
+        ["CreatedAt"] = DateTime.UtcNow,
+        ["UpdatedAt"] = DateTime.UtcNow
+    };
+
+    private static PlatformQueryDescriptor Descriptor(IReadOnlyList<string>? withStableSortFields = null) => new()
+    {
+        ResourceKey = "organization.person",
+        ModelName = "Person",
+        IdField = "EID",
+        AllowedModelFields = ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "BirthDate", "IsEnabled"],
+        DefaultFields = ["EID", "PersonNo", "ENAME"],
+        SortableFields = ["PersonNo", "ENAME", "BirthDate", "IsEnabled"],
+        StableSortFields = withStableSortFields ?? [],
+        DefaultSortField = "ENAME",
+        DefaultSortDirection = "asc",
+        DisplayValueFields =
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
+        ]
+    };
+}

@@ -1,0 +1,126 @@
+/* 组合页面只拥有导航与外层面板；CRUD 内容样式由共享 UI 组件负责。 */
+.np-composed-page {
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.np-composed-tabs > .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.np-composed-page > .np-composed-tabs > .ant-tabs-nav .ant-tabs-tab {
+  padding: 8px 20px;
+}
+
+.np-tree-workspace {
+  --np-workspace-header-height: 48px;
+  display: grid;
+  grid-template-columns: clamp(260px, 24vw, 300px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 16px;
+}
+
+.np-tree-sidebar-card {
+  height: 100%;
+  min-height: 320px;
+}
+
+/* 鼠标菜单关闭后回焦整行；选中底色已标识节点，键盘标题的焦点样式保持不变。 */
+.np-tree-sidebar-card [data-tree-node-key][tabindex="-1"]:focus {
+  outline: none;
+}
+
+.np-tree-content {
+  min-width: 0;
+  background: var(--np-composition-surface);
+  border: 1px solid var(--np-composition-border);
+  border-radius: var(--np-composition-radius);
+}
+
+.np-tree-context-header {
+  display: flex;
+  align-items: center;
+  min-height: var(--np-workspace-header-height);
+  box-sizing: border-box;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--np-composition-border);
+}
+
+.np-tree-context-header .ant-breadcrumb {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+.np-tree-breadcrumb-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.np-tree-content-body {
+  min-width: 0;
+  padding: 0 16px 16px;
+}
+
+.np-tree-content-body > .np-composed-tabs > .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+.np-composed-page > .np-composed-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane > .np-crud-embedded {
+  padding: 16px;
+  background: var(--np-composition-surface);
+  border: 1px solid var(--np-composition-border);
+  border-radius: var(--np-composition-radius);
+}
+
+@media (max-width: 900px) {
+  .np-tree-sidebar-card {
+    min-height: 0;
+  }
+
+  .np-tree-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .np-composed-page > .np-composed-tabs > .ant-tabs-nav .ant-tabs-tab {
+    padding-inline: 12px;
+  }
+}
+
+/* 树、Tab 自身传递剩余高度，不依赖是否已打开列表；数据滚动仍由内容拥有。 */
+.np-composed-tabs,
+.np-composed-tabs > .ant-tabs-content-holder,
+.np-composed-tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.np-composed-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane-active {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.np-tree-workspace {
+  flex: 1;
+  min-height: 0;
+}
+.np-tree-workspace > aside {
+  min-height: 0;
+  overflow: auto;
+}
+.np-tree-workspace > .np-tree-content,
+.np-tree-workspace > .np-tree-content > .np-tree-content-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.np-tree-workspace > .np-tree-content > .np-tree-content-body {
+  overflow: auto;
+}
+.np-tree-context-header,
+.np-composed-tabs > .ant-tabs-nav {
+  flex-shrink: 0;
+}

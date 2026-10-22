@@ -1,0 +1,15 @@
+﻿{
+    "defaultLanguage":  "zhs",
+    "supportedLanguages":  [
+                               {
+                                   "code":  "zhs",
+                                   "displayName":  "简体中文",
+                                   "locale":  "zh-CN"
+                               },
+                               {
+                                   "code":  "en",
+                                   "displayName":  "English",
+                                   "locale":  "en-US"
+                               }
+                           ]
+}
